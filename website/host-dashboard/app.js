@@ -1092,6 +1092,19 @@
     render();
   }
 
+  function beginFreshHostSession() {
+    model.session = createSession();
+    model.backend.sessionId = null;
+    model.backend.revision = 0;
+    model.backend.clientRole = "host";
+    model.backend.lastSyncedJson = "";
+    model.exportText = "";
+    writeStore(STORAGE.backend, null);
+    saveSession();
+    startBackendPoller();
+    render();
+  }
+
   function updateDraftFromInputs() {
     const count = Number(document.getElementById("playerCount")?.value ?? model.session.draft.playerCount);
     model.session.draft.playerCount = clamp(count, 2, 5);
@@ -3224,12 +3237,7 @@
         setMessage("Online table setup is unavailable. This browser can still host locally.");
       }
       writeStore(STORAGE.auth, model.auth);
-      model.backend.clientRole = "host";
-      model.session = ensureSessionShape(readStore(STORAGE.session, null) ?? createSession());
-      restoreBackendState();
-      saveSession();
-      startBackendPoller();
-      render();
+      beginFreshHostSession();
       return;
     }
 
@@ -3252,12 +3260,7 @@
         try {
           model.auth = await createAccountAuth(name, email, password);
           writeStore(STORAGE.auth, model.auth);
-          model.backend.clientRole = "host";
-          model.session = ensureSessionShape(readStore(STORAGE.session, null) ?? createSession());
-          restoreBackendState();
-          saveSession();
-          startBackendPoller();
-          render();
+          beginFreshHostSession();
           return;
         } catch (error) {
           setMessage("Account creation is unavailable right now. Use guest hosting for this play session.");
@@ -3274,12 +3277,7 @@
       try {
         model.auth = await loginAccountAuth(email, password);
         writeStore(STORAGE.auth, model.auth);
-        model.backend.clientRole = "host";
-        model.session = ensureSessionShape(readStore(STORAGE.session, null) ?? createSession());
-        restoreBackendState();
-        saveSession();
-        startBackendPoller();
-        render();
+        beginFreshHostSession();
         return;
       } catch (error) {
         setMessage("Account login is unavailable or the credentials are incorrect. Use guest hosting for this play session.");
