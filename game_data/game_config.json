@@ -1,0 +1,1188 @@
+{
+  "meta": {
+    "title": "Give And Take",
+    "version": "0.4-finalized-current-spec",
+    "productType": "Student-to-Investor life-path board game with QR web companion and session-code backend",
+    "targetAudience": "Students ages 14-16",
+    "designStyle": "Modern board-game finance: illustrated 6000px background under vector gameplay layers, navy/gold/category-accent hierarchy, bundled Inter typography, readable school prototype",
+    "evidenceBoundary": "AI simulation verifies mechanics and balance; real student surveys verify target-audience understanding."
+  },
+  "prototypeContract": {
+    "scope": "81-card dice-path school prototype.",
+    "movement": "Roll one six-sided die and move forward on the linear S00-S43 path.",
+    "turnLimit": 12,
+    "endCondition": "Score when all players reach S43 Finish Review or after 12 turns per player, whichever happens first.",
+    "dashboardRole": "QR web app can run a playable session with guest/account access, join-by-session-code, setup, turns, decks, prices, player ledgers, scoring, and evidence export; it falls back to browser-local mode when the session backend is unavailable; physical player boards remain the fallback."
+  },
+  "componentCounts": {
+    "players": "2-5",
+    "boardSpaces": 44,
+    "dice": 1,
+    "starterProfiles": 5,
+    "investmentCards": 18,
+    "marketLifeCards": 18,
+    "ethicsCards": 12,
+    "actionCards": 12,
+    "reflectionCards": 10,
+    "quickReferenceCards": 5,
+    "hostTrackerCards": 1,
+    "totalCards": 81,
+    "playerBoards": 5,
+    "smallPawnDiscsOrCubes": 5
+  },
+  "playerRoles": {
+    "humanPlayer": {
+      "count": "2-5",
+      "responsibilities": [
+        "Roll one six-sided die on their turn.",
+        "Move one pawn disc or cube forward on S00-S43.",
+        "Resolve the landing space.",
+        "Manage fictional cash, holdings, evidence notes, ethics, and reflection on the Player Board.",
+        "Record one decision, finance term, or evidence note each turn."
+      ]
+    },
+    "hostFacilitator": {
+      "count": "1 recommended",
+      "responsibilities": [
+        "Maintain deck and discard piles.",
+        "Maintain the shared asset price tracker.",
+        "Read and apply Market/Life, Ethics, Action, and Reflection card effects.",
+        "Use the QR web app when available; physical tracking remains valid.",
+        "Score the game using the current formula."
+      ]
+    },
+    "starterProfiles": "Starter Profiles give players asymmetric starting cash and one small rule modifier. They are player setup cards, not separate character classes with extra hidden mechanics."
+  },
+  "boardSpec": {
+    "trimSize": "500mm x 500mm",
+    "printPageSize": "506mm x 506mm including 3mm bleed on every edge",
+    "safeMargin": "Keep critical text, icons, QR replacement art, pawn pads, and gameplay markings at least 10mm inside the final trim.",
+    "fold": "2x2 quad-fold grid centered at 250mm horizontally and vertically on the final trim.",
+    "path": "Single linear S00-S43 dice path with no alternate routes.",
+    "pawnPads": "Each board space has one separate printed pawn pad for a 6-8mm disc or cube; pawns must not cover the category icon.",
+    "hostTrackerPanel": "Use a host tracker or blank QR box only. Do not print a fake QR code before the real hosted URL exists.",
+    "artMode": "Hybrid raster/vector: high-resolution illustrated background under editable vector route, spaces, labels, icons, pawn pads, host tracker, legend, score reference, and setup rules.",
+    "productionStatus": "Validated school prototype and manufacturer-brief package, not final commercial press artwork."
+  },
+  "rules": {
+    "setup": [
+      "Give each player one Starter Profile, one Player Board, one 6-8mm pawn disc or cube, and the fictional cash printed on their Starter Profile.",
+      "Place one pawn on S00 Student Start. If several players share a space, put one pawn on the pad and queue extras beside the tile in player-code order.",
+      "Shuffle the Investment, Market/Life, Ethics, Action, and Reflection decks separately. Put a face-up discard pile beside each deck.",
+      "Keep one D6, the fictional bank, and the shared price tracker near the host.",
+      "Use the QR web app when available to run the session, track prices, maintain player ledgers, score the game, sync session codes through the bundled backend, and export evidence."
+    ],
+    "turnSequence": [
+      "Roll one D6.",
+      "Move forward on S00-S43. If a roll passes S43, stop at S43.",
+      "Resolve the landing space.",
+      "Record one decision, finance term, or evidence note on the Player Board.",
+      "Discard any drawn card face-up after it resolves."
+    ],
+    "deckExhaustion": "When a draw deck runs out, shuffle its discard pile into a new draw deck. If both draw deck and discard pile are empty, use the printed fallback for that space and continue.",
+    "choiceTiming": "Risky Choice effects that advance a pawn one extra space do not resolve the new space until that player's next turn.",
+    "marketPrices": "Asset price indexes cannot fall below 1.",
+    "endCondition": "Score when all players reach S43 Finish Review or after 12 turns per player, whichever happens first.",
+    "evidenceBoundary": "AI simulation verifies mechanics and balance. Real student surveys or playtests are required before claiming target-audience understanding."
+  },
+  "scoringFormulas": {
+    "portfolioValue": "cash + sum(units held * current asset index * 1000)",
+    "portfolioScore": "round(player portfolio value / highest player portfolio value * 25)",
+    "diversificationScore": "min(20, unique asset categories * 4); if unique categories >= 5, score 20",
+    "riskManagementScore": "min(15, riskEvidence * 2 + 4 if cash >= 20000 + 3 if unique categories >= 3)",
+    "ethicsScore": "clamp(10 + ethicsPosition * 2, 0, 20)",
+    "reflectionScore": "clamp(total reflection evidence, 0, 20)",
+    "totalScore": "portfolioScore + diversificationScore + riskManagementScore + ethicsScore + reflectionScore"
+  },
+  "scoreWeights": {
+    "portfolioValue": 25,
+    "diversification": 20,
+    "riskManagement": 15,
+    "ethics": 20,
+    "reflection": 20
+  },
+  "assets": [
+    {
+      "id": "cash",
+      "name": "Cash Reserve",
+      "color": "#22C55E",
+      "pattern": "solid",
+      "risk": 1,
+      "startIndex": 10
+    },
+    {
+      "id": "bond",
+      "name": "Government Bond",
+      "color": "#3B82F6",
+      "pattern": "diagonal stripe",
+      "risk": 1,
+      "startIndex": 12
+    },
+    {
+      "id": "index",
+      "name": "Index Fund",
+      "color": "#14B8A6",
+      "pattern": "crosshatch",
+      "risk": 2,
+      "startIndex": 15
+    },
+    {
+      "id": "growth",
+      "name": "Growth Stock",
+      "color": "#F97316",
+      "pattern": "dotted",
+      "risk": 3,
+      "startIndex": 18
+    },
+    {
+      "id": "crypto",
+      "name": "Crypto-Style Asset",
+      "color": "#EF4444",
+      "pattern": "dashed",
+      "risk": 5,
+      "startIndex": 20
+    },
+    {
+      "id": "ethical",
+      "name": "Ethical Business",
+      "color": "#8B5CF6",
+      "pattern": "stippled",
+      "risk": 2,
+      "startIndex": 14
+    },
+    {
+      "id": "trend",
+      "name": "Unverified Trend",
+      "color": "#EAB308",
+      "pattern": "zigzag",
+      "risk": 5,
+      "startIndex": 8
+    }
+  ],
+  "boardSpaces": [
+    {
+      "id": "S00",
+      "type": "Start",
+      "label": "Student Start",
+      "effect": "Collect profile cash and choose first goal."
+    },
+    {
+      "id": "S01",
+      "type": "Income",
+      "label": "Allowance Boost",
+      "cash": 8000
+    },
+    {
+      "id": "S02",
+      "type": "Invest",
+      "label": "First Portfolio Choice"
+    },
+    {
+      "id": "S03",
+      "type": "Research/Action",
+      "label": "Ask Before Buying"
+    },
+    {
+      "id": "S04",
+      "type": "Choice",
+      "label": "Risk Decision",
+      "choices": [
+        "Safe: gain +1 risk-management evidence.",
+        "Risky: advance +1 space after resolving this space; do not resolve the new space this turn."
+      ]
+    },
+    {
+      "id": "S05",
+      "type": "Invest",
+      "label": "Starter Position"
+    },
+    {
+      "id": "S06",
+      "type": "Market Pulse",
+      "label": "Market News"
+    },
+    {
+      "id": "S07",
+      "type": "Life Expense",
+      "label": "Device Repair",
+      "cash": -6000
+    },
+    {
+      "id": "S08",
+      "type": "Ethics Crossroad",
+      "label": "Profit vs Principle"
+    },
+    {
+      "id": "S09",
+      "type": "Income",
+      "label": "Freelance Gig",
+      "cash": 10000
+    },
+    {
+      "id": "S10",
+      "type": "Rebalance",
+      "label": "Portfolio Check"
+    },
+    {
+      "id": "S11",
+      "type": "Market Pulse",
+      "label": "Global Signal"
+    },
+    {
+      "id": "S12",
+      "type": "Invest",
+      "label": "New Asset Desk"
+    },
+    {
+      "id": "S13",
+      "type": "Reflection",
+      "label": "Explain a Decision"
+    },
+    {
+      "id": "S14",
+      "type": "Choice",
+      "label": "Ethics Decision",
+      "choices": [
+        "Responsible: gain +1 ethics.",
+        "Profit-first: gain no ethics bonus."
+      ]
+    },
+    {
+      "id": "S15",
+      "type": "Research/Action",
+      "label": "Due Diligence"
+    },
+    {
+      "id": "S16",
+      "type": "Invest",
+      "label": "Build Position"
+    },
+    {
+      "id": "S17",
+      "type": "Market Pulse",
+      "label": "Volatility Wave"
+    },
+    {
+      "id": "S18",
+      "type": "Life Expense",
+      "label": "Exam Prep Cost",
+      "cash": -5000
+    },
+    {
+      "id": "S19",
+      "type": "Income",
+      "label": "Internship Pay",
+      "cash": 12000
+    },
+    {
+      "id": "S20",
+      "type": "Ethics Crossroad",
+      "label": "Hidden Impact"
+    },
+    {
+      "id": "S21",
+      "type": "Rebalance",
+      "label": "Reduce Concentration"
+    },
+    {
+      "id": "S22",
+      "type": "Invest",
+      "label": "Long-Term Choice"
+    },
+    {
+      "id": "S23",
+      "type": "Market Pulse",
+      "label": "System Shock"
+    },
+    {
+      "id": "S24",
+      "type": "Research/Action",
+      "label": "Second Opinion"
+    },
+    {
+      "id": "S25",
+      "type": "Life Expense",
+      "label": "Family Contribution",
+      "cash": -7000
+    },
+    {
+      "id": "S26",
+      "type": "Choice",
+      "label": "Cash Decision",
+      "choices": [
+        "Hold cash: gain +1 risk-management evidence.",
+        "Chase return: advance +1 space after resolving this space; do not resolve the new space this turn."
+      ]
+    },
+    {
+      "id": "S27",
+      "type": "Invest",
+      "label": "Opportunity Market"
+    },
+    {
+      "id": "S28",
+      "type": "Ethics Crossroad",
+      "label": "Reputation Test"
+    },
+    {
+      "id": "S29",
+      "type": "Market Pulse",
+      "label": "Trend Shock"
+    },
+    {
+      "id": "S30",
+      "type": "Income",
+      "label": "Project Prize",
+      "cash": 9000
+    },
+    {
+      "id": "S31",
+      "type": "Research/Action",
+      "label": "Risk Review"
+    },
+    {
+      "id": "S32",
+      "type": "Life Expense",
+      "label": "Emergency Cost",
+      "cash": -8000
+    },
+    {
+      "id": "S33",
+      "type": "Invest",
+      "label": "Final Buy/Sell"
+    },
+    {
+      "id": "S34",
+      "type": "Market Pulse",
+      "label": "Final Market Move"
+    },
+    {
+      "id": "S35",
+      "type": "Ethics Crossroad",
+      "label": "Final Impact Choice"
+    },
+    {
+      "id": "S36",
+      "type": "Rebalance",
+      "label": "Last Portfolio Check"
+    },
+    {
+      "id": "S37",
+      "type": "Reflection",
+      "label": "Roundtable Review"
+    },
+    {
+      "id": "S38",
+      "type": "Choice",
+      "label": "Impact Decision",
+      "choices": [
+        "Impact: gain +1 ethics.",
+        "Profit sprint: advance +1 space after resolving this space; do not resolve the new space this turn."
+      ]
+    },
+    {
+      "id": "S39",
+      "type": "Invest",
+      "label": "Future Hub Deal"
+    },
+    {
+      "id": "S40",
+      "type": "Market Pulse",
+      "label": "Final Signal"
+    },
+    {
+      "id": "S41",
+      "type": "Life Expense",
+      "label": "Graduation Cost",
+      "cash": -6000
+    },
+    {
+      "id": "S42",
+      "type": "Reflection",
+      "label": "Final Explanation"
+    },
+    {
+      "id": "S43",
+      "type": "Finish",
+      "label": "Finish Review"
+    }
+  ],
+  "cards": {
+    "starterProfiles": [
+      {
+        "id": "SP01",
+        "title": "Budget Builder",
+        "cash": 105000,
+        "trait": "Keeps liquidity",
+        "bonus": "Start with +1 risk-management evidence if ending Turn 1 with INR 20000 cash."
+      },
+      {
+        "id": "SP02",
+        "title": "Opportunity Hunter",
+        "cash": 100000,
+        "trait": "Likes growth",
+        "bonus": "First Growth or Index buy costs INR 2000 less."
+      },
+      {
+        "id": "SP03",
+        "title": "Ethical Analyst",
+        "cash": 98000,
+        "trait": "Values impact",
+        "bonus": "Start one step right on the ethics track."
+      },
+      {
+        "id": "SP04",
+        "title": "Balanced Planner",
+        "cash": 100000,
+        "trait": "Diversifies early",
+        "bonus": "If holding three categories by Turn 3, gain +2 reflection evidence."
+      },
+      {
+        "id": "SP05",
+        "title": "Trend Chaser",
+        "cash": 102000,
+        "trait": "Tempted by hype",
+        "bonus": "Trend buy costs INR 1000 less, but first Trend loss costs one extra risk point."
+      }
+    ],
+    "investments": [
+      {
+        "id": "I01",
+        "title": "Emergency Cash",
+        "asset": "cash",
+        "units": 1,
+        "costIndex": 10,
+        "text": "Stable liquidity. Low return, high flexibility."
+      },
+      {
+        "id": "I02",
+        "title": "Rainy Day Reserve",
+        "asset": "cash",
+        "units": 1,
+        "costIndex": 10,
+        "text": "Protects against expenses and panic."
+      },
+      {
+        "id": "I03",
+        "title": "School Savings Bond",
+        "asset": "bond",
+        "units": 1,
+        "costIndex": 12,
+        "text": "Defensive holding. Helps during market stress."
+      },
+      {
+        "id": "I04",
+        "title": "Infrastructure Bond",
+        "asset": "bond",
+        "units": 1,
+        "costIndex": 12,
+        "text": "Slow but resilient public-project exposure."
+      },
+      {
+        "id": "I05",
+        "title": "MarketMix Index",
+        "asset": "index",
+        "units": 1,
+        "costIndex": 15,
+        "text": "Diversified basket across companies."
+      },
+      {
+        "id": "I06",
+        "title": "GlobalBasket Index",
+        "asset": "index",
+        "units": 1,
+        "costIndex": 15,
+        "text": "Connects personal investing to global systems."
+      },
+      {
+        "id": "I07",
+        "title": "IndiaPlus Index",
+        "asset": "index",
+        "units": 1,
+        "costIndex": 15,
+        "text": "Domestic-market basket with medium risk."
+      },
+      {
+        "id": "I08",
+        "title": "NovaTech Growth",
+        "asset": "growth",
+        "units": 1,
+        "costIndex": 18,
+        "text": "High upside; vulnerable to rate shocks."
+      },
+      {
+        "id": "I09",
+        "title": "EduSpark Growth",
+        "asset": "growth",
+        "units": 1,
+        "costIndex": 18,
+        "text": "Education technology linked to SDG 4."
+      },
+      {
+        "id": "I10",
+        "title": "FinWave Growth",
+        "asset": "growth",
+        "units": 1,
+        "costIndex": 18,
+        "text": "Fintech company with volatile returns."
+      },
+      {
+        "id": "I11",
+        "title": "BlockBurst Coin",
+        "asset": "crypto",
+        "units": 1,
+        "costIndex": 20,
+        "text": "Extreme volatility. Needs clear reasoning."
+      },
+      {
+        "id": "I12",
+        "title": "MetaMint Token",
+        "asset": "crypto",
+        "units": 1,
+        "costIndex": 20,
+        "text": "Hype-sensitive digital asset."
+      },
+      {
+        "id": "I13",
+        "title": "GreenBridge Energy",
+        "asset": "ethical",
+        "units": 1,
+        "costIndex": 14,
+        "text": "Responsible infrastructure with medium risk."
+      },
+      {
+        "id": "I14",
+        "title": "FairWear Supply",
+        "asset": "ethical",
+        "units": 1,
+        "costIndex": 14,
+        "text": "Ethical supply chain investment."
+      },
+      {
+        "id": "I15",
+        "title": "EduAccess Co.",
+        "asset": "ethical",
+        "units": 1,
+        "costIndex": 14,
+        "text": "Affordable education provider."
+      },
+      {
+        "id": "I16",
+        "title": "TrendZap",
+        "asset": "trend",
+        "units": 1,
+        "costIndex": 8,
+        "text": "Cheap entry, severe downside risk."
+      },
+      {
+        "id": "I17",
+        "title": "HypeCart",
+        "asset": "trend",
+        "units": 1,
+        "costIndex": 8,
+        "text": "Rumour-driven opportunity."
+      },
+      {
+        "id": "I18",
+        "title": "ViralMine",
+        "asset": "trend",
+        "units": 1,
+        "costIndex": 8,
+        "text": "Can crash after scam warnings."
+      }
+    ],
+    "events": [
+      {
+        "id": "M01",
+        "title": "Tech Sector Boom",
+        "sentiment": "Bull",
+        "bias": "FOMO",
+        "priceEffects": {
+          "growth": 4,
+          "crypto": 3,
+          "index": 2,
+          "bond": -1,
+          "ethical": 1,
+          "trend": 3
+        }
+      },
+      {
+        "id": "M02",
+        "title": "Regulatory Shock",
+        "sentiment": "Bear",
+        "bias": "Panic",
+        "priceEffects": {
+          "crypto": -7,
+          "trend": -6,
+          "growth": -3,
+          "index": -2,
+          "bond": 1
+        }
+      },
+      {
+        "id": "M03",
+        "title": "Inflation Surge",
+        "sentiment": "Bear",
+        "bias": "Panic",
+        "priceEffects": {
+          "bond": -2,
+          "growth": -2,
+          "index": -1,
+          "crypto": 1,
+          "ethical": -1
+        }
+      },
+      {
+        "id": "M04",
+        "title": "Global Trade Recovery",
+        "sentiment": "Bull",
+        "bias": "Herd",
+        "priceEffects": {
+          "index": 3,
+          "growth": 2,
+          "ethical": 2,
+          "crypto": 1,
+          "trend": 1
+        }
+      },
+      {
+        "id": "M05",
+        "title": "Supply Chain Disruption",
+        "sentiment": "Bear",
+        "bias": "Panic",
+        "priceEffects": {
+          "growth": -4,
+          "index": -3,
+          "ethical": -2,
+          "bond": 1,
+          "crypto": -1,
+          "trend": -2
+        }
+      },
+      {
+        "id": "M06",
+        "title": "Green Policy Incentive",
+        "sentiment": "Bull",
+        "bias": "None",
+        "priceEffects": {
+          "ethical": 4,
+          "index": 1,
+          "growth": 1,
+          "crypto": -1
+        }
+      },
+      {
+        "id": "M07",
+        "title": "Social Media Hype",
+        "sentiment": "Bull",
+        "bias": "FOMO",
+        "priceEffects": {
+          "trend": 8,
+          "crypto": 5,
+          "growth": 2
+        }
+      },
+      {
+        "id": "M08",
+        "title": "Scam Warning",
+        "sentiment": "Bear",
+        "bias": "Panic",
+        "priceEffects": {
+          "trend": -8,
+          "crypto": -5,
+          "growth": -1,
+          "index": -1,
+          "bond": 1,
+          "ethical": 1
+        }
+      },
+      {
+        "id": "M09",
+        "title": "Interest Rate Cut",
+        "sentiment": "Bull",
+        "bias": "Overconfidence",
+        "priceEffects": {
+          "growth": 3,
+          "index": 2,
+          "bond": 1,
+          "crypto": 2,
+          "ethical": 1,
+          "trend": 2
+        }
+      },
+      {
+        "id": "M10",
+        "title": "Interest Rate Hike",
+        "sentiment": "Bear",
+        "bias": "Panic",
+        "priceEffects": {
+          "growth": -4,
+          "index": -2,
+          "bond": -1,
+          "crypto": -3,
+          "ethical": -1,
+          "trend": -3
+        }
+      },
+      {
+        "id": "M11",
+        "title": "Currency Volatility",
+        "sentiment": "Neutral",
+        "bias": "Herd",
+        "priceEffects": {
+          "index": -2,
+          "growth": -1,
+          "crypto": 2,
+          "ethical": -1,
+          "trend": 1
+        }
+      },
+      {
+        "id": "M12",
+        "title": "Consumer Confidence Rise",
+        "sentiment": "Bull",
+        "bias": "FOMO",
+        "priceEffects": {
+          "growth": 3,
+          "index": 2,
+          "ethical": 1,
+          "trend": 2,
+          "crypto": 1
+        }
+      },
+      {
+        "id": "M13",
+        "title": "Consumer Confidence Drop",
+        "sentiment": "Bear",
+        "bias": "Panic",
+        "priceEffects": {
+          "growth": -3,
+          "index": -2,
+          "ethical": -1,
+          "trend": -3,
+          "crypto": -2,
+          "bond": 1
+        }
+      },
+      {
+        "id": "M14",
+        "title": "Infrastructure Push",
+        "sentiment": "Bull",
+        "bias": "None",
+        "priceEffects": {
+          "bond": 2,
+          "index": 1,
+          "ethical": 2,
+          "growth": 1
+        }
+      },
+      {
+        "id": "M15",
+        "title": "Data Privacy Scandal",
+        "sentiment": "Bear",
+        "bias": "Panic",
+        "priceEffects": {
+          "growth": -3,
+          "crypto": -2,
+          "trend": -3,
+          "index": -1,
+          "ethical": 1
+        }
+      },
+      {
+        "id": "M16",
+        "title": "Clean Energy Breakthrough",
+        "sentiment": "Bull",
+        "bias": "FOMO",
+        "priceEffects": {
+          "ethical": 5,
+          "growth": 2,
+          "index": 1,
+          "trend": 1
+        }
+      },
+      {
+        "id": "M17",
+        "title": "Market Correction",
+        "sentiment": "Bear",
+        "bias": "Panic",
+        "priceEffects": {
+          "growth": -5,
+          "crypto": -6,
+          "trend": -7,
+          "index": -3,
+          "ethical": -2,
+          "bond": 1
+        }
+      },
+      {
+        "id": "M18",
+        "title": "Quiet Market",
+        "sentiment": "Neutral",
+        "bias": "None",
+        "priceEffects": {
+          "bond": 1,
+          "index": 1,
+          "ethical": 1,
+          "trend": -1
+        }
+      }
+    ],
+    "ethics": [
+      {
+        "id": "E01",
+        "title": "Labour Concern",
+        "profit": {
+          "cash": 6000,
+          "ethics": -1
+        },
+        "responsible": {
+          "cash": -3000,
+          "ethics": 1
+        },
+        "prompt": "Should labour practices affect investing?"
+      },
+      {
+        "id": "E02",
+        "title": "Green Upgrade",
+        "profit": {
+          "cash": 4000,
+          "ethics": -1
+        },
+        "responsible": {
+          "cash": -2000,
+          "ethics": 1
+        },
+        "prompt": "Can lower short-term returns be justified?"
+      },
+      {
+        "id": "E03",
+        "title": "Influencer Hype",
+        "profit": {
+          "cash": 5000,
+          "ethics": -1
+        },
+        "responsible": {
+          "cash": 0,
+          "ethics": 1
+        },
+        "prompt": "What is the risk of promotion without evidence?"
+      },
+      {
+        "id": "E04",
+        "title": "Data Misuse",
+        "profit": {
+          "cash": 5000,
+          "ethics": -1
+        },
+        "responsible": {
+          "cash": -1000,
+          "ethics": 1
+        },
+        "prompt": "How does privacy connect to investing?"
+      },
+      {
+        "id": "E05",
+        "title": "Community Impact",
+        "profit": {
+          "cash": 4000,
+          "ethics": -1
+        },
+        "responsible": {
+          "cash": -2000,
+          "ethics": 1
+        },
+        "prompt": "Should community impact affect financial choice?"
+      },
+      {
+        "id": "E06",
+        "title": "Carbon Fine",
+        "profit": {
+          "cash": 0,
+          "ethics": -1
+        },
+        "responsible": {
+          "cash": -3000,
+          "ethics": 2
+        },
+        "prompt": "Can ESG risk become financial risk?"
+      },
+      {
+        "id": "E07",
+        "title": "Governance Warning",
+        "profit": {
+          "cash": 3000,
+          "ethics": -1
+        },
+        "responsible": {
+          "cash": 0,
+          "ethics": 1
+        },
+        "prompt": "Why does governance matter?"
+      },
+      {
+        "id": "E08",
+        "title": "Fair Wage Vote",
+        "profit": {
+          "cash": 5000,
+          "ethics": -1
+        },
+        "responsible": {
+          "cash": -2000,
+          "ethics": 1
+        },
+        "prompt": "How do workers fit into economic value?"
+      },
+      {
+        "id": "E09",
+        "title": "Product Safety Issue",
+        "profit": {
+          "cash": 6000,
+          "ethics": -2
+        },
+        "responsible": {
+          "cash": 0,
+          "ethics": 2
+        },
+        "prompt": "When should risk override return?"
+      },
+      {
+        "id": "E10",
+        "title": "Transparent Reporting",
+        "profit": {
+          "cash": 3000,
+          "ethics": -1
+        },
+        "responsible": {
+          "cash": 0,
+          "ethics": 1,
+          "action": 1
+        },
+        "prompt": "Why is information quality important?"
+      },
+      {
+        "id": "E11",
+        "title": "Greenwashing Alert",
+        "profit": {
+          "cash": 3000,
+          "ethics": -1
+        },
+        "responsible": {
+          "cash": -2000,
+          "ethics": 2
+        },
+        "prompt": "How can false sustainability claims mislead investors?"
+      },
+      {
+        "id": "E12",
+        "title": "Long-Term Reputation",
+        "profit": {
+          "cash": 6000,
+          "ethics": -1
+        },
+        "responsible": {
+          "cash": -2000,
+          "ethics": 2
+        },
+        "prompt": "How can ethics protect future value?"
+      }
+    ],
+    "actions": [
+      {
+        "id": "A01",
+        "title": "Research Report",
+        "type": "research",
+        "text": "Peek at the next Market/Life Event."
+      },
+      {
+        "id": "A02",
+        "title": "Due Diligence",
+        "type": "discount-risky",
+        "text": "Buy Growth/Crypto/Trend at INR 2000 less after naming one risk."
+      },
+      {
+        "id": "A03",
+        "title": "Stop-Loss",
+        "type": "loss-limit",
+        "text": "Limit one risky asset loss this event to half."
+      },
+      {
+        "id": "A04",
+        "title": "Insurance Hedge",
+        "type": "hedge",
+        "text": "If a chosen category falls this round, gain INR 3000 cash."
+      },
+      {
+        "id": "A05",
+        "title": "Cash Buffer",
+        "type": "cash-buffer",
+        "text": "If keeping INR 20000 cash after your turn, gain +2 risk evidence."
+      },
+      {
+        "id": "A06",
+        "title": "Emergency Reserve",
+        "type": "reserve",
+        "text": "If your portfolio fell and you hold Cash, gain INR 4000."
+      },
+      {
+        "id": "A07",
+        "title": "Rebalance",
+        "type": "rebalance",
+        "text": "Sell one unit and buy a different category without penalty."
+      },
+      {
+        "id": "A08",
+        "title": "Second Opinion",
+        "type": "risk-check",
+        "text": "Before a risky buy, name one risk and ask the host or a peer for a second opinion; clear reasoning earns +1 risk evidence."
+      },
+      {
+        "id": "A09",
+        "title": "Peer Review",
+        "type": "explain",
+        "text": "Defend a decision with one finance term for +2 explanation evidence."
+      },
+      {
+        "id": "A10",
+        "title": "Market Patience",
+        "type": "hold",
+        "text": "Choose not to trade; gain +1 risk evidence and INR 1000."
+      },
+      {
+        "id": "A11",
+        "title": "Ethics Audit",
+        "type": "ethics-boost",
+        "text": "Responsible ethics choice moves one extra step right."
+      },
+      {
+        "id": "A12",
+        "title": "Diversify Now",
+        "type": "diversify",
+        "text": "If holding 1-2 categories, new category costs INR 2000 less."
+      }
+    ],
+    "reflection": [
+      {
+        "id": "R01",
+        "title": "Emotion Check",
+        "prompt": "Name one decision you made because of emotion, not analysis. What should you have done instead?"
+      },
+      {
+        "id": "R02",
+        "title": "Diversification",
+        "prompt": "Explain your diversification strategy using at least one finance term."
+      },
+      {
+        "id": "R03",
+        "title": "Hidden Risk",
+        "prompt": "Which asset looked attractive but carried hidden risk? Explain why."
+      },
+      {
+        "id": "R04",
+        "title": "Ethics Trade-Off",
+        "prompt": "Describe one ethics decision and whether you prioritised return or responsibility."
+      },
+      {
+        "id": "R05",
+        "title": "Liquidity",
+        "prompt": "When did holding cash help or hurt your strategy?"
+      },
+      {
+        "id": "R06",
+        "title": "Event Risk",
+        "prompt": "What market event changed your strategy the most?"
+      },
+      {
+        "id": "R07",
+        "title": "Action Card",
+        "prompt": "Which action card did you use, and how did it manage risk?"
+      },
+      {
+        "id": "R08",
+        "title": "Replay",
+        "prompt": "What would you change if you replayed from the start?"
+      },
+      {
+        "id": "R09",
+        "title": "Global Systems",
+        "prompt": "Explain one global event and how it affected personal investing choices."
+      },
+      {
+        "id": "R10",
+        "title": "Richest vs Best",
+        "prompt": "Did the richest player also make the best decisions? Explain using score categories."
+      }
+    ],
+    "quickReference": [
+      {
+        "id": "Q01",
+        "title": "Turn Order",
+        "text": "Roll one die, move on S00-S43, resolve the landing space, then log one decision."
+      },
+      {
+        "id": "Q02",
+        "title": "Finance Terms",
+        "text": "Volatility, diversification, liquidity, risk-return, FOMO, ESG."
+      },
+      {
+        "id": "Q03",
+        "title": "Scoring",
+        "text": "Value 25, diversification 20, risk 15, ethics 20, reflection 20."
+      },
+      {
+        "id": "Q04",
+        "title": "Choice Spaces",
+        "text": "Safe adds risk evidence, responsible adds ethics, risky may advance one extra space without resolving it this turn."
+      },
+      {
+        "id": "Q05",
+        "title": "Host Role",
+        "text": "Reveal events, track prices, export host evidence. Player boards hold portfolio records and final scoring."
+      }
+    ],
+    "qr": [
+      {
+        "id": "QR01",
+        "title": "Host Tracker Setup",
+        "text": "Use the hosted dashboard only after a real URL is confirmed. Until then, use player boards and the price tracker."
+      }
+    ]
+  },
+  "agentProfiles": [
+    {
+      "id": "cautious",
+      "name": "Cautious Student",
+      "riskPreference": 0.2,
+      "ethicsPreference": 0.7,
+      "cashPreference": 0.8
+    },
+    {
+      "id": "risk_seeking",
+      "name": "Risk-Seeking Student",
+      "riskPreference": 0.85,
+      "ethicsPreference": 0.35,
+      "cashPreference": 0.25
+    },
+    {
+      "id": "ethical",
+      "name": "Ethical Investor",
+      "riskPreference": 0.45,
+      "ethicsPreference": 0.95,
+      "cashPreference": 0.55
+    },
+    {
+      "id": "confused",
+      "name": "Confused Beginner",
+      "riskPreference": 0.5,
+      "ethicsPreference": 0.5,
+      "cashPreference": 0.5
+    },
+    {
+      "id": "competitive",
+      "name": "Competitive Profit-Maximizer",
+      "riskPreference": 0.75,
+      "ethicsPreference": 0.15,
+      "cashPreference": 0.2
+    }
+  ]
+}

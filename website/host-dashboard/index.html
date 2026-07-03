@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Give And Take QR web app for classroom setup, guest play, session codes, market tracking, player ledgers, and final scoring."
+    />
+    <title>Give And Take QR App</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <noscript>
+      <main class="no-script">
+        <h1>Give And Take</h1>
+        <p>This QR app needs JavaScript to run the game session.</p>
+      </main>
+    </noscript>
+
+    <div id="app" class="boot-shell">
+      <section class="boot-card">
+        <p class="kicker">Give And Take</p>
+        <h1>Loading game rules...</h1>
+        <p>Reading the current S00-S43 prototype contract.</p>
+      </section>
+    </div>
+
+    <script src="game-data.js"></script>
+    <script src="supabase-config.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
