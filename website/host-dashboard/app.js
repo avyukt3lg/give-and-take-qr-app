@@ -10,33 +10,84 @@
     auth: "give-and-take:auth:v1",
     backend: "give-and-take:backend:v1",
     client: "give-and-take:client:v1",
-    session: "give-and-take:session:v3"
+    session: "give-and-take:session:v3",
+    ui: "give-and-take:ui:v1"
   };
 
   const deckMeta = {
-    investments: { label: "Investment", configKey: "investments" },
-    events: { label: "Market/Life", configKey: "events" },
-    ethics: { label: "Ethics", configKey: "ethics" },
-    actions: { label: "Action", configKey: "actions" },
-    reflection: { label: "Reflection", configKey: "reflection" }
+    investments: { label: "Investment", configKey: "investments", icon: "UP", tone: "investment" },
+    events: { label: "Market/Life", configKey: "events", icon: "MK", tone: "market" },
+    ethics: { label: "Ethics", configKey: "ethics", icon: "EQ", tone: "ethics" },
+    actions: { label: "Action", configKey: "actions", icon: "CK", tone: "action" },
+    reflection: { label: "Reflection", configKey: "reflection", icon: "RF", tone: "reflection" }
   };
 
   const navItems = [
-    ["setup", "Setup"],
-    ["play", "Play"],
-    ["market", "Market"],
-    ["players", "Players"],
-    ["scoring", "Scoring"],
-    ["export", "Export"],
-    ["rules", "Rules"]
+    ["setup", "Setup", "TB"],
+    ["play", "Play", "D6"],
+    ["market", "Market", "MK"],
+    ["players", "Ledger", "PL"],
+    ["scoring", "Scores", "SC"],
+    ["export", "Export", "EX"],
+    ["rules", "Help", "HP"]
   ];
+
+  const playerTokens = ["#d7b45b", "#3fb6a6", "#da6b4f", "#7d6bd6", "#5aa36f"];
+
+  const profileMeta = {
+    SP01: { icon: "WL", style: "Liquidity keeper" },
+    SP02: { icon: "GR", style: "Growth seeker" },
+    SP03: { icon: "ES", style: "Impact first" },
+    SP04: { icon: "DB", style: "Balanced builder" },
+    SP05: { icon: "TR", style: "Hype watcher" }
+  };
+
+  const assetUi = {
+    cash: { icon: "CA", pattern: "solid", label: "Low-risk liquidity" },
+    bond: { icon: "GB", pattern: "stripe", label: "Defensive income" },
+    index: { icon: "IX", pattern: "cross", label: "Diversified basket" },
+    growth: { icon: "GS", pattern: "dot", label: "Higher-growth company" },
+    crypto: { icon: "CR", pattern: "dash", label: "Extreme volatility" },
+    ethical: { icon: "EB", pattern: "stipple", label: "Responsible business" },
+    trend: { icon: "UT", pattern: "zigzag", label: "Hype-sensitive trend" }
+  };
+
+  const spaceUi = {
+    Start: { icon: "ST", tone: "start", help: "Collect profile cash and begin the route." },
+    Income: { icon: "IN", tone: "income", help: "Add fictional cash to the player ledger." },
+    Invest: { icon: "IV", tone: "invest", help: "Draw Investment and buy or pass." },
+    "Research/Action": { icon: "AC", tone: "action", help: "Draw Action or gain risk evidence if empty." },
+    Choice: { icon: "CH", tone: "choice", help: "Choose one equal option and commit it." },
+    "Market Pulse": { icon: "MK", tone: "market", help: "Draw Market/Life and update shared prices." },
+    "Life Expense": { icon: "EX", tone: "expense", help: "Pay the printed expense from cash." },
+    "Ethics Crossroad": { icon: "EQ", tone: "ethics", help: "Choose profit or responsible effect." },
+    Rebalance: { icon: "RB", tone: "rebalance", help: "Sell or adjust holdings, then gain risk evidence." },
+    Reflection: { icon: "RF", tone: "reflection", help: "Answer and score reflection evidence." },
+    Finish: { icon: "FN", tone: "finish", help: "Wait for final scoring." }
+  };
+
+  const evidenceNotes = {
+    Income: "Recorded income and updated cash.",
+    "Life Expense": "Recorded expense and updated cash.",
+    "Market Pulse": "Observed market event and price impact.",
+    "Ethics Crossroad": "Explained profit versus responsible choice.",
+    Invest: "Bought or passed after considering risk-return.",
+    "Research/Action": "Used action card to manage risk.",
+    Rebalance: "Adjusted portfolio and gained risk evidence.",
+    Reflection: "Answered reflection prompt.",
+    Choice: "Made a risk or ethics trade-off.",
+    Start: "Confirmed starting cash and first goal.",
+    Finish: "Reached final review."
+  };
+
+  const phaseSteps = ["Roll", "Resolve", "Log", "End"];
 
   const appRoot = document.getElementById("app");
   const model = {
     game: null,
     indexes: null,
     auth: null,
-    authTab: "login",
+    authTab: "guest",
     session: null,
     backend: {
       online: false,
@@ -51,7 +102,17 @@
       needsSave: false,
       clientRole: null,
       lastSyncedJson: "",
-      unavailableReason: ""
+      unavailableReason: "",
+      saveState: "local",
+      lastSavedAt: null
+    },
+    ui: {
+      theme: readStore(STORAGE.ui, {})?.theme ?? (window.matchMedia?.("(prefers-color-scheme: light)")?.matches ? "classroom" : "table"),
+      diceMode: readStore(STORAGE.ui, {})?.diceMode ?? "digital",
+      boardExpanded: false,
+      ledgerEditMode: false,
+      rulesQuery: "",
+      dialog: null
     },
     message: "",
     exportText: "",
@@ -77,6 +138,150 @@
     } catch {
       setMessage("This browser blocked local storage. The app can run, but refresh persistence may fail.");
     }
+  }
+
+  function persistUi() {
+    writeStore(STORAGE.ui, {
+      theme: model.ui.theme,
+      diceMode: model.ui.diceMode
+    });
+  }
+
+  function setSaveState(state, detail = "") {
+    model.backend.saveState = state;
+    model.backend.unavailableReason = detail || model.backend.unavailableReason || "";
+    if (state === "synced" || state === "local") {
+      model.backend.lastSavedAt = nowIso();
+    }
+  }
+
+  function relativeTime(iso) {
+    if (!iso) {
+      return "not saved yet";
+    }
+    const seconds = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+    if (seconds < 10) return "just now";
+    if (seconds < 60) return `${seconds}s ago`;
+    const minutes = Math.round(seconds / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+
+  function saveModeLabel() {
+    if (model.backend.provider === "supabase" && model.backend.online) {
+      return "Live table";
+    }
+    if (model.backend.online) {
+      return "Local network";
+    }
+    return "This browser";
+  }
+
+  function sessionStatus() {
+    if (model.backend.saving || model.backend.saveState === "saving") {
+      return { state: "saving", label: "Saving", detail: "Writing the latest table state.", action: "" };
+    }
+    if (model.backend.saveState === "failed") {
+      return {
+        state: "failed",
+        label: "Save failed",
+        detail: "Saved in this browser. Retry when the connection is back.",
+        action: `<button class="mini-button" type="button" data-action="retry-sync">Retry</button>`
+      };
+    }
+    if (model.backend.online && model.backend.saveState === "synced") {
+      return { state: "synced", label: "Synced", detail: `Last saved ${relativeTime(model.backend.lastSavedAt)}.`, action: "" };
+    }
+    if (model.backend.online) {
+      return { state: "synced", label: "Ready", detail: `${saveModeLabel()} is ready.`, action: "" };
+    }
+    return {
+      state: "local",
+      label: "Local only",
+      detail: "This table is stored in the current browser.",
+      action: ""
+    };
+  }
+
+  function assetMeta(assetId) {
+    const asset = getAsset(assetId);
+    return {
+      ...asset,
+      ...(assetUi[assetId] ?? { icon: assetId.slice(0, 2).toUpperCase(), pattern: "solid", label: asset.name })
+    };
+  }
+
+  function spaceMeta(type) {
+    return spaceUi[type] ?? { icon: "SP", tone: "generic", help: "Resolve the printed board space." };
+  }
+
+  function profileUi(profileId) {
+    return profileMeta[profileId] ?? { icon: profileId?.slice(0, 2) ?? "SP", style: "Starter profile" };
+  }
+
+  function phaseIndex() {
+    if (model.session.gameOver) {
+      return phaseSteps.length;
+    }
+    if (model.session.phase === "Setup") {
+      return 0;
+    }
+    const index = phaseSteps.indexOf(model.session.phase);
+    return index >= 0 ? index : 0;
+  }
+
+  function choiceDetails(space, choice, index) {
+    const text = String(choice ?? "");
+    const lower = text.toLowerCase();
+    const movement = lower.includes("advance") ? "+1 space; do not resolve it this turn" : "No extra movement";
+    const risk = lower.includes("risk-management") ? "+1 risk evidence" : "No risk change";
+    const ethics = lower.includes("ethics") && lower.includes("+1") ? "+1 ethics" : lower.includes("profit-first") ? "No ethics bonus" : "No ethics change";
+    const title = text.includes(":") ? text.split(":")[0] : `Option ${index + 1}`;
+    return {
+      title,
+      consequence: text.includes(":") ? text.slice(text.indexOf(":") + 1).trim() : text,
+      risk,
+      ethics,
+      movement,
+      confirm: `You chose ${title}. ${movement}. Confirm this choice for ${space.id} ${space.label}?`
+    };
+  }
+
+  function scoreStateLabel() {
+    return model.session.gameOver || isGameOver() ? "Final Review" : "Provisional Scoreboard";
+  }
+
+  function exportSummary() {
+    const notes = model.session.players.reduce((sum, player) => sum + player.decisions.length, 0);
+    const cardsDrawn = model.session.players.reduce((sum, player) => {
+      return sum + player.decisions.filter((decision) => decision.cardId).length;
+    }, 0);
+    const totalTurns = model.session.players.reduce((sum, player) => sum + player.turnsTaken, 0);
+    return {
+      code: model.session.code,
+      createdAt: model.session.createdAt,
+      updatedAt: model.session.updatedAt,
+      playerCount: model.session.players.length,
+      totalTurns,
+      events: model.session.marketHistory.length,
+      cardsDrawn,
+      notes,
+      scoreState: scoreStateLabel(),
+      saveMode: saveModeLabel()
+    };
+  }
+
+  function openDialog(dialog) {
+    model.ui.dialog = dialog;
+    render();
+    window.setTimeout(() => {
+      appRoot.querySelector(".dialog-card button, .dialog-card input, .dialog-card textarea, .dialog-card select")?.focus();
+    }, 0);
+  }
+
+  function closeDialog() {
+    model.ui.dialog = null;
+    render();
   }
 
   function getClientId() {
@@ -237,12 +442,14 @@
       model.backend.label = health.label ?? "Session server";
       model.backend.client = null;
       model.backend.unavailableReason = "";
+      setSaveState("synced");
     } catch (error) {
       model.backend.online = false;
       model.backend.provider = "local";
       model.backend.label = "Local browser";
       model.backend.client = null;
       model.backend.unavailableReason = error.message ?? "Session server unavailable.";
+      setSaveState("local", model.backend.unavailableReason);
     }
   }
 
@@ -261,6 +468,7 @@
       model.backend.label = "Supabase";
       model.backend.client = client;
       model.backend.unavailableReason = "";
+      setSaveState("synced");
       return true;
     } catch (error) {
       model.backend.online = false;
@@ -268,6 +476,7 @@
       model.backend.label = "Local browser";
       model.backend.client = null;
       model.backend.unavailableReason = error.message ?? "Online table service could not load.";
+      setSaveState("local", model.backend.unavailableReason);
       return false;
     }
   }
@@ -281,12 +490,14 @@
 
   function queueBackendSync() {
     if (!model.backend.online || !model.auth || !model.session) {
+      setSaveState("local");
       return;
     }
     if (model.backend.saving) {
       model.backend.needsSave = true;
       return;
     }
+    setSaveState("saving");
     window.clearTimeout(model.backend.syncTimer);
     model.backend.syncTimer = window.setTimeout(syncSessionToBackend, 450);
   }
@@ -319,12 +530,14 @@
       model.backend.revision = Number(result.revision ?? model.backend.revision);
       model.backend.lastSyncedJson = JSON.stringify(result.session ?? model.session);
       model.backend.unavailableReason = "";
+      setSaveState("synced");
     } catch (error) {
       model.backend.online = false;
       model.backend.provider = "local";
       model.backend.label = "Local browser";
       model.backend.unavailableReason = error.message ?? "Session server unavailable.";
-      setMessage("Session server went offline. Continuing in this browser.");
+      setSaveState("failed", model.backend.unavailableReason);
+      setMessage("Could not save online. The table is still saved in this browser.");
     } finally {
       model.backend.saving = false;
       if (model.backend.needsSave) {
@@ -422,8 +635,10 @@
       model.backend.lastSyncedJson = localJson;
       persistBackendState();
       writeStore(STORAGE.session, model.session);
+      setSaveState("synced");
     } catch (error) {
-      setMessage("Online table save failed. The current browser state is still available.");
+      setSaveState("failed", error.message ?? "Online save failed.");
+      setMessage("Could not save online. The table is still saved in this browser.");
     } finally {
       model.backend.saving = false;
       if (model.backend.needsSave) {
@@ -617,7 +832,15 @@
       pendingResolution: null,
       activeEvent: null,
       peekedEventId: null,
+      priceHistory: [
+        {
+          at: nowIso(),
+          source: "setup",
+          prices: Object.fromEntries(model.game.assets.map((asset) => [asset.id, asset.startIndex]))
+        }
+      ],
       marketHistory: [],
+      manualAdjustments: [],
       activity: []
     };
   }
@@ -631,7 +854,9 @@
     merged.decks = { ...fresh.decks, ...(session?.decks ?? {}) };
     merged.discards = { ...fresh.discards, ...(session?.discards ?? {}) };
     merged.players = Array.isArray(session?.players) ? session.players.map(ensurePlayerShape) : [];
+    merged.priceHistory = Array.isArray(session?.priceHistory) ? session.priceHistory : fresh.priceHistory;
     merged.marketHistory = Array.isArray(session?.marketHistory) ? session.marketHistory : [];
+    merged.manualAdjustments = Array.isArray(session?.manualAdjustments) ? session.manualAdjustments : [];
     merged.activity = Array.isArray(session?.activity) ? session.activity : [];
     return merged;
   }
@@ -642,6 +867,7 @@
       name: player.name,
       profileId: player.profileId,
       profileTitle: player.profileTitle,
+      tokenColor: player.tokenColor ?? playerTokens[Number(String(player.id ?? "P1").replace(/\D/g, "")) - 1] ?? playerTokens[0],
       cash: Number(player.cash ?? 0),
       position: Number(player.position ?? 0),
       turnsTaken: Number(player.turnsTaken ?? 0),
@@ -755,10 +981,25 @@
 
     const players = [];
     const usedProfiles = new Set();
+    const usedNames = new Set();
     for (let index = 0; index < count; index += 1) {
-      const name = document.getElementById(`playerName${index}`)?.value.trim() || `Player ${index + 1}`;
+      const name = document.getElementById(`playerName${index}`)?.value.trim();
       const profileId = document.getElementById(`playerProfile${index}`)?.value;
       const profile = model.game.cards.starterProfiles.find((item) => item.id === profileId);
+      if (!name) {
+        setMessage(`Seat ${index + 1} needs a player name.`);
+        render();
+        return;
+      }
+      if (usedNames.has(name.toLowerCase())) {
+        openDialog({
+          type: "duplicate-names",
+          title: "Duplicate names",
+          body: "Two players have the same name. Use unique names before starting so the ledger and evidence export stay clear."
+        });
+        return;
+      }
+      usedNames.add(name.toLowerCase());
       if (!profile) {
         setMessage(`Player ${index + 1} needs a Starter Profile.`);
         render();
@@ -775,6 +1016,7 @@
         name,
         profileId: profile.id,
         profileTitle: profile.title,
+        tokenColor: playerTokens[index] ?? playerTokens[0],
         cash: profile.cash,
         position: 0,
         turnsTaken: 0,
@@ -1024,9 +1266,19 @@
     });
 
     model.session.activeEvent = event;
+    model.session.priceHistory.unshift({
+      at: nowIso(),
+      source,
+      eventId: event.id,
+      appliedEffects,
+      prices: { ...model.session.prices }
+    });
+    model.session.priceHistory = model.session.priceHistory.slice(0, 40);
     model.session.marketHistory.unshift({
       at: nowIso(),
       source,
+      playerId: currentPlayer()?.id ?? null,
+      playerName: currentPlayer()?.name ?? null,
       id: event.id,
       title: event.title,
       sentiment: event.sentiment,
@@ -1430,7 +1682,9 @@
       exportedAt: nowIso(),
       app: "Give And Take QR session app",
       accessModel: "Host and players use the table code shown on the physical board or shared by the host.",
+      summary: exportSummary(),
       session: model.session,
+      manualAdjustments: model.session.manualAdjustments,
       scorePreview: calculateScores().map((score) => ({
         playerId: score.player.id,
         name: score.player.name,
@@ -1508,25 +1762,37 @@
   }
 
   function renderAuth() {
-    appRoot.className = "auth-page";
+    appRoot.className = `auth-page theme-${model.ui.theme}`;
     appRoot.innerHTML = `
-      <section class="auth-visual">
-        <p class="kicker">Give And Take</p>
-        <h1>Host or join a live game table.</h1>
-        <p>Use the table code from the board to keep turns, prices, player ledgers, and final scoring aligned during play.</p>
-        <div class="auth-proof">
-          <div class="proof-tile"><strong>Host</strong><span>Create a table code</span></div>
-          <div class="proof-tile"><strong>Join</strong><span>Enter the table code</span></div>
-          <div class="proof-tile"><strong>Score</strong><span>Finish the review</span></div>
+      <section class="auth-visual" aria-labelledby="entry-title">
+        <div class="table-map">
+          <img src="${BOARD_IMAGE_URL}" alt="Give And Take board with QR code" />
+          <div class="map-badge">S00-S43</div>
         </div>
+        <p class="kicker">Give And Take</p>
+        <h1 id="entry-title">Open the QR table for the physical board game.</h1>
+        <p>Host the table, join with a GT code, track fictional cash and prices, then export the session evidence.</p>
+        <div class="auth-proof" aria-label="Game flow">
+          <div class="proof-tile"><strong>D6</strong><span>Roll and move on the printed board.</span></div>
+          <div class="proof-tile"><strong>GT</strong><span>Share one table code with players.</span></div>
+          <div class="proof-tile"><strong>100</strong><span>Score value, diversification, risk, ethics, and reflection.</span></div>
+        </div>
+        <p class="privacy-line">Uses fictional cash and gameplay notes only. No real investment data.</p>
       </section>
       <section class="auth-card">
+        <div class="auth-card-head">
+          <div>
+            <p class="eyeline">Table entry</p>
+            <h2>${model.authTab === "join" ? "Join a table" : model.authTab === "signup" ? "Create account" : model.authTab === "login" ? "Login" : "Host a table"}</h2>
+          </div>
+          ${renderThemeToggle()}
+        </div>
         <div class="auth-tabs" role="tablist" aria-label="Access mode">
-          ${["login", "signup", "guest", "join"]
+          ${["guest", "join", "login", "signup"]
             .map(
               (tab) => `
                 <button class="auth-tab" type="button" data-auth-tab="${tab}" aria-selected="${model.authTab === tab}">
-                  ${tab === "signup" ? "Sign up" : tab === "login" ? "Login" : tab === "guest" ? "Guest" : "Join"}
+                  ${tab === "signup" ? "Sign up" : tab === "login" ? "Login" : tab === "guest" ? "Host" : "Join"}
                 </button>
               `
             )
@@ -1535,6 +1801,7 @@
         ${renderAuthPanel()}
       </section>
       ${renderToast()}
+      ${renderDialog()}
     `;
   }
 
@@ -1566,6 +1833,10 @@
             <label for="guestName">Host name</label>
             <input class="input" id="guestName" name="name" autocomplete="name" required />
           </div>
+          <div class="entry-preview">
+            <strong>Host flow</strong>
+            <span>Create a GT code, set 2-5 players, then run turns from the Play table.</span>
+          </div>
           <p class="notice">${escapeHtml(backendNotice("guest"))}</p>
           <button class="button" type="submit">Host table</button>
         </form>
@@ -1581,6 +1852,10 @@
           <div class="field">
             <label for="joinCode">Session code</label>
             <input class="input code-input" id="joinCode" name="code" value="GT-" inputmode="text" autocomplete="off" required />
+          </div>
+          <div class="entry-preview">
+            <strong>Where is the code?</strong>
+            <span>The host shows a code like GT-4827 after creating the table.</span>
           </div>
           <p class="notice">${escapeHtml(backendNotice("join"))}</p>
           <button class="button" type="submit">Join session</button>
@@ -1603,23 +1878,167 @@
     `;
   }
 
+  function renderThemeToggle() {
+    const labels = { table: "Table", classroom: "Classroom", contrast: "Contrast" };
+    return `
+      <div class="theme-toggle" role="group" aria-label="Visual theme">
+        ${["table", "classroom", "contrast"]
+          .map(
+            (theme) => `
+              <button class="theme-button" type="button" data-action="set-theme" data-theme="${theme}" aria-pressed="${model.ui.theme === theme}">
+                ${labels[theme]}
+              </button>
+            `
+          )
+          .join("")}
+      </div>
+    `;
+  }
+
+  function renderSessionStatus(status = sessionStatus()) {
+    return `
+      <section class="session-status status-${status.state}" aria-label="Session save status">
+        <div>
+          <span class="label">${escapeHtml(saveModeLabel())}</span>
+          <strong>${escapeHtml(status.label)}</strong>
+          <p>${escapeHtml(status.detail)}</p>
+        </div>
+        ${status.action}
+      </section>
+    `;
+  }
+
+  function renderDialog() {
+    const dialog = model.ui.dialog;
+    if (!dialog) {
+      return "";
+    }
+    if (dialog.type === "choice") {
+      return `
+        <div class="dialog-backdrop" data-action="close-dialog">
+          <section class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="choiceDialogTitle" data-dialog-card>
+            <button class="dialog-close" type="button" data-action="close-dialog" aria-label="Close dialog">x</button>
+            <p class="eyeline">Confirm choice</p>
+            <h2 id="choiceDialogTitle">${escapeHtml(dialog.title)}</h2>
+            <p>${escapeHtml(dialog.body)}</p>
+            <div class="choice-confirm-grid">
+              <span><strong>Risk</strong>${escapeHtml(dialog.risk)}</span>
+              <span><strong>Ethics</strong>${escapeHtml(dialog.ethics)}</span>
+              <span><strong>Movement</strong>${escapeHtml(dialog.movement)}</span>
+            </div>
+            <div class="btn-row">
+              <button class="button-secondary" type="button" data-action="close-dialog">Review options</button>
+              <button class="button" type="button" data-action="confirm-choice" data-choice-index="${dialog.choiceIndex}">Confirm choice</button>
+            </div>
+          </section>
+        </div>
+      `;
+    }
+    if (dialog.type === "adjust") {
+      const player = model.session.players.find((item) => item.id === dialog.playerId);
+      return `
+        <div class="dialog-backdrop" data-action="close-dialog">
+          <form class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="adjustDialogTitle" data-modal-form="adjust" data-dialog-card>
+            <button class="dialog-close" type="button" data-action="close-dialog" aria-label="Close dialog">x</button>
+            <p class="eyeline">Ledger correction</p>
+            <h2 id="adjustDialogTitle">${escapeHtml(player?.name ?? "Player")} - ${escapeHtml(dialog.label)}</h2>
+            <p>Manual edits are for corrections or physical fallback. They are recorded in the export log.</p>
+            <input type="hidden" name="playerId" value="${escapeHtml(dialog.playerId)}" />
+            <input type="hidden" name="field" value="${escapeHtml(dialog.field)}" />
+            <div class="field">
+              <label for="adjustAmount">Amount</label>
+              <input class="input" id="adjustAmount" name="amount" type="number" step="${dialog.field === "cash" ? "1000" : "1"}" value="${dialog.field === "cash" ? "1000" : "1"}" required />
+            </div>
+            <div class="field">
+              <label for="adjustDirection">Direction</label>
+              <select class="select" id="adjustDirection" name="direction">
+                <option value="1">Add</option>
+                <option value="-1">Subtract</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="adjustReason">Reason</label>
+              <textarea class="textarea" id="adjustReason" name="reason" required>Correction from physical board.</textarea>
+            </div>
+            <div class="btn-row">
+              <button class="button-secondary" type="button" data-action="close-dialog">Cancel</button>
+              <button class="button" type="submit">Apply and log</button>
+            </div>
+          </form>
+        </div>
+      `;
+    }
+    if (dialog.type === "confirm-action") {
+      return `
+        <div class="dialog-backdrop" data-action="close-dialog">
+          <section class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="confirmDialogTitle" data-dialog-card>
+            <button class="dialog-close" type="button" data-action="close-dialog" aria-label="Close dialog">x</button>
+            <p class="eyeline">${escapeHtml(dialog.eyeline ?? "Confirm")}</p>
+            <h2 id="confirmDialogTitle">${escapeHtml(dialog.title)}</h2>
+            <p>${escapeHtml(dialog.body)}</p>
+            <div class="btn-row">
+              <button class="button-secondary" type="button" data-action="close-dialog">Cancel</button>
+              <button class="button" type="button" data-action="${escapeHtml(dialog.confirmAction)}">${escapeHtml(dialog.confirmLabel ?? "Confirm")}</button>
+            </div>
+          </section>
+        </div>
+      `;
+    }
+    if (dialog.type === "board") {
+      return `
+        <div class="dialog-backdrop" data-action="close-dialog">
+          <section class="dialog-card board-dialog" role="dialog" aria-modal="true" aria-labelledby="boardDialogTitle" data-dialog-card>
+            <button class="dialog-close" type="button" data-action="close-dialog" aria-label="Close dialog">x</button>
+            <p class="eyeline">${escapeHtml(dialog.eyeline)}</p>
+            <h2 id="boardDialogTitle">${escapeHtml(dialog.title)}</h2>
+            <p>${escapeHtml(dialog.body)}</p>
+            <img src="${BOARD_IMAGE_URL}" alt="Give And Take board with QR code" />
+            <div class="btn-row">
+              <button class="button" type="button" data-action="close-dialog">Close</button>
+            </div>
+          </section>
+        </div>
+      `;
+    }
+    return `
+      <div class="dialog-backdrop" data-action="close-dialog">
+        <section class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="infoDialogTitle" data-dialog-card>
+          <button class="dialog-close" type="button" data-action="close-dialog" aria-label="Close dialog">x</button>
+          <p class="eyeline">${escapeHtml(dialog.eyeline ?? "Notice")}</p>
+          <h2 id="infoDialogTitle">${escapeHtml(dialog.title ?? "Give And Take")}</h2>
+          <p>${escapeHtml(dialog.body ?? "")}</p>
+          <div class="btn-row">
+            <button class="button" type="button" data-action="close-dialog">Close</button>
+          </div>
+        </section>
+      </div>
+    `;
+  }
+
   function renderApp() {
     const player = currentPlayer();
-    appRoot.className = "app-shell";
+    const status = sessionStatus();
+    appRoot.className = `app-shell theme-${model.ui.theme}`;
     appRoot.innerHTML = `
       <aside class="rail">
         <div class="brand-mark">
           <div class="brand-token">GT</div>
           <div>
             <p class="brand-title">Give And Take</p>
-            <p class="brand-subtitle">QR game table</p>
+            <p class="brand-subtitle">QR table companion</p>
           </div>
+        </div>
+        <div class="rail-status">
+          <span class="label">Table</span>
+          <strong>${escapeHtml(model.session.code)}</strong>
+          <span>${escapeHtml(model.session.phase)} - ${escapeHtml(player?.name ?? "setup")}</span>
         </div>
         <nav class="nav-list" aria-label="Game sections">
           ${navItems
             .map(
-              ([view, label]) => `
+              ([view, label, icon]) => `
                 <button class="nav-button" type="button" data-view="${view}" aria-current="${model.session.view === view ? "page" : "false"}">
+                  <span class="nav-icon" aria-hidden="true">${icon}</span>
                   <span>${label}</span>
                   <span>${view === "play" && model.session.pendingResolution ? "Live" : ""}</span>
                 </button>
@@ -1628,11 +2047,9 @@
             .join("")}
         </nav>
         <div class="rail-footer">
-          <div class="session-mini">
-            <span class="label">Session</span>
-            <strong>${escapeHtml(model.session.code)}</strong>
-            <button class="mini-button" type="button" data-action="copy-session-code">Copy code</button>
-          </div>
+          ${renderSessionStatus(status)}
+          <button class="mini-button" type="button" data-action="copy-session-code">Copy code</button>
+          ${renderThemeToggle()}
           <button class="button-ghost" type="button" data-action="logout">Logout</button>
         </div>
       </aside>
@@ -1649,14 +2066,28 @@
             <span class="status-pill">Turn <strong>${escapeHtml(currentTurnLabel())}</strong></span>
             <span class="status-pill">Player <strong>${escapeHtml(player?.name ?? "None")}</strong></span>
             <span class="status-pill">Phase <strong>${escapeHtml(model.session.phase)}</strong></span>
-            <span class="status-pill">Mode <strong>${model.session.started ? "Live" : "Setup"}</strong></span>
+            <span class="status-pill status-${status.state}">${escapeHtml(status.label)} <strong>${escapeHtml(status.state === "saving" ? "now" : status.state === "synced" ? relativeTime(model.backend.lastSavedAt) : saveModeLabel())}</strong></span>
           </div>
         </header>
         <section class="content">
           ${renderCurrentView()}
         </section>
       </main>
+      <nav class="mobile-nav" aria-label="Mobile game sections">
+        ${navItems
+          .slice(0, 5)
+          .map(
+            ([view, label, icon]) => `
+              <button class="mobile-nav-button" type="button" data-view="${view}" aria-current="${model.session.view === view ? "page" : "false"}">
+                <span>${icon}</span>
+                <strong>${label}</strong>
+              </button>
+            `
+          )
+          .join("")}
+      </nav>
       ${renderToast()}
+      ${renderDialog()}
     `;
   }
 
@@ -1666,9 +2097,9 @@
       play: "Play Table",
       market: "Market Tracker",
       players: "Player Ledger",
-      scoring: "Final Scoring",
+      scoring: scoreStateLabel(),
       export: "Evidence Export",
-      rules: "Rules Reference"
+      rules: "Help Center"
     }[view] ?? "Give And Take";
   }
 
@@ -1695,57 +2126,80 @@
 
   function renderSetup() {
     const draft = model.session.draft;
+    const readyCount = Number(draft.playerCount);
     return `
-      <div class="grid two">
-        <section class="panel">
+      <div class="setup-layout">
+        <section class="panel setup-session-panel">
           <div class="panel-header">
             <div>
-              <p class="eyeline">Setup</p>
-              <h2>Build the table</h2>
-              <p>Choose 2-5 unique Starter Profiles. Starting cash and profile bonuses apply automatically.</p>
+              <p class="eyeline">Table setup</p>
+              <h2>Prepare the host table</h2>
+              <p>Choose 2-5 players, assign unique Starter Profiles, then start the one-D6 route.</p>
             </div>
             <button class="button-ghost" type="button" data-action="new-session">New session</button>
           </div>
-          <div class="stack">
-            ${hostOnlyNotice()}
-            <div class="session-code-card">
-              <div>
-                <span class="label">Table code</span>
-                <strong>${escapeHtml(model.session.code)}</strong>
-              </div>
-              <div>
-                <span class="label">Access</span>
-                <strong>${escapeHtml(tableRoleLabel())}</strong>
-              </div>
-              <button class="button-secondary" type="button" data-action="copy-session-code">Copy code</button>
+          ${hostOnlyNotice()}
+          <div class="session-code-card">
+            <div>
+              <span class="label">GT code</span>
+              <strong>${escapeHtml(model.session.code)}</strong>
             </div>
+            <div>
+              <span class="label">Mode</span>
+              <strong>${escapeHtml(saveModeLabel())}</strong>
+            </div>
+            <button class="button-secondary" type="button" data-action="copy-session-code">Copy code</button>
+          </div>
+          ${renderSessionStatus()}
+          <div class="setup-actions">
             <div class="field">
-              <label for="playerCount">Players</label>
+              <label for="playerCount">Number of players</label>
               <select class="select" id="playerCount" data-draft="count" ${hostDisabledAttr(model.session.started)}>
-                ${[2, 3, 4, 5]
-                  .map((count) => `<option value="${count}" ${Number(draft.playerCount) === count ? "selected" : ""}>${count} players</option>`)
-                  .join("")}
+                ${[2, 3, 4, 5].map((count) => `<option value="${count}" ${Number(draft.playerCount) === count ? "selected" : ""}>${count} players</option>`).join("")}
               </select>
             </div>
-            ${Array.from({ length: Number(draft.playerCount) }, (_, index) => renderSetupRow(index)).join("")}
-            <div class="btn-row">
-              <button class="button" type="button" data-action="start-session" ${hostDisabledAttr(model.session.started)}>Start game</button>
-              <button class="button-secondary" type="button" data-view="play" ${model.session.started ? "" : "disabled"}>Open play table</button>
-            </div>
+            <button class="button" type="button" data-action="start-session" ${hostDisabledAttr(model.session.started)}>Start game: ${readyCount} players ready</button>
+            <button class="button-secondary" type="button" data-view="play" ${model.session.started ? "" : "disabled"}>Open play table</button>
           </div>
         </section>
+
+        <section class="panel player-setup-panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyeline">Players</p>
+              <h2>Starter Profile seats</h2>
+              <p>Profile cash and bonuses apply automatically when the game starts.</p>
+            </div>
+          </div>
+          <div class="setup-card-grid">
+            ${Array.from({ length: Number(draft.playerCount) }, (_, index) => renderSetupRow(index)).join("")}
+          </div>
+        </section>
+
         <section class="panel board-reference">
           <div class="panel-header">
             <div>
-              <p class="eyeline">Board reference</p>
-              <h2>S00-S43 physical board</h2>
-              <p>The QR app follows the same one-D6 route and stops at S43.</p>
+              <p class="eyeline">Physical board reference</p>
+              <h2>Board and QR check</h2>
+              <p>The web app tracks the session; the physical board remains playable.</p>
             </div>
+            <button class="mini-button" type="button" data-action="expand-board">Expand</button>
           </div>
           <figure>
             <img src="${BOARD_IMAGE_URL}" alt="Give And Take physical game board" />
             <figcaption>Use this as the visual reference while the website tracks the playable state.</figcaption>
           </figure>
+          <div class="checklist">
+            ${[
+              "Shuffle Investment, Market/Life, Ethics, Action, and Reflection decks.",
+              "Put pawns on S00 Student Start.",
+              "Keep the D6 and price tracker near the host.",
+              "Share the GT code with players.",
+              "Confirm player boards and pencils are ready."
+            ]
+              .map((item, index) => `<label><input type="checkbox" /> <span>${index + 1}. ${escapeHtml(item)}</span></label>`)
+              .join("")}
+          </div>
         </section>
       </div>
     `;
@@ -1755,12 +2209,17 @@
     const starterProfiles = model.game.cards.starterProfiles;
     const draft = model.session.draft.players[index] ?? { name: `Player ${index + 1}`, profileId: starterProfiles[index]?.id };
     const profile = starterProfiles.find((item) => item.id === draft.profileId) ?? starterProfiles[index] ?? starterProfiles[0];
+    const meta = profileUi(profile.id);
     return `
-      <article class="setup-row">
-        <div class="metric-tile">
-          <span>Seat</span>
-          <strong>P${index + 1}</strong>
-        </div>
+      <article class="setup-row setup-player-card">
+        <header>
+          <span class="player-token" style="--token:${cssVar(playerTokens[index] ?? playerTokens[0])}">P${index + 1}</span>
+          <div>
+            <p class="eyeline">${escapeHtml(meta.style)}</p>
+            <h3>${escapeHtml(profile.title)}</h3>
+          </div>
+          <span class="profile-icon">${escapeHtml(meta.icon)}</span>
+        </header>
         <div class="field">
           <label for="playerName${index}">Player name</label>
           <input class="input" id="playerName${index}" data-draft="name" data-index="${index}" value="${escapeHtml(draft.name)}" ${hostDisabledAttr(model.session.started)} />
@@ -1772,6 +2231,11 @@
               .map((item) => `<option value="${item.id}" ${item.id === profile.id ? "selected" : ""}>${item.id} ${escapeHtml(item.title)} - ${money(item.cash)}</option>`)
               .join("")}
           </select>
+        </div>
+        <div class="profile-summary">
+          <span><strong>Cash</strong>${money(profile.cash)}</span>
+          <span><strong>Trait</strong>${escapeHtml(profile.trait)}</span>
+          <span><strong>Bonus</strong>${escapeHtml(profile.bonus)}</span>
         </div>
       </article>
     `;
@@ -1790,49 +2254,85 @@
       `;
     }
     return `
-      <div class="grid three">
-        <section class="panel stack">
-          ${hostOnlyNotice()}
-          ${renderCurrentPlayerCard()}
-          ${renderPathTracker()}
-        </section>
-        <section class="panel stack">
-          ${renderResolutionPanel()}
-          ${renderTurnLogPanel()}
-        </section>
-        <section class="panel stack">
-          ${renderDecks()}
-          ${renderPriceTracker()}
-        </section>
-      </div>
-      <div style="height:16px"></div>
+      <section class="play-board">
+        ${hostOnlyNotice()}
+        ${renderPhaseStepper()}
+        <div class="play-layout">
+          <div class="play-primary">
+            ${renderCurrentPlayerCard()}
+            ${renderResolutionPanel()}
+            ${renderTurnLogPanel()}
+          </div>
+          <aside class="play-side">
+            ${renderPathTracker()}
+            ${renderDecks()}
+            ${renderPriceTracker()}
+          </aside>
+        </div>
+      </section>
       ${renderLedger()}
+    `;
+  }
+
+  function renderPhaseStepper() {
+    const current = phaseIndex();
+    return `
+      <nav class="phase-stepper" aria-label="Turn phase tracker">
+        ${phaseSteps
+          .map((step, index) => {
+            const done = index < current || model.session.gameOver;
+            const active = index === current && !model.session.gameOver;
+            return `
+              <span class="phase-step ${done ? "done" : ""} ${active ? "active" : ""}">
+                <span>${done ? "OK" : index + 1}</span>
+                <strong>${step}</strong>
+              </span>
+            `;
+          })
+          .join("")}
+      </nav>
     `;
   }
 
   function renderCurrentPlayerCard() {
     const player = currentPlayer();
     const canRoll = Boolean(player && !model.session.pendingResolution && !model.session.gameOver && !player.finished && player.turnsTaken < model.game.turnLimit);
+    const space = getSpace(`S${String(player?.position ?? 0).padStart(2, "0")}`);
     return `
-      <article class="resolution-card">
+      <article class="current-player-card">
         <div class="panel-header">
           <div>
             <p class="eyeline">Current player</p>
             <h2>${escapeHtml(player?.name ?? "No player")}</h2>
-            <p>${escapeHtml(player?.profileTitle ?? "Start setup first")}</p>
+            <p>${escapeHtml(player?.profileTitle ?? "Start setup first")} - ${escapeHtml(space?.id ?? "S00")} ${escapeHtml(space?.label ?? "Student Start")}</p>
           </div>
-          <button class="die-button" type="button" data-action="roll-die" ${hostDisabledAttr(!canRoll)}>${model.session.die ?? "D6"}</button>
+          <span class="player-token large" style="--token:${cssVar(player?.tokenColor ?? playerTokens[0])}">${escapeHtml(player?.id ?? "P")}</span>
         </div>
-        <div class="metric-grid">
+        <div class="metric-grid player-metrics">
           <div class="metric-tile"><span>Position</span><strong>S${String(player?.position ?? 0).padStart(2, "0")}</strong></div>
           <div class="metric-tile"><span>Cash</span><strong>${money(player?.cash ?? 0)}</strong></div>
           <div class="metric-tile"><span>Value</span><strong>${money(player ? portfolioValue(player) : 0)}</strong></div>
           <div class="metric-tile"><span>Evidence</span><strong>R${player?.riskEvidence ?? 0} E${player?.ethicsPosition ?? 0} F${player?.reflectionEvidence ?? 0}</strong></div>
         </div>
-        <div class="btn-row">
-          ${[1, 2, 3, 4, 5, 6]
-            .map((roll) => `<button class="mini-button" type="button" data-action="manual-roll" data-roll="${roll}" ${hostDisabledAttr(!canRoll)}>${roll}</button>`)
-            .join("")}
+        <div class="dice-console">
+          <div class="dice-mode" role="group" aria-label="Dice mode">
+            <button class="mini-button" type="button" data-action="set-dice-mode" data-mode="digital" aria-pressed="${model.ui.diceMode === "digital"}">Digital dice</button>
+            <button class="mini-button" type="button" data-action="set-dice-mode" data-mode="physical" aria-pressed="${model.ui.diceMode === "physical"}">Physical dice</button>
+          </div>
+          ${
+            model.ui.diceMode === "physical"
+              ? `
+                <div class="physical-roll">
+                  <label for="physicalDie">Enter D6 result</label>
+                  <input class="input die-input" id="physicalDie" type="number" min="1" max="6" value="${model.session.die ?? 1}" ${hostDisabledAttr(!canRoll)} />
+                  <button class="button" type="button" data-action="submit-physical-roll" ${hostDisabledAttr(!canRoll)}>Move pawn</button>
+                </div>
+                <div class="quick-rolls" aria-label="Quick physical die entries">
+                  ${[1, 2, 3, 4, 5, 6].map((roll) => `<button class="mini-button" type="button" data-action="manual-roll" data-roll="${roll}" ${hostDisabledAttr(!canRoll)}>${roll}</button>`).join("")}
+                </div>
+              `
+              : `<button class="die-button" type="button" data-action="roll-die" aria-label="Roll digital six-sided die. Current result ${model.session.die ?? "none"}" ${hostDisabledAttr(!canRoll)}>${model.session.die ?? "D6"}</button>`
+          }
         </div>
       </article>
     `;
@@ -1852,6 +2352,7 @@
             <p class="eyeline">Board path</p>
             <h2>S00 to S43</h2>
           </div>
+          <button class="mini-button" type="button" data-action="expand-board">Board image</button>
         </div>
         <div class="path-track" aria-label="Board position tracker">
           ${model.game.boardSpaces
@@ -1859,11 +2360,14 @@
               const players = occupied.get(index) ?? [];
               const isActive = currentPlayer()?.position === index;
               const isFinish = index === 43;
+              const meta = spaceMeta(space.type);
               return `
-                <div class="path-dot ${isActive ? "active" : ""} ${isFinish ? "finished" : ""}" title="${space.id} ${escapeHtml(space.label)}">
-                  ${String(index).padStart(2, "0")}
-                  <span class="pawn-markers">${players.map(() => `<span class="pawn-marker"></span>`).join("")}</span>
-                </div>
+                <button class="path-dot ${isActive ? "active" : ""} ${isFinish ? "finished" : ""} tone-${meta.tone}" type="button" data-action="space-info" data-space-id="${space.id}" aria-label="${space.id} ${escapeHtml(space.label)}: ${escapeHtml(space.type)}">
+                  <span class="path-id">${space.id}</span>
+                  <span class="path-icon">${meta.icon}</span>
+                  <span class="path-label">${escapeHtml(space.label)}</span>
+                  <span class="pawn-markers">${players.map((playerId) => `<span class="pawn-marker" title="${playerId}"></span>`).join("")}</span>
+                </button>
               `;
             })
             .join("")}
@@ -1894,11 +2398,17 @@
       `;
     }
     const space = getSpace(pending.spaceId);
+    const meta = spaceMeta(space.type);
     return `
-      <article class="resolution-card ${pending.completed ? "completed" : ""}">
-        <p class="eyeline">${escapeHtml(space.type)}</p>
-        <h2>${escapeHtml(space.id)} ${escapeHtml(space.label)}</h2>
-        <p>${escapeHtml(space.effect ?? space.choices?.join(" ") ?? "Resolve this board space.")}</p>
+      <article class="resolution-card ${pending.completed ? "completed" : ""} tone-${meta.tone}">
+        <div class="resolver-head">
+          <span class="space-badge tone-${meta.tone}">${escapeHtml(meta.icon)}</span>
+          <div>
+            <p class="eyeline">${escapeHtml(space.type)}</p>
+            <h2>${escapeHtml(space.id)} ${escapeHtml(space.label)}</h2>
+            <p>${escapeHtml(space.effect ?? meta.help)}</p>
+          </div>
+        </div>
         ${renderPendingCard(pending)}
         ${renderResolutionControls(pending, space)}
         ${pending.result.length ? `<ul class="effect-list">${pending.result.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : ""}
@@ -1962,8 +2472,8 @@
         <div class="btn-row">
           ${Object.entries(event.priceEffects)
             .map(([assetId, delta]) => {
-              const asset = getAsset(assetId);
-              return `<span class="asset-chip" style="background:${cssVar(asset.color)}">${escapeHtml(asset.name)} ${signed(delta)}</span>`;
+              const asset = assetMeta(assetId);
+              return `<span class="asset-chip pattern-${asset.pattern}" style="--asset:${cssVar(asset.color)}" aria-label="${escapeHtml(asset.name)} changed ${signed(delta)}">${escapeHtml(asset.icon)} ${escapeHtml(asset.name)} ${signed(delta)}</span>`;
             })
             .join("")}
         </div>
@@ -2016,9 +2526,20 @@
     }
     if (space.type === "Choice") {
       return `
-        <div class="btn-row">
+        <div class="choice-grid">
           ${(space.choices ?? ["Choice A", "Choice B"])
-            .map((choice, index) => `<button class="${index === 0 ? "button" : "button-secondary"}" type="button" data-action="apply-choice" data-choice-index="${index}" ${hostDisabledAttr()}>${escapeHtml(choice)}</button>`)
+            .map((choice, index) => {
+              const details = choiceDetails(space, choice, index);
+              return `
+                <button class="choice-card" type="button" data-action="request-choice" data-choice-index="${index}" ${hostDisabledAttr()}>
+                  <span class="choice-title">${escapeHtml(details.title)}</span>
+                  <span>${escapeHtml(details.consequence)}</span>
+                  <span class="choice-meta">Risk: ${escapeHtml(details.risk)}</span>
+                  <span class="choice-meta">Ethics: ${escapeHtml(details.ethics)}</span>
+                  <span class="choice-meta">Movement: ${escapeHtml(details.movement)}</span>
+                </button>
+              `;
+            })
             .join("")}
         </div>
       `;
@@ -2040,14 +2561,21 @@
 
   function renderTurnLogPanel() {
     const pending = model.session.pendingResolution;
+    const suggested = pending ? evidenceNotes[pending.type] ?? "Recorded the turn result and reasoning." : "";
     return `
-      <section class="stack">
+      <section class="turn-log-card">
         <div class="field">
           <label for="turnNote">Required decision, finance term, or evidence note</label>
-          <p class="notice">Example note: I kept cash because liquidity protects me from surprise expenses.</p>
+          <p class="notice">Use a suggested note or write your own. The note is saved in the evidence export.</p>
+          ${
+            suggested
+              ? `<div class="note-chip-row"><button class="note-chip" type="button" data-action="use-evidence-note" data-note="${escapeHtml(suggested)}" ${pending?.completed && canEditSession() ? "" : "disabled"}>${escapeHtml(suggested)}</button></div>`
+              : ""
+          }
           <textarea class="textarea" id="turnNote" ${pending?.completed && canEditSession() ? "" : "disabled"}></textarea>
         </div>
-        <div class="btn-row">
+        <div class="sticky-turn-actions">
+          <span>${pending?.completed ? "Ready to end turn." : "Resolve the space before ending the turn."}</span>
           <button class="button" type="button" data-action="end-turn" ${hostDisabledAttr(!pending?.completed)}>End turn</button>
         </div>
       </section>
@@ -2067,9 +2595,11 @@
           ${Object.entries(deckMeta)
             .map(
               ([deckKey, meta]) => `
-                <div class="deck-card">
+                <div class="deck-card tone-${meta.tone}">
+                  <span class="deck-icon">${meta.icon}</span>
                   <strong>${meta.label}</strong>
-                  <span class="table-label">Deck ${model.session.decks[deckKey].length} / Discard ${model.session.discards[deckKey].length}</span>
+                  <span class="table-label">Draw ${model.session.decks[deckKey].length} / Discard ${model.session.discards[deckKey].length}</span>
+                  ${model.session.decks[deckKey].length <= 2 ? `<span class="deck-warning">Low deck</span>` : ""}
                 </div>
               `
             )
@@ -2080,6 +2610,7 @@
   }
 
   function renderPriceTracker() {
+    const last = model.session.marketHistory[0];
     return `
       <article>
         <div class="section-head">
@@ -2088,16 +2619,25 @@
             <h2>Asset indexes</h2>
           </div>
         </div>
-        <div class="asset-bars">
+        <div class="asset-grid" role="list" aria-label="Asset price indexes">
           ${model.game.assets
             .map((asset) => {
+              const meta = assetMeta(asset.id);
               const index = Number(model.session.prices[asset.id] ?? asset.startIndex);
-              const width = clamp(index * 4, 7, 100);
+              const start = Number(asset.startIndex ?? 1);
+              const delta = index - start;
+              const lastDelta = Number(last?.appliedEffects?.[asset.id] ?? 0);
+              const width = clamp((index / Math.max(1, start + 12)) * 100, 7, 100);
               return `
-                <div class="asset-row">
-                  <div class="asset-name">${escapeHtml(asset.name)}</div>
-                  <div class="bar"><span style="width:${width}%; background:${cssVar(asset.color)}"></span></div>
-                  <div class="index">${index}</div>
+                <div class="asset-row pattern-${meta.pattern}" role="listitem" style="--asset:${cssVar(asset.color)}">
+                  <div class="asset-name"><span>${escapeHtml(meta.icon)}</span><strong>${escapeHtml(asset.name)}</strong><small>Risk ${asset.risk} - ${escapeHtml(meta.label)}</small></div>
+                  <div class="bar" aria-label="${escapeHtml(asset.name)} current index ${index}, start ${start}, delta ${signed(delta)}, last change ${signed(lastDelta)}"><span style="width:${width}%"></span></div>
+                  <div class="index">
+                    <strong>${index}</strong>
+                    <span>start ${start}</span>
+                    <span>${signed(delta)} total</span>
+                    <span>${signed(lastDelta)} last</span>
+                  </div>
                 </div>
               `;
             })
@@ -2166,8 +2706,8 @@
       <div class="holding-list">
         ${holdings
           .map(([assetId, units]) => {
-            const asset = getAsset(assetId);
-            return `<span class="asset-chip" style="background:${cssVar(asset.color)}">${escapeHtml(asset.name)} x${units}</span>`;
+            const asset = assetMeta(assetId);
+            return `<span class="asset-chip pattern-${asset.pattern}" style="--asset:${cssVar(asset.color)}">${escapeHtml(asset.icon)} ${escapeHtml(asset.name)} x${units}</span>`;
           })
           .join("")}
       </div>
@@ -2176,32 +2716,33 @@
 
   function renderMarket() {
     return `
-      <div class="grid two">
+      <div class="market-layout">
         <section class="panel stack">
           ${hostOnlyNotice()}
           <div class="panel-header">
             <div>
-              <p class="eyeline">Host market</p>
-              <h2>Reveal Event</h2>
-              <p>Use this only when the board space or host flow calls for a Market/Life card.</p>
+              <p class="eyeline">Latest Market/Life card</p>
+              <h2>${model.session.activeEvent ? escapeHtml(model.session.activeEvent.title) : "No event revealed yet"}</h2>
+              <p>Market events appear after Market Pulse spaces or an intentional host reveal.</p>
             </div>
-            <button class="button" type="button" data-action="host-reveal-event" ${hostDisabledAttr(!model.session.started)}>Reveal Event</button>
           </div>
-          ${model.session.activeEvent ? renderEventCard(model.session.activeEvent) : `<div class="empty-state">No Market/Life event revealed yet.</div>`}
+          ${model.session.activeEvent ? renderEventCard(model.session.activeEvent) : `<div class="empty-state">The first Market/Life card will show here with sentiment, bias watch, and price effects.</div>`}
           ${renderPriceTracker()}
         </section>
         <section class="panel">
           <div class="panel-header">
             <div>
-              <p class="eyeline">Market history</p>
-              <h2>Latest events</h2>
+              <p class="eyeline">Event history</p>
+              <h2>Applied price changes</h2>
             </div>
+            <button class="button-secondary" type="button" data-action="confirm-host-reveal" ${hostDisabledAttr(!model.session.started)}>Host reveal</button>
           </div>
+          <p class="notice">Use host reveal only when a board space or host flow calls for a Market/Life card.</p>
           <div class="stack">
             ${
               model.session.marketHistory.length
                 ? model.session.marketHistory.map(renderMarketHistoryRow).join("")
-                : `<div class="empty-state">Market history starts after the first event.</div>`
+                : `<div class="empty-state">History starts after the first Market/Life card. Each entry records source, sentiment, bias, and applied deltas.</div>`
             }
           </div>
         </section>
@@ -2213,10 +2754,13 @@
     return `
       <article class="event-row">
         <strong>${escapeHtml(item.id)} ${escapeHtml(item.title)}</strong>
-        <p>${escapeHtml(item.sentiment)} / ${escapeHtml(item.bias)} / ${escapeHtml(item.source)}</p>
+        <p>${escapeHtml(item.sentiment)} / ${escapeHtml(item.bias)} / ${escapeHtml(item.source)}${item.playerName ? ` / ${escapeHtml(item.playerName)}` : ""}</p>
         <div class="btn-row">
           ${Object.entries(item.priceEffects)
-            .map(([assetId, delta]) => `<span class="chip">${escapeHtml(getAsset(assetId).name)} <strong>${signed(delta)}</strong></span>`)
+            .map(([assetId, delta]) => {
+              const asset = assetMeta(assetId);
+              return `<span class="asset-chip pattern-${asset.pattern}" style="--asset:${cssVar(asset.color)}">${escapeHtml(asset.icon)} ${escapeHtml(asset.name)} <strong>${signed(delta)}</strong></span>`;
+            })
             .join("")}
         </div>
       </article>
@@ -2228,17 +2772,33 @@
       return `<section class="panel"><div class="empty-state">Start setup before editing player ledgers.</div></section>`;
     }
     return `
-      <div class="grid two">
+      <section class="panel ledger-console">
+        <div class="panel-header">
+          <div>
+            <p class="eyeline">Player ledger</p>
+            <h2>Cash, holdings, and evidence</h2>
+            <p>Manual edits are for correction or physical fallback only.</p>
+          </div>
+          <div class="btn-row">
+            <button class="button-secondary" type="button" data-action="toggle-ledger-edit" aria-pressed="${model.ui.ledgerEditMode}" ${hostDisabledAttr()}>${model.ui.ledgerEditMode ? "Exit edit mode" : "Edit ledger"}</button>
+            <button class="mini-button" type="button" data-action="undo-adjustment" ${hostDisabledAttr(!model.session.manualAdjustments.length)}>Undo latest</button>
+          </div>
+        </div>
         ${hostOnlyNotice()}
-        ${model.session.players.map(renderPlayerCard).join("")}
-      </div>
+        ${model.ui.ledgerEditMode ? `<p class="notice warning">Correction mode is active. Every manual change needs a reason and is included in the export.</p>` : ""}
+        <div class="player-grid">
+          ${model.session.players.map(renderPlayerCard).join("")}
+        </div>
+      </section>
     `;
   }
 
   function renderPlayerCard(player) {
+    const lastNote = player.decisions[0]?.note ?? "No turn note yet.";
     return `
       <article class="player-card">
         <header>
+          <span class="player-token" style="--token:${cssVar(player.tokenColor ?? playerTokens[0])}">${escapeHtml(player.id)}</span>
           <div>
             <p class="eyeline">${escapeHtml(player.id)}</p>
             <h2>${escapeHtml(player.name)}</h2>
@@ -2252,18 +2812,30 @@
           <div class="metric-tile"><span>Categories</span><strong>${uniqueHoldingCount(player)}</strong></div>
           <div class="metric-tile"><span>Turns</span><strong>${player.turnsTaken}/${model.game.turnLimit}</strong></div>
         </div>
+        <div class="evidence-strip">
+          <span>Risk <strong>${player.riskEvidence}</strong></span>
+          <span>Ethics <strong>${player.ethicsPosition}</strong></span>
+          <span>Reflection <strong>${player.reflectionEvidence}</strong></span>
+        </div>
         <div class="stack compact">
           <div>${renderHoldings(player)}</div>
-          <div class="adjust-grid">
-            <button class="mini-button" type="button" data-action="adjust-player" data-player-id="${player.id}" data-field="cash" data-delta="1000" ${hostDisabledAttr()}>+INR 1000</button>
-            <button class="mini-button" type="button" data-action="adjust-player" data-player-id="${player.id}" data-field="riskEvidence" data-delta="1" ${hostDisabledAttr()}>+Risk</button>
-            <button class="mini-button" type="button" data-action="adjust-player" data-player-id="${player.id}" data-field="ethicsPosition" data-delta="1" ${hostDisabledAttr()}>+Ethics</button>
-            <button class="mini-button" type="button" data-action="adjust-player" data-player-id="${player.id}" data-field="reflectionEvidence" data-delta="1" ${hostDisabledAttr()}>+Reflection</button>
-            ${Object.entries(player.holdings)
-              .filter(([, units]) => Number(units) > 0)
-              .map(([assetId]) => `<button class="mini-button" type="button" data-action="sell-holding" data-player-id="${player.id}" data-asset-id="${assetId}" ${hostDisabledAttr()}>Sell ${escapeHtml(getAsset(assetId).name)}</button>`)
-              .join("")}
-          </div>
+          <p class="latest-note">${escapeHtml(lastNote)}</p>
+          ${
+            model.ui.ledgerEditMode
+              ? `
+                <div class="adjust-grid">
+                  <button class="mini-button" type="button" data-action="request-adjustment" data-player-id="${player.id}" data-field="cash" data-label="Cash">Cash correction</button>
+                  <button class="mini-button" type="button" data-action="request-adjustment" data-player-id="${player.id}" data-field="riskEvidence" data-label="Risk evidence">Risk correction</button>
+                  <button class="mini-button" type="button" data-action="request-adjustment" data-player-id="${player.id}" data-field="ethicsPosition" data-label="Ethics">Ethics correction</button>
+                  <button class="mini-button" type="button" data-action="request-adjustment" data-player-id="${player.id}" data-field="reflectionEvidence" data-label="Reflection">Reflection correction</button>
+                  ${Object.entries(player.holdings)
+                    .filter(([, units]) => Number(units) > 0)
+                    .map(([assetId]) => `<button class="mini-button" type="button" data-action="sell-holding" data-player-id="${player.id}" data-asset-id="${assetId}" ${hostDisabledAttr()}>Sell ${escapeHtml(getAsset(assetId).name)}</button>`)
+                    .join("")}
+                </div>
+              `
+              : ""
+          }
         </div>
       </article>
     `;
@@ -2271,29 +2843,39 @@
 
   function renderScoring() {
     const scores = calculateScores();
+    const final = scoreStateLabel() === "Final Review";
     return `
       <section class="panel stack">
         <div class="panel-header">
           <div>
-            <p class="eyeline">Final Review</p>
-            <h2>Score out of 100</h2>
-            <p>Portfolio 25, diversification 20, risk management 15, ethics 20, reflection 20.</p>
+            <p class="eyeline">${final ? "Final Review" : "Provisional"}</p>
+            <h2>${escapeHtml(scoreStateLabel())}</h2>
+            <p>${final ? "The game has met the scoring condition." : "These scores can still change before all players finish or reach the turn limit."}</p>
           </div>
           <button class="button" type="button" data-action="download-evidence">Export evidence</button>
         </div>
-        <div class="stack">
+        <details class="rules-accordion" open>
+          <summary>How the score is calculated</summary>
+          <p>Portfolio 25, diversification 20, risk management 15, ethics 20, reflection 20. Portfolio is normalized against the highest player value.</p>
+        </details>
+        <div class="score-grid">
           ${scores
             .map(
               (score, index) => `
                 <article class="score-row ${index === 0 ? "winner" : ""}">
-                  <div>
-                    <h3>${index + 1}. ${escapeHtml(score.player.name)}</h3>
-                    <p>
-                      Value ${money(score.value)} | Portfolio ${score.portfolioScore} | Diversification ${score.diversificationScore}
-                      | Risk ${score.riskManagementScore} | Ethics ${score.ethicsScore} | Reflection ${score.reflectionScore}
-                    </p>
-                  </div>
-                  <strong class="num">${score.total}</strong>
+                  <header>
+                    <div>
+                      <p class="eyeline">Rank ${index + 1}</p>
+                      <h3>${escapeHtml(score.player.name)}</h3>
+                      <p>${escapeHtml(scoreInsight(score))}</p>
+                    </div>
+                    <strong class="score-total">${score.total}<span>/100</span></strong>
+                  </header>
+                  ${renderScoreBars(score)}
+                  <details>
+                    <summary>Calculation details</summary>
+                    <p>Value ${money(score.value)}. Cash ${money(score.player.cash)}. Categories ${uniqueHoldingCount(score.player)}. Risk evidence ${score.player.riskEvidence}. Ethics position ${score.player.ethicsPosition}. Reflection evidence ${score.player.reflectionEvidence}.</p>
+                  </details>
                 </article>
               `
             )
@@ -2303,53 +2885,122 @@
     `;
   }
 
+  function renderScoreBars(score) {
+    const rows = [
+      ["Portfolio", score.portfolioScore, Number(model.game.scoreWeights.portfolioValue ?? 25)],
+      ["Diversify", score.diversificationScore, Number(model.game.scoreWeights.diversification ?? 20)],
+      ["Risk", score.riskManagementScore, Number(model.game.scoreWeights.riskManagement ?? 15)],
+      ["Ethics", score.ethicsScore, Number(model.game.scoreWeights.ethics ?? 20)],
+      ["Reflect", score.reflectionScore, Number(model.game.scoreWeights.reflection ?? 20)]
+    ];
+    return `
+      <div class="score-bars">
+        ${rows
+          .map(([label, value, max]) => {
+            const width = clamp((value / max) * 100, 0, 100);
+            return `<div class="score-bar"><span>${label}</span><div class="bar" aria-label="${label} ${value} out of ${max}"><span style="width:${width}%"></span></div><strong>${value}/${max}</strong></div>`;
+          })
+          .join("")}
+      </div>
+    `;
+  }
+
+  function scoreInsight(score) {
+    const weak = [
+      ["diversification", score.diversificationScore, 20],
+      ["risk evidence", score.riskManagementScore, 15],
+      ["ethics", score.ethicsScore, 20],
+      ["reflection", score.reflectionScore, 20]
+    ].sort((a, b) => a[1] / a[2] - b[1] / b[2])[0][0];
+    if (score.portfolioScore >= 20 && weak !== "portfolio") {
+      return `Strong portfolio score; improve ${weak} evidence.`;
+    }
+    if (uniqueHoldingCount(score.player) >= 3 && score.player.cash >= 20000) {
+      return "Balanced liquidity and diversification.";
+    }
+    return `Main improvement area: ${weak}.`;
+  }
+
   function renderExport() {
     const text = model.exportText || exportEvidence();
+    const summary = exportSummary();
     return `
       <section class="panel stack">
         <div class="panel-header">
           <div>
             <p class="eyeline">Evidence</p>
             <h2>Session export</h2>
-            <p>Use this JSON for host evidence and debugging. It includes local gameplay state, not fabricated playtest findings.</p>
+            <p>This export supports process evidence and debugging. Real student feedback and observations should still be recorded separately.</p>
           </div>
           <div class="btn-row">
             <button class="button-secondary" type="button" data-action="refresh-export">Refresh JSON</button>
+            <button class="button-secondary" type="button" data-action="copy-export">Copy JSON</button>
             <button class="button" type="button" data-action="download-evidence">Download JSON</button>
           </div>
         </div>
-        <pre class="export-box" id="evidenceOutput">${escapeHtml(text)}</pre>
+        <div class="export-summary-grid">
+          ${Object.entries(summary)
+            .map(([key, value]) => `<div class="metric-tile"><span>${escapeHtml(key.replace(/([A-Z])/g, " $1"))}</span><strong>${escapeHtml(value)}</strong></div>`)
+            .join("")}
+        </div>
+        <div class="evidence-completeness">
+          ${model.session.players
+            .map(
+              (player) => `
+                <article>
+                  <strong>${escapeHtml(player.name)}</strong>
+                  <span>Notes ${player.decisions.length}</span>
+                  <span>Risk ${player.riskEvidence}</span>
+                  <span>Ethics ${player.ethicsPosition}</span>
+                  <span>Reflection ${player.reflectionEvidence}</span>
+                </article>
+              `
+            )
+            .join("")}
+        </div>
+        <details class="rules-accordion">
+          <summary>Raw JSON preview</summary>
+          <pre class="export-box" id="evidenceOutput">${escapeHtml(text)}</pre>
+        </details>
       </section>
     `;
   }
 
   function renderRules() {
-    const rules = [
-      ["Setup", "Give each player one Starter Profile, Player Board, pawn, and starting cash."],
-      ["Turn", "Roll one D6, move forward on S00-S43, resolve the landing space, then record one note."],
-      ["Movement", "If a roll passes S43, stop at S43. Choice advances do not resolve the new space until next turn."],
-      ["Decks", "When a deck runs out, shuffle its discard pile into a new draw deck."],
-      ["Market", "Asset price indexes cannot fall below 1."],
-      ["End", "Score when all players reach S43 or after 12 turns per player."],
-      ["Formula", "Value 25, diversification 20, risk 15, ethics 20, reflection 20."]
-    ];
+    const rules = helpSections().filter((section) => {
+      const query = model.ui.rulesQuery.trim().toLowerCase();
+      if (!query) return true;
+      return `${section.title} ${section.body}`.toLowerCase().includes(query);
+    });
     return `
       <div class="grid two">
         <section class="panel stack">
           <div class="panel-header">
             <div>
-              <p class="eyeline">Quick reference</p>
-              <h2>Game rules</h2>
+              <p class="eyeline">Searchable rules</p>
+              <h2>Help center</h2>
             </div>
           </div>
-          ${rules.map(([title, text]) => `<article class="rule-row"><strong>${title}</strong><span>${escapeHtml(text)}</span></article>`).join("")}
+          <div class="field">
+            <label for="rulesSearch">Search rules and glossary</label>
+            <input class="input" id="rulesSearch" data-rules-search="true" value="${escapeHtml(model.ui.rulesQuery)}" autocomplete="off" />
+          </div>
+          ${rules.map((section) => `<details class="rules-accordion" open><summary>${escapeHtml(section.title)}</summary><p>${escapeHtml(section.body)}</p></details>`).join("")}
         </section>
         <section class="panel stack">
           <div class="panel-header">
             <div>
-              <p class="eyeline">Reference cards</p>
-              <h2>Printed quick cards</h2>
+              <p class="eyeline">Legends</p>
+              <h2>Assets and quick cards</h2>
             </div>
+          </div>
+          <div class="asset-legend">
+            ${model.game.assets
+              .map((asset) => {
+                const meta = assetMeta(asset.id);
+                return `<span class="asset-chip pattern-${meta.pattern}" style="--asset:${cssVar(asset.color)}">${escapeHtml(meta.icon)} ${escapeHtml(asset.name)} - risk ${asset.risk}</span>`;
+              })
+              .join("")}
           </div>
           ${model.game.cards.quickReference
             .map((card) => `<article class="card-face"><strong>${card.id} ${escapeHtml(card.title)}</strong><p>${escapeHtml(card.text)}</p></article>`)
@@ -2357,6 +3008,25 @@
         </section>
       </div>
     `;
+  }
+
+  function helpSections() {
+    return [
+      { title: "Quick start", body: "Give each player one Starter Profile, Player Board, pawn, and starting cash. Shuffle each deck separately and keep the D6 near the host." },
+      { title: "Turn flow", body: "Roll one D6, move on S00-S43, resolve the landing space, record one evidence note, then end the turn." },
+      { title: "Movement", body: "If a roll passes S43, stop at S43. Choice advances do not resolve the new space until that player's next turn." },
+      { title: "Deck lifecycle", body: "Draw, resolve, discard face-up. When a draw deck is empty, shuffle its discard pile into a new draw deck." },
+      { title: "Market", body: "Market/Life cards update shared asset indexes. Asset price indexes cannot fall below 1." },
+      { title: "Scoring", body: "Score when all players reach S43 or after 12 turns per player. Value 25, diversification 20, risk 15, ethics 20, reflection 20." },
+      { title: "Evidence", body: "Each turn needs one decision, finance term, or evidence note. Suggested notes are allowed; custom notes are better when the decision needs context." },
+      { title: "Volatility", body: "How much an asset price can move up or down. High volatility can raise gains and losses." },
+      { title: "Diversification", body: "Holding multiple asset categories instead of relying on one category." },
+      { title: "Liquidity", body: "How easily cash or an asset can cover expenses without forced selling." },
+      { title: "Risk-return", body: "The trade-off between possible reward and possible loss." },
+      { title: "FOMO", body: "Fear of missing out. In the game, it appears in hype-driven market choices." },
+      { title: "ESG", body: "Environmental, social, and governance factors that can affect ethical and financial decisions." },
+      { title: "Troubleshooting", body: "If live saving fails, keep playing on the host browser and retry from the status panel. The physical board and printed cards remain playable." }
+    ];
   }
 
   function renderToast() {
@@ -2594,16 +3264,62 @@
     render();
   }
 
-  function adjustPlayer(playerId, field, delta) {
+  function adjustPlayer(playerId, field, delta, reason = "Manual correction.") {
     const player = model.session.players.find((item) => item.id === playerId);
     if (!player) {
       return;
     }
-    player[field] = Number(player[field] ?? 0) + Number(delta);
+    const before = Number(player[field] ?? 0);
+    player[field] = before + Number(delta);
     if (["riskEvidence", "reflectionEvidence"].includes(field)) {
       player[field] = Math.max(0, player[field]);
     }
-    logActivity(`${player.name} adjusted ${field} by ${signed(delta)}.`);
+    if (field === "ethicsPosition") {
+      player[field] = clamp(player[field], -5, 5);
+    }
+    const after = Number(player[field] ?? 0);
+    const entry = {
+      id: `adj-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      at: nowIso(),
+      playerId: player.id,
+      playerName: player.name,
+      field,
+      delta: after - before,
+      before,
+      after,
+      reason
+    };
+    model.session.manualAdjustments.unshift(entry);
+    model.session.manualAdjustments = model.session.manualAdjustments.slice(0, 50);
+    player.decisions.unshift({
+      at: entry.at,
+      turn: player.turnsTaken,
+      spaceId: `S${String(player.position).padStart(2, "0")}`,
+      type: "Manual adjustment",
+      result: `${field} changed by ${signed(entry.delta)}.`,
+      note: reason
+    });
+    player.decisions = player.decisions.slice(0, 30);
+    logActivity(`${player.name} correction: ${field} ${signed(entry.delta)}.`);
+    saveSession();
+    render();
+  }
+
+  function undoManualAdjustment() {
+    const entry = model.session.manualAdjustments.shift();
+    if (!entry) {
+      setMessage("No manual correction to undo.");
+      render();
+      return;
+    }
+    const player = model.session.players.find((item) => item.id === entry.playerId);
+    if (!player) {
+      setMessage("Original player is missing; undo was not applied.");
+      render();
+      return;
+    }
+    player[entry.field] = entry.before;
+    logActivity(`Undid correction for ${player.name}: ${entry.field}.`);
     saveSession();
     render();
   }
@@ -2633,7 +3349,41 @@
     }
 
     switch (action) {
+      case "close-dialog":
+        closeDialog();
+        break;
+      case "set-theme":
+        model.ui.theme = button.dataset.theme || "table";
+        persistUi();
+        render();
+        break;
+      case "set-dice-mode":
+        model.ui.diceMode = button.dataset.mode || "digital";
+        persistUi();
+        render();
+        break;
+      case "retry-sync":
+        if (!requireHostAction()) break;
+        setSaveState("saving");
+        probeBackend().then(syncSessionToBackend).finally(render);
+        break;
       case "logout":
+        if (model.backend.saveState === "saving" || model.backend.saveState === "failed") {
+          openDialog({
+            type: "confirm-action",
+            title: "Leave this table?",
+            body: "There may be unsynced changes. Leaving now keeps the local copy, but this browser will exit the table view.",
+            confirmAction: "confirm-logout",
+            confirmLabel: "Leave table"
+          });
+          break;
+        }
+        if (!window.confirm("Leave this table?")) {
+          break;
+        }
+        // fall through
+      case "confirm-logout":
+        model.ui.dialog = null;
         if (model.backend.provider === "supabase") {
           model.backend.client.auth.signOut();
         }
@@ -2647,6 +3397,9 @@
         render();
         break;
       case "new-session":
+        if (!window.confirm("Create a new table? Current local table state will be replaced in this browser.")) {
+          break;
+        }
         resetSession();
         break;
       case "copy-session-code":
@@ -2660,6 +3413,17 @@
         if (!requireHostAction()) break;
         rollDie();
         break;
+      case "submit-physical-roll": {
+        if (!requireHostAction()) break;
+        const value = Number(document.getElementById("physicalDie")?.value);
+        if (!Number.isInteger(value) || value < 1 || value > 6) {
+          setMessage("Enter a physical D6 result from 1 to 6.");
+          render();
+          break;
+        }
+        rollDie(value);
+        break;
+      }
       case "manual-roll":
         if (!requireHostAction()) break;
         rollDie(Number(button.dataset.roll));
@@ -2688,6 +3452,29 @@
         if (!requireHostAction()) break;
         applyChoice(Number(button.dataset.choiceIndex));
         break;
+      case "request-choice": {
+        if (!requireHostAction()) break;
+        const pending = model.session.pendingResolution;
+        const space = pending ? getSpace(pending.spaceId) : null;
+        const choiceIndex = Number(button.dataset.choiceIndex);
+        const details = space ? choiceDetails(space, space.choices?.[choiceIndex], choiceIndex) : null;
+        if (!space || !details) break;
+        openDialog({
+          type: "choice",
+          title: details.title,
+          body: details.confirm,
+          choiceIndex,
+          risk: details.risk,
+          ethics: details.ethics,
+          movement: details.movement
+        });
+        break;
+      }
+      case "confirm-choice":
+        if (!requireHostAction()) break;
+        applyChoice(Number(button.dataset.choiceIndex));
+        closeDialog();
+        break;
       case "sell-current-holding":
         if (!requireHostAction()) break;
         sellHolding(currentPlayer().id, button.dataset.assetId);
@@ -2708,24 +3495,94 @@
         if (!requireHostAction()) break;
         endTurn();
         break;
+      case "use-evidence-note": {
+        const note = button.dataset.note ?? "";
+        const input = document.getElementById("turnNote");
+        if (input) {
+          input.value = note;
+          input.focus();
+        }
+        break;
+      }
       case "host-reveal-event":
         if (!requireHostAction()) break;
+        model.ui.dialog = null;
         resolveMarketPulse("host");
         saveSession();
         render();
+        break;
+      case "confirm-host-reveal":
+        if (!requireHostAction()) break;
+        openDialog({
+          type: "confirm-action",
+          title: "Reveal a Market/Life card?",
+          body: "Use this only when the board space or host flow calls for a Market/Life card. It will update prices immediately.",
+          confirmAction: "host-reveal-event",
+          confirmLabel: "Reveal card"
+        });
         break;
       case "adjust-player":
         if (!requireHostAction()) break;
         adjustPlayer(button.dataset.playerId, button.dataset.field, button.dataset.delta);
         break;
+      case "toggle-ledger-edit":
+        if (!requireHostAction()) break;
+        model.ui.ledgerEditMode = !model.ui.ledgerEditMode;
+        render();
+        break;
+      case "request-adjustment":
+        if (!requireHostAction()) break;
+        openDialog({
+          type: "adjust",
+          playerId: button.dataset.playerId,
+          field: button.dataset.field,
+          label: button.dataset.label
+        });
+        break;
+      case "undo-adjustment":
+        if (!requireHostAction()) break;
+        if (window.confirm("Undo the latest manual correction?")) {
+          undoManualAdjustment();
+        }
+        break;
       case "sell-holding":
         if (!requireHostAction()) break;
+        if (!model.ui.ledgerEditMode) {
+          setMessage("Open ledger edit mode before selling from the ledger.");
+          render();
+          break;
+        }
         sellHolding(button.dataset.playerId, button.dataset.assetId);
         saveSession();
         render();
         break;
+      case "expand-board":
+        openDialog({
+          type: "board",
+          eyeline: "Physical board reference",
+          title: "Give And Take board",
+          body: "Use the printed board for pawn movement. The QR app mirrors the S00-S43 route and session state."
+        });
+        break;
+      case "space-info": {
+        const space = getSpace(button.dataset.spaceId);
+        const meta = spaceMeta(space?.type);
+        openDialog({
+          eyeline: space?.type ?? "Board space",
+          title: `${space?.id ?? ""} ${space?.label ?? ""}`,
+          body: `${meta.help} ${space?.effect ?? space?.choices?.join(" ") ?? ""}`.trim()
+        });
+        break;
+      }
       case "refresh-export":
         exportEvidence();
+        render();
+        break;
+      case "copy-export":
+        navigator.clipboard?.writeText(exportEvidence()).then(
+          () => setMessage("Export JSON copied."),
+          () => setMessage("Copy failed. Use Download JSON instead.")
+        );
         render();
         break;
       case "download-evidence":
@@ -2749,9 +3606,34 @@
     if (event.target.matches('[data-draft="name"]')) {
       updateDraftFromInputs();
     }
+    if (event.target.matches("[data-rules-search]")) {
+      model.ui.rulesQuery = event.target.value;
+      render();
+      const search = document.getElementById("rulesSearch");
+      search?.focus();
+      search?.setSelectionRange(search.value.length, search.value.length);
+    }
   }
 
   function handleSubmit(event) {
+    const modalForm = event.target.closest("form[data-modal-form]");
+    if (modalForm) {
+      event.preventDefault();
+      if (modalForm.dataset.modalForm === "adjust") {
+        const data = new FormData(modalForm);
+        const amount = Number(data.get("amount"));
+        const direction = Number(data.get("direction"));
+        const reason = String(data.get("reason") ?? "").trim();
+        if (!Number.isFinite(amount) || amount <= 0 || !reason) {
+          setMessage("Enter a positive amount and a correction reason.");
+          render();
+          return;
+        }
+        model.ui.dialog = null;
+        adjustPlayer(data.get("playerId"), data.get("field"), amount * direction, reason);
+      }
+      return;
+    }
     const form = event.target.closest("form[data-auth-form]");
     if (!form) {
       return;
