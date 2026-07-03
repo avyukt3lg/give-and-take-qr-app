@@ -1,1 +1,1 @@
-http://192.168.29.204:4173/website/host-dashboard/
+https://avyukt3lg.github.io/give-and-take-qr-app/website/host-dashboard/
