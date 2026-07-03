@@ -155,6 +155,14 @@
     }
   }
 
+  function withTimeout(promise, ms, message) {
+    let timer;
+    const timeout = new Promise((_, reject) => {
+      timer = window.setTimeout(() => reject(new Error(message)), ms);
+    });
+    return Promise.race([promise, timeout]).finally(() => window.clearTimeout(timer));
+  }
+
   function relativeTime(iso) {
     if (!iso) {
       return "not saved yet";
@@ -543,6 +551,8 @@
       if (model.backend.needsSave) {
         model.backend.needsSave = false;
         queueBackendSync();
+      } else {
+        render();
       }
     }
   }
@@ -592,12 +602,16 @@
   }
 
   async function createSupabaseSession() {
-    const { data, error } = await model.backend.client.rpc("create_game_session_public", {
-      p_code: model.session.code,
-      p_client_id: getClientId(),
-      p_display_name: model.auth?.name ?? "Host",
-      p_session: model.session
-    });
+    const { data, error } = await withTimeout(
+      model.backend.client.rpc("create_game_session_public", {
+        p_code: model.session.code,
+        p_client_id: getClientId(),
+        p_display_name: model.auth?.name ?? "Host",
+        p_session: model.session
+      }),
+      12000,
+      "Live table save timed out."
+    );
     if (error) {
       throw error;
     }
@@ -619,12 +633,16 @@
       if (!model.backend.sessionId) {
         record = await createSupabaseSession();
       } else {
-        const { data, error } = await model.backend.client.rpc("update_game_session_public", {
-          p_session_id: model.backend.sessionId,
-          p_client_id: getClientId(),
-          p_session: model.session,
-          p_revision: model.backend.revision
-        });
+        const { data, error } = await withTimeout(
+          model.backend.client.rpc("update_game_session_public", {
+            p_session_id: model.backend.sessionId,
+            p_client_id: getClientId(),
+            p_session: model.session,
+            p_revision: model.backend.revision
+          }),
+          12000,
+          "Live table save timed out."
+        );
         if (error) {
           throw error;
         }
@@ -644,6 +662,8 @@
       if (model.backend.needsSave) {
         model.backend.needsSave = false;
         queueBackendSync();
+      } else {
+        render();
       }
     }
   }
@@ -653,10 +673,14 @@
       return;
     }
     try {
-      const { data, error } = await model.backend.client.rpc("get_game_session_public", {
-        p_session_id: model.backend.sessionId,
-        p_client_id: getClientId()
-      });
+      const { data, error } = await withTimeout(
+        model.backend.client.rpc("get_game_session_public", {
+          p_session_id: model.backend.sessionId,
+          p_client_id: getClientId()
+        }),
+        12000,
+        "Live table refresh timed out."
+      );
       if (error) {
         throw error;
       }
@@ -673,11 +697,15 @@
   }
 
   async function loadSupabaseSession(code) {
-    const { data, error } = await model.backend.client.rpc("join_game_session_public", {
-      p_code: code,
-      p_client_id: getClientId(),
-      p_display_name: model.auth?.name ?? "Player"
-    });
+    const { data, error } = await withTimeout(
+      model.backend.client.rpc("join_game_session_public", {
+        p_code: code,
+        p_client_id: getClientId(),
+        p_display_name: model.auth?.name ?? "Player"
+      }),
+      12000,
+      "Live table join timed out."
+    );
     if (error) {
       throw error;
     }
