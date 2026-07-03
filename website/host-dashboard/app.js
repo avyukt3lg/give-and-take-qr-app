@@ -2,9 +2,10 @@
   "use strict";
 
   const CONFIG_URL = "../../game_data/game_config.json";
-  const BOARD_IMAGE_URL = "../../outputs/final_assets/board/give_and_take_board_final.png";
+  const BOARD_IMAGE_URL = "../../outputs/final_assets/board/give_and_take_board_with_qr.png";
   const API_BASE = "/api";
   const BACKEND_POLL_MS = 2500;
+  const PRODUCTION_APP_URL = "https://avyukt3lg.github.io/give-and-take-qr-app/website/host-dashboard/";
   const STORAGE = {
     auth: "give-and-take:auth:v1",
     backend: "give-and-take:backend:v1",
@@ -103,8 +104,37 @@
     return raw;
   }
 
-  function backendNotice() {
-    return "Host a table as a guest, then share the table code with players.";
+  function normaliseUrl(value) {
+    try {
+      const url = new URL(value, window.location.href);
+      return url.href.endsWith("/") ? url.href : `${url.href}/`;
+    } catch {
+      return PRODUCTION_APP_URL;
+    }
+  }
+
+  function authRedirectUrl() {
+    const staticConfig = window.GIVE_AND_TAKE_SUPABASE ?? {};
+    return normaliseUrl(
+      staticConfig.authRedirectUrl ??
+        staticConfig.siteUrl ??
+        staticConfig.appUrl ??
+        staticConfig.publicSiteBaseUrl ??
+        PRODUCTION_APP_URL
+    );
+  }
+
+  function backendNotice(mode = model.authTab) {
+    if (mode === "signup") {
+      return "Create an account for repeat hosting. Email confirmations return to the live GitHub Pages app.";
+    }
+    if (mode === "guest") {
+      return "Host a table without an account, then share the GT code with players.";
+    }
+    if (mode === "join") {
+      return "Enter the GT code from the host to join as a player.";
+    }
+    return "Login to host or continue a saved table on the live QR app.";
   }
 
   function tableRoleLabel() {
@@ -1468,13 +1498,13 @@
   function renderFatal(error) {
     appRoot.className = "boot-shell";
     appRoot.innerHTML = `
-      <section class="boot-card">
-        <p class="kicker">Give And Take</p>
-        <h1>Game config is not available.</h1>
-        <p>${escapeHtml(error.message ?? error)}</p>
-        <p>Run the site from the repository root with <strong>python3 -m http.server 4173 -d .</strong>.</p>
-      </section>
-    `;
+        <section class="boot-card">
+          <p class="kicker">Give And Take</p>
+          <h1>Game config is not available.</h1>
+          <p>${escapeHtml(error.message ?? error)}</p>
+          <p>Open the hosted app at <strong>${PRODUCTION_APP_URL}</strong>, or run <strong>npm run start:qr</strong> from the repository root for local testing.</p>
+        </section>
+      `;
   }
 
   function renderAuth() {
@@ -1524,7 +1554,7 @@
             <label for="signupPassword">Password</label>
             <input class="input" id="signupPassword" name="password" type="password" autocomplete="new-password" minlength="6" required />
           </div>
-          <p class="notice">${escapeHtml(backendNotice())}</p>
+          <p class="notice">${escapeHtml(backendNotice("signup"))}</p>
           <button class="button" type="submit">Create account</button>
         </form>
       `;
@@ -1536,7 +1566,7 @@
             <label for="guestName">Host name</label>
             <input class="input" id="guestName" name="name" autocomplete="name" required />
           </div>
-          <p class="notice">${escapeHtml(backendNotice())}</p>
+          <p class="notice">${escapeHtml(backendNotice("guest"))}</p>
           <button class="button" type="submit">Host table</button>
         </form>
       `;
@@ -1552,7 +1582,7 @@
             <label for="joinCode">Session code</label>
             <input class="input code-input" id="joinCode" name="code" value="GT-" inputmode="text" autocomplete="off" required />
           </div>
-          <p class="notice">${escapeHtml(backendNotice())}</p>
+          <p class="notice">${escapeHtml(backendNotice("join"))}</p>
           <button class="button" type="submit">Join session</button>
         </form>
       `;
@@ -1567,7 +1597,7 @@
           <label for="loginPassword">Password</label>
           <input class="input" id="loginPassword" name="password" type="password" autocomplete="current-password" required />
         </div>
-        <p class="notice">${escapeHtml(backendNotice())}</p>
+        <p class="notice">${escapeHtml(backendNotice("login"))}</p>
         <button class="button" type="submit">Login</button>
       </form>
     `;
@@ -2357,7 +2387,10 @@
       const { data, error } = await model.backend.client.auth.signUp({
         email,
         password,
-        options: { data: { name } }
+        options: {
+          data: { name },
+          emailRedirectTo: authRedirectUrl()
+        }
       });
       if (error) {
         throw error;
