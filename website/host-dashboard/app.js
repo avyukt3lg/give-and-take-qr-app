@@ -80,6 +80,31 @@
     Finish: "Reached final review."
   };
 
+  const commonEvidenceNotes = [
+    "Updated the physical player board and explained the decision.",
+    "Used the printed card and recorded the effect.",
+    "Compared risk-return before acting.",
+    "Checked diversification before choosing.",
+    "Explained the ethical trade-off.",
+    "Updated the price tracker and noted the market impact.",
+    "Kept cash liquid to manage risk.",
+    "Asked for clarification before committing."
+  ];
+
+  const physicalChecklistLabels = {
+    pawnMoved: "Pawn moved on physical board",
+    cardDiscarded: "Physical card placed in correct discard pile",
+    playerBoardUpdated: "Cash/holdings updated on player board",
+    evidenceNote: "Evidence note added",
+    priceTrackerUpdated: "Price tracker updated if applicable"
+  };
+
+  const physicalModeLabels = {
+    host: "Physical Play",
+    table: "Table Display",
+    player: "Player Assist"
+  };
+
   const phaseSteps = ["Roll", "Resolve", "Log", "End"];
 
   const appRoot = document.getElementById("app");
@@ -108,11 +133,17 @@
     },
     ui: {
       theme: readStore(STORAGE.ui, {})?.theme ?? (window.matchMedia?.("(prefers-color-scheme: light)")?.matches ? "classroom" : "table"),
-      diceMode: readStore(STORAGE.ui, {})?.diceMode ?? "digital",
+      diceMode: readStore(STORAGE.ui, {})?.diceMode ?? "physical",
+      companionMode: readStore(STORAGE.ui, {})?.companionMode ?? "host",
+      reducedMotion: Boolean(readStore(STORAGE.ui, {})?.reducedMotion ?? false),
       boardExpanded: false,
       boardZoom: Number(readStore(STORAGE.ui, {})?.boardZoom ?? 1),
       ledgerEditMode: false,
       rulesQuery: "",
+      cardLookupId: "",
+      boardLookupId: "",
+      selectedBoardSpaceId: "S00",
+      selectedAssistPlayerId: "",
       marketFilters: {
         sentiment: "all",
         asset: "all",
@@ -145,7 +176,7 @@
     try {
       localStorage.setItem(key, JSON.stringify(value));
     } catch {
-      setMessage("Browser storage is blocked. Supabase saving still controls the table state.");
+      setMessage("This device cannot retain interface preferences. Supabase saving still controls the table state.");
     }
   }
 
@@ -153,7 +184,9 @@
     writeStore(STORAGE.ui, {
       theme: model.ui.theme,
       diceMode: model.ui.diceMode,
-      boardZoom: model.ui.boardZoom
+      boardZoom: model.ui.boardZoom,
+      companionMode: model.ui.companionMode,
+      reducedMotion: model.ui.reducedMotion
     });
   }
 
@@ -191,25 +224,25 @@
 
   function sessionStatus() {
     if (model.backend.saving || model.backend.saveState === "saving") {
-      return { state: "saving", label: "Saving", detail: "Writing the latest table state to Supabase.", action: "" };
+      return { state: "saving", label: "Saving to Supabase", detail: "Writing the latest table state to Supabase.", action: "" };
     }
     if (model.backend.saveState === "failed") {
       return {
         state: "failed",
-        label: "Error - Supabase save failed",
+        label: "Supabase error",
         detail: model.backend.unavailableReason || "Supabase did not accept the latest table state.",
         action: `<button class="mini-button" type="button" data-action="retry-sync">Retry</button>`
       };
     }
     if (model.backend.online && model.backend.saveState === "synced") {
-      return { state: "synced", label: "Saved", detail: `Last saved to Supabase ${relativeTime(model.backend.lastSavedAt)}.`, action: "" };
+      return { state: "synced", label: "Saved to Supabase", detail: `Last saved to Supabase ${relativeTime(model.backend.lastSavedAt)}.`, action: "" };
     }
     if (model.backend.online) {
-      return { state: "connected", label: "Connected", detail: "Connected to Supabase.", action: "" };
+      return { state: "connected", label: "Saved to Supabase", detail: "Connected to Supabase.", action: "" };
     }
     return {
       state: "failed",
-      label: "Error - Supabase unavailable",
+      label: "Supabase error",
       detail: model.backend.unavailableReason || "Connect to Supabase before hosting or joining a table.",
       action: `<button class="mini-button" type="button" data-action="retry-sync">Retry</button>`
     };
@@ -278,6 +311,221 @@
     const meta = spaceMeta(space?.type);
     const details = [meta.help, space?.effect, ...(space?.choices ?? [])].filter(Boolean).join(" ");
     return `${space?.id ?? ""} ${space?.label ?? ""}: ${space?.type ?? "Board space"}. ${details}`.trim();
+  }
+
+  function deckKeyForCardId(cardId) {
+    const prefix = String(cardId ?? "").trim().toUpperCase()[0];
+    return {
+      I: "investments",
+      M: "events",
+      E: "ethics",
+      A: "actions",
+      R: "reflection"
+    }[prefix] ?? "";
+  }
+
+  function deckKeyForSpace(space) {
+    if (!space) return "";
+    return {
+      Invest: "investments",
+      "Market Pulse": "events",
+      "Ethics Crossroad": "ethics",
+      "Research/Action": "actions",
+      Reflection: "reflection"
+    }[space.type] ?? "";
+  }
+
+  function normaliseCardId(value) {
+    const raw = String(value ?? "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+    const match = raw.match(/^([IMEAR])0*([0-9]{1,2})$/);
+    return match ? `${match[1]}${String(Number(match[2])).padStart(2, "0")}` : raw;
+  }
+
+  function normaliseSpaceId(value) {
+    const raw = String(value ?? "").trim().toUpperCase().replace(/[^S0-9]/g, "");
+    const digits = raw.replace(/[^0-9]/g, "");
+    if (!digits) return raw;
+    return `S${String(clamp(Number(digits), 0, 43)).padStart(2, "0")}`;
+  }
+
+  function findCardByPrintedId(value) {
+    const id = normaliseCardId(value);
+    const deckKey = deckKeyForCardId(id);
+    if (!deckKey) return null;
+    const card = getCard(deckKey, id);
+    return card ? { deckKey, card } : null;
+  }
+
+  function deckLabel(deckKey) {
+    return deckMeta[deckKey]?.label ?? "Card";
+  }
+
+  function discardInstruction(deckKey, cardId = "") {
+    if (!deckKey || !cardId) {
+      return "No printed card is attached to this turn.";
+    }
+    return `After resolving ${cardId}, place it face-up in the ${deckLabel(deckKey)} discard pile.`;
+  }
+
+  function spaceRequiredDeck(space) {
+    const deckKey = deckKeyForSpace(space);
+    return deckKey ? `${deckLabel(deckKey)} deck` : "No deck required";
+  }
+
+  function physicalActionForSpace(space) {
+    if (!space) return "Check the printed board and ask the host for the correct action.";
+    if (space.cash) {
+      return `${space.cash > 0 ? "Add" : "Pay"} ${money(Math.abs(space.cash))} on the player board.`;
+    }
+    const actions = {
+      Start: "Confirm the pawn is on S00 and the player has their Starter Profile cash.",
+      Invest: "Draw one Investment card from the physical deck, enter its ID, then buy or pass.",
+      "Market Pulse": "Draw one Market/Life card from the physical deck, enter its ID, update the price tracker, then discard it.",
+      "Research/Action": "Draw one Action card from the physical deck, enter its ID, apply it, then discard it.",
+      "Ethics Crossroad": "Draw one Ethics card from the physical deck, enter its ID, choose profit or responsible, then discard it.",
+      Reflection: "Draw one Reflection card from the physical deck, enter its ID, discuss the prompt, score evidence, then discard it.",
+      Choice: "Read the two printed choices aloud and confirm the chosen option before recording it.",
+      Rebalance: "Update the physical player board after selling or adjusting holdings.",
+      Finish: "Move the pawn to Finish Review and wait for final scoring."
+    };
+    return actions[space.type] ?? "Resolve the printed instruction on the board.";
+  }
+
+  function spaceInstruction(space) {
+    const meta = spaceMeta(space?.type);
+    return [
+      `${space?.id ?? ""} ${space?.label ?? ""}`,
+      `${space?.type ?? "Board space"}: ${meta.help}`,
+      space?.effect,
+      ...(space?.choices ?? []),
+      `Required deck: ${spaceRequiredDeck(space)}.`,
+      `Physical action: ${physicalActionForSpace(space)}`
+    ]
+      .filter(Boolean)
+      .join(" ");
+  }
+
+  function priceEffectText(priceEffects = {}) {
+    const entries = Object.entries(priceEffects);
+    if (!entries.length) return "No price change.";
+    return entries.map(([assetId, delta]) => `${getAsset(assetId).name} ${signed(delta)}`).join(", ");
+  }
+
+  function cardExplanation(deckKey, card) {
+    if (!card) return "No printed card selected.";
+    if (deckKey === "events") {
+      return `${card.id} ${card.title}. Market/Life card. Sentiment ${card.sentiment}. Bias watch ${card.bias}. Price effects: ${priceEffectText(card.priceEffects)}. ${discardInstruction(deckKey, card.id)}`;
+    }
+    if (deckKey === "investments") {
+      const asset = getAsset(card.asset);
+      return `${card.id} ${card.title}. Investment card. ${card.text} Asset ${asset.name}. Units ${card.units}. Printed cost index ${card.costIndex}. ${discardInstruction(deckKey, card.id)}`;
+    }
+    if (deckKey === "ethics") {
+      return `${card.id} ${card.title}. Ethics card. ${card.prompt} Profit option: ${money(card.profit?.cash ?? 0)}, ethics ${signed(card.profit?.ethics ?? 0)}. Responsible option: ${money(card.responsible?.cash ?? 0)}, ethics ${signed(card.responsible?.ethics ?? 0)}. ${discardInstruction(deckKey, card.id)}`;
+    }
+    if (deckKey === "actions") {
+      return `${card.id} ${card.title}. Action card. ${card.text} ${discardInstruction(deckKey, card.id)}`;
+    }
+    if (deckKey === "reflection") {
+      return `${card.id} ${card.title}. Reflection card. ${card.prompt} Score the explanation evidence from 0 to 10. ${discardInstruction(deckKey, card.id)}`;
+    }
+    return `${card.id} ${card.title}. ${discardInstruction(deckKey, card.id)}`;
+  }
+
+  function cardSummaryLines(deckKey, card) {
+    if (!card) return [];
+    if (deckKey === "events") {
+      return [
+        ["Card type", "Market/Life"],
+        ["Sentiment", card.sentiment],
+        ["Bias watch", card.bias],
+        ["Price effects", priceEffectText(card.priceEffects)]
+      ];
+    }
+    if (deckKey === "investments") {
+      return [
+        ["Card type", "Investment"],
+        ["Asset", getAsset(card.asset).name],
+        ["Units", card.units],
+        ["Cost", money(Number(card.costIndex ?? 0) * 1000)]
+      ];
+    }
+    if (deckKey === "ethics") {
+      return [
+        ["Card type", "Ethics"],
+        ["Profit option", `${money(card.profit?.cash ?? 0)}, ethics ${signed(card.profit?.ethics ?? 0)}`],
+        ["Responsible option", `${money(card.responsible?.cash ?? 0)}, ethics ${signed(card.responsible?.ethics ?? 0)}`]
+      ];
+    }
+    if (deckKey === "actions") {
+      return [
+        ["Card type", "Action"],
+        ["Action type", card.type],
+        ["Effect", card.text]
+      ];
+    }
+    if (deckKey === "reflection") {
+      return [
+        ["Card type", "Reflection"],
+        ["Prompt", card.prompt],
+        ["Evidence", "Score 0-10"]
+      ];
+    }
+    return [["Card type", deckLabel(deckKey)]];
+  }
+
+  function defaultPhysicalChecks() {
+    return {
+      pawnMoved: false,
+      cardDiscarded: false,
+      playerBoardUpdated: false,
+      evidenceNote: false,
+      priceTrackerUpdated: false
+    };
+  }
+
+  function resetPhysicalChecks() {
+    model.session.physicalChecks = defaultPhysicalChecks();
+  }
+
+  function requiredPhysicalChecks(pending = model.session.pendingResolution) {
+    const required = ["pawnMoved", "playerBoardUpdated", "evidenceNote"];
+    if (pending?.cardId) required.push("cardDiscarded");
+    if (pending?.cardDeck === "events") required.push("priceTrackerUpdated");
+    return required;
+  }
+
+  function missingPhysicalChecks() {
+    const checks = model.session.physicalChecks ?? defaultPhysicalChecks();
+    return requiredPhysicalChecks().filter((key) => !checks[key]);
+  }
+
+  function effectiveCompanionMode() {
+    if (model.backend.clientRole === "player") {
+      return "player";
+    }
+    return model.ui.companionMode || "host";
+  }
+
+  function assistPlayer() {
+    const bySelection = model.session.players.find((player) => player.id === model.ui.selectedAssistPlayerId);
+    if (bySelection) return bySelection;
+    const authName = String(model.auth?.name ?? "").trim().toLowerCase();
+    const byName = model.session.players.find((player) => player.name.trim().toLowerCase() === authName);
+    return byName ?? currentPlayer() ?? model.session.players[0] ?? null;
+  }
+
+  function speak(text) {
+    const message = String(text ?? "").trim();
+    if (!message || !("speechSynthesis" in window)) {
+      setMessage("Read-aloud is not available in this browser.");
+      render();
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(message);
+    utterance.rate = 0.92;
+    window.speechSynthesis.speak(utterance);
   }
 
   function profileUi(profileId) {
@@ -858,6 +1106,9 @@
       },
       players: [],
       pendingResolution: null,
+      physicalChecks: defaultPhysicalChecks(),
+      lastPhysicalCard: null,
+      lastPhysicalMove: null,
       activeEvent: null,
       peekedEventId: null,
       priceHistory: [
@@ -886,6 +1137,9 @@
     merged.marketHistory = Array.isArray(session?.marketHistory) ? session.marketHistory : [];
     merged.manualAdjustments = Array.isArray(session?.manualAdjustments) ? session.manualAdjustments : [];
     merged.activity = Array.isArray(session?.activity) ? session.activity : [];
+    merged.physicalChecks = { ...defaultPhysicalChecks(), ...(session?.physicalChecks ?? {}) };
+    merged.lastPhysicalCard = session?.lastPhysicalCard ?? null;
+    merged.lastPhysicalMove = session?.lastPhysicalMove ?? null;
     return merged;
   }
 
@@ -975,9 +1229,108 @@
   }
 
   function discardCard(deckKey, cardId) {
-    if (cardId) {
+    if (cardId && !model.session.discards[deckKey].includes(cardId)) {
       model.session.discards[deckKey].push(cardId);
     }
+  }
+
+  function nextSyncedCardId(deckKey) {
+    if (!model.session.decks[deckKey]?.length && model.session.discards[deckKey]?.length) {
+      model.session.decks[deckKey] = shuffled(model.session.discards[deckKey]);
+      model.session.discards[deckKey] = [];
+    }
+    return model.session.decks[deckKey]?.[0] ?? null;
+  }
+
+  function takePrintedCard(deckKey, cardId) {
+    const warnings = [];
+    const nextId = nextSyncedCardId(deckKey);
+    const deck = model.session.decks[deckKey] ?? [];
+    const discard = model.session.discards[deckKey] ?? [];
+    if (nextId && nextId !== cardId) {
+      warnings.push(`App deck expected ${nextId}; physical card entered was ${cardId}. Check whether the physical deck was shuffled or a card was missed.`);
+    }
+    const deckIndex = deck.indexOf(cardId);
+    if (deckIndex >= 0) {
+      deck.splice(deckIndex, 1);
+      return warnings;
+    }
+    const discardIndex = discard.indexOf(cardId);
+    if (discardIndex >= 0) {
+      discard.splice(discardIndex, 1);
+      warnings.push(`${cardId} was already in the app discard pile. The host should check the physical discard pile.`);
+      return warnings;
+    }
+    warnings.push(`${cardId} was not found in the app draw or discard state. Continuing with the printed card ID, but the deck state needs host attention.`);
+    return warnings;
+  }
+
+  function useSyncedCardForPending() {
+    const pending = model.session.pendingResolution;
+    if (!pending?.cardDeck) {
+      setMessage("The current space does not need a printed card.");
+      render();
+      return;
+    }
+    const cardId = nextSyncedCardId(pending.cardDeck);
+    if (!cardId) {
+      setMessage(`${deckLabel(pending.cardDeck)} deck has no app-synced card available.`);
+      render();
+      return;
+    }
+    applyPrintedCardId(cardId);
+  }
+
+  function applyPrintedCardId(rawId) {
+    const lookup = findCardByPrintedId(rawId);
+    if (!lookup) {
+      setMessage(`No printed card found for ${normaliseCardId(rawId)}.`);
+      render();
+      return;
+    }
+    const pending = model.session.pendingResolution;
+    const { deckKey, card } = lookup;
+    if (!pending) {
+      openCardLookupDialog(deckKey, card, []);
+      return;
+    }
+    const warnings = [];
+    if (pending?.cardDeck && pending.cardDeck !== deckKey) {
+      warnings.push(`Current space expects ${deckLabel(pending.cardDeck)}, but ${card.id} is a ${deckLabel(deckKey)} card.`);
+    }
+    warnings.push(...takePrintedCard(deckKey, card.id));
+    model.session.lastPhysicalCard = {
+      at: nowIso(),
+      deckKey,
+      cardId: card.id,
+      title: card.title,
+      warnings
+    };
+    pending.cardDeck = deckKey;
+    pending.cardId = card.id;
+    pending.deckConflict = warnings.join(" ");
+    if (deckKey === "events") {
+      const before = { ...model.session.prices };
+      const applied = applyMarketEvent(card, "physical-card");
+      pending.priceBefore = before;
+      pending.priceAfter = { ...model.session.prices };
+      pending.appliedEffects = applied.appliedEffects;
+      discardCard(deckKey, card.id);
+      pending.result.push(`${card.id} ${card.title} applied from the printed Market/Life deck. Price floor of 1 enforced.`);
+      completeResolution();
+    }
+    saveSession();
+    render();
+  }
+
+  function openCardLookupDialog(deckKey, card, warnings = []) {
+    openDialog({
+      type: "card-lookup",
+      deckKey,
+      cardId: card.id,
+      title: card.title,
+      warnings
+    });
   }
 
   function getCard(deckKey, cardId) {
@@ -1139,32 +1492,52 @@
     }
 
     model.ui.undoRollSession = cloneSession(session);
+    const fromPosition = player.position;
     const die = value ?? Math.floor(1 + Math.random() * 6);
-    const nextPosition = Math.min(43, player.position + die);
+    const nextPosition = Math.min(43, fromPosition + die);
     player.position = nextPosition;
     player.finished = nextPosition >= 43;
     session.die = die;
     session.phase = "Resolve";
-    beginResolution(player, getSpace(`S${String(nextPosition).padStart(2, "0")}`), die);
+    resetPhysicalChecks();
+    model.session.lastPhysicalMove = {
+      playerId: player.id,
+      fromSpaceId: `S${String(fromPosition).padStart(2, "0")}`,
+      die,
+      expectedSpaceId: `S${String(nextPosition).padStart(2, "0")}`,
+      confirmed: false
+    };
+    beginResolution(player, getSpace(`S${String(nextPosition).padStart(2, "0")}`), die, fromPosition);
     saveSession();
     render();
   }
 
-  function beginResolution(player, space, die) {
+  function beginResolution(player, space, die, fromPosition = player.position) {
     const pending = {
       playerId: player.id,
+      fromSpaceId: `S${String(fromPosition).padStart(2, "0")}`,
       spaceId: space.id,
       die,
       type: space.type,
       completed: false,
       cardDeck: null,
       cardId: null,
+      expectedCardId: null,
+      deckConflict: "",
+      physicalPawnConfirmed: false,
+      cashBefore: null,
+      cashAfter: null,
+      priceBefore: null,
+      priceAfter: null,
+      appliedEffects: null,
       result: []
     };
     model.session.pendingResolution = pending;
 
     if (space.cash) {
+      pending.cashBefore = player.cash;
       player.cash += Number(space.cash);
+      pending.cashAfter = player.cash;
       pending.result.push(`${space.label}: ${space.cash > 0 ? "gained" : "paid"} ${money(Math.abs(space.cash))}.`);
       completeResolution();
       return;
@@ -1181,20 +1554,21 @@
         completeResolution();
         break;
       case "Market Pulse":
-        resolveMarketPulse("board");
+        pending.cardDeck = "events";
+        pending.expectedCardId = model.session.decks.events[0] ?? null;
         break;
       case "Invest":
         pending.cardDeck = "investments";
-        pending.cardId = drawCard("investments");
-        if (!pending.cardId) {
+        pending.expectedCardId = model.session.decks.investments[0] ?? null;
+        if (!pending.expectedCardId && !model.session.discards.investments.length) {
           pending.result.push("Investment deck is empty. Player may pass and keep cash.");
           completeResolution();
         }
         break;
       case "Ethics Crossroad":
         pending.cardDeck = "ethics";
-        pending.cardId = drawCard("ethics");
-        if (!pending.cardId) {
+        pending.expectedCardId = model.session.decks.ethics[0] ?? null;
+        if (!pending.expectedCardId && !model.session.discards.ethics.length) {
           pending.result.push("Ethics deck is empty. Gain +1 ethics for discussing the printed space instruction.");
           player.ethicsPosition += 1;
           completeResolution();
@@ -1202,17 +1576,17 @@
         break;
       case "Research/Action":
         pending.cardDeck = "actions";
-        pending.cardId = drawCard("actions");
-        if (!pending.cardId) {
+        pending.expectedCardId = model.session.decks.actions[0] ?? null;
+        if (!pending.expectedCardId && !model.session.discards.actions.length) {
           player.riskEvidence += 1;
-          pending.result.push("Action deck is empty. Fallback applied: +1 risk-management evidence.");
+          pending.result.push("Action deck is empty. Printed space instruction applied: +1 risk-management evidence.");
           completeResolution();
         }
         break;
       case "Reflection":
         pending.cardDeck = "reflection";
-        pending.cardId = drawCard("reflection");
-        if (!pending.cardId) {
+        pending.expectedCardId = model.session.decks.reflection[0] ?? null;
+        if (!pending.expectedCardId && !model.session.discards.reflection.length) {
           pending.result.push("Reflection deck is empty. Host may ask a finance explanation question.");
         }
         break;
@@ -1236,6 +1610,12 @@
     pending.completed = true;
     model.ui.undoRollSession = null;
     model.session.phase = "Log";
+    if (!pending.cardId) {
+      model.session.physicalChecks.cardDiscarded = true;
+    }
+    if (pending.cardDeck !== "events") {
+      model.session.physicalChecks.priceTrackerUpdated = true;
+    }
   }
 
   function cancelRoll() {
@@ -1263,11 +1643,14 @@
       }
       return;
     }
-    applyMarketEvent(event, source);
+    const applied = applyMarketEvent(event, source);
     discardCard("events", event.id);
     if (pending) {
       pending.cardDeck = "events";
       pending.cardId = event.id;
+      pending.priceBefore = applied.beforePrices;
+      pending.priceAfter = applied.afterPrices;
+      pending.appliedEffects = applied.appliedEffects;
       pending.result.push(`${event.id} ${event.title} revealed. Price floor of 1 enforced.`);
       completeResolution();
     }
@@ -1275,6 +1658,7 @@
 
   function applyMarketEvent(event, source) {
     const beforeValues = new Map(model.session.players.map((player) => [player.id, portfolioValue(player)]));
+    const beforePrices = { ...model.session.prices };
     const appliedEffects = {};
     Object.entries(event.priceEffects ?? {}).forEach(([assetId, delta]) => {
       const next = Math.max(1, Number(model.session.prices[assetId] ?? 1) + Number(delta));
@@ -1347,6 +1731,11 @@
     });
     model.session.marketHistory = model.session.marketHistory.slice(0, 30);
     logActivity(`Reveal Event: ${event.id} ${event.title}.`);
+    return {
+      beforePrices,
+      afterPrices: { ...model.session.prices },
+      appliedEffects
+    };
   }
 
   function buyInvestment(cardId) {
@@ -1645,6 +2034,13 @@
       render();
       return;
     }
+    model.session.physicalChecks.evidenceNote = true;
+    const missingChecks = missingPhysicalChecks();
+    if (missingChecks.length) {
+      setMessage(`Finish the physical checklist first: ${missingChecks.map((key) => physicalChecklistLabels[key]).join(", ")}.`);
+      render();
+      return;
+    }
 
     player.decisions.unshift({
       at: nowIso(),
@@ -1663,6 +2059,7 @@
     logActivity(`${player.name} ended turn ${player.turnsTaken} at S${String(player.position).padStart(2, "0")}.`);
 
     session.pendingResolution = null;
+    session.physicalChecks = defaultPhysicalChecks();
     session.die = null;
     session.peekedEventId = null;
     model.ui.undoRollSession = null;
@@ -2079,6 +2476,7 @@
             `
           )
           .join("")}
+        <button class="theme-button" type="button" data-action="toggle-reduced-motion" aria-pressed="${model.ui.reducedMotion}" title="Reduce animation and smooth scrolling">Reduced motion</button>
       </div>
     `;
   }
@@ -2093,6 +2491,80 @@
         </div>
         ${status.action}
       </section>
+    `;
+  }
+
+  function renderCompanionModeToggle() {
+    if (model.backend.clientRole === "player") {
+      return `<span class="status-pill">Mode <strong>Player Assist</strong></span>`;
+    }
+    return `
+      <div class="mode-toggle" role="group" aria-label="Companion mode">
+        ${Object.entries(physicalModeLabels)
+          .map(
+            ([mode, label]) => `
+              <button class="theme-button" type="button" data-action="set-companion-mode" data-mode="${mode}" aria-pressed="${effectiveCompanionMode() === mode}" title="${mode === "host" ? "Host workflow for physical turns" : mode === "table" ? "Large classroom projection view" : "Student-focused player assist view"}">${label}</button>
+            `
+          )
+          .join("")}
+      </div>
+    `;
+  }
+
+  function speakButton(text, label = "Read aloud") {
+    return `<button class="mini-button read-button" type="button" data-action="speak" data-speak="${escapeHtml(text)}" aria-label="${escapeHtml(label)}">${escapeHtml(label)}</button>`;
+  }
+
+  function renderSpaceDetailPanel(spaceId, compact = false) {
+    const space = getSpace(spaceId) ?? getSpace("S00");
+    const meta = spaceMeta(space?.type);
+    const instruction = spaceInstruction(space);
+    return `
+      <article class="space-detail-panel tone-${meta.tone}">
+        <div class="panel-header">
+          <div>
+            <p class="eyeline">Board space lookup</p>
+            <h2>${escapeHtml(space.id)} ${escapeHtml(space.label)}</h2>
+            <p>${escapeHtml(space.type)} - ${escapeHtml(spaceRequiredDeck(space))}</p>
+          </div>
+          <span class="space-badge tone-${meta.tone}">${escapeHtml(meta.icon)}</span>
+        </div>
+        <p class="large-readable">${escapeHtml(physicalActionForSpace(space))}</p>
+        <dl class="lookup-detail-grid">
+          <div><dt>Instruction</dt><dd>${escapeHtml(meta.help)}</dd></div>
+          <div><dt>Required deck</dt><dd>${escapeHtml(spaceRequiredDeck(space))}</dd></div>
+          <div><dt>Effect</dt><dd>${escapeHtml(space.effect ?? space.choices?.join(" ") ?? "Resolve the printed board instruction.")}</dd></div>
+          <div><dt>Physical action</dt><dd>${escapeHtml(physicalActionForSpace(space))}</dd></div>
+        </dl>
+        ${compact ? "" : `<div class="btn-row">${speakButton(instruction, "Read space")}</div>`}
+      </article>
+    `;
+  }
+
+  function renderLargeCard(deckKey, card, warnings = []) {
+    if (!card) {
+      return `<article class="large-card-view"><h2>No card selected</h2></article>`;
+    }
+    const explanation = cardExplanation(deckKey, card);
+    return `
+      <article class="large-card-view tone-${deckMeta[deckKey]?.tone ?? "generic"}">
+        <div class="panel-header">
+          <div>
+            <p class="eyeline">${escapeHtml(deckLabel(deckKey))} printed card</p>
+            <h2>${escapeHtml(card.id)} ${escapeHtml(card.title)}</h2>
+          </div>
+          <span class="deck-icon">${escapeHtml(deckMeta[deckKey]?.icon ?? card.id.slice(0, 1))}</span>
+        </div>
+        ${warnings.length ? `<div class="notice warning">${warnings.map(escapeHtml).join("<br>")}</div>` : ""}
+        <p class="large-readable">${escapeHtml(explanation)}</p>
+        <dl class="lookup-detail-grid">
+          ${cardSummaryLines(deckKey, card)
+            .map(([term, value]) => `<div><dt>${escapeHtml(term)}</dt><dd>${escapeHtml(value)}</dd></div>`)
+            .join("")}
+          <div><dt>Discard instruction</dt><dd>${escapeHtml(discardInstruction(deckKey, card.id))}</dd></div>
+        </dl>
+        <div class="btn-row">${speakButton(explanation, "Read card")}</div>
+      </article>
     `;
   }
 
@@ -2172,6 +2644,21 @@
         </div>
       `;
     }
+    if (dialog.type === "card-lookup") {
+      const card = getCard(dialog.deckKey, dialog.cardId);
+      return `
+        <div class="dialog-backdrop">
+          <section class="dialog-card lookup-dialog" role="dialog" aria-modal="true" aria-labelledby="cardLookupDialogTitle" data-dialog-card>
+            <button class="dialog-close" type="button" data-action="close-dialog" aria-label="Close dialog">x</button>
+            <h2 id="cardLookupDialogTitle">Printed card lookup</h2>
+            ${renderLargeCard(dialog.deckKey, card, dialog.warnings ?? [])}
+            <div class="btn-row">
+              <button class="button" type="button" data-action="close-dialog">Close</button>
+            </div>
+          </section>
+        </div>
+      `;
+    }
     if (dialog.type === "board") {
       const occupied = new Map();
       model.session.players.forEach((player) => {
@@ -2179,14 +2666,18 @@
         list.push(player.id);
         occupied.set(player.position, list);
       });
+      const selectedSpaceId = dialog.selectedSpaceId ?? model.ui.selectedBoardSpaceId ?? `S${String(currentPlayer()?.position ?? 0).padStart(2, "0")}`;
       return `
-        <div class="dialog-backdrop" data-action="close-dialog">
+        <div class="dialog-backdrop">
           <section class="dialog-card board-dialog" role="dialog" aria-modal="true" aria-labelledby="boardDialogTitle" data-dialog-card>
             <button class="dialog-close" type="button" data-action="close-dialog" aria-label="Close dialog">x</button>
             <p class="eyeline">${escapeHtml(dialog.eyeline)}</p>
             <h2 id="boardDialogTitle">${escapeHtml(dialog.title)}</h2>
             <p>${escapeHtml(dialog.body)}</p>
-            ${renderInteractiveBoard(occupied, "modal")}
+            <div class="board-dialog-grid">
+              ${renderInteractiveBoard(occupied, "modal")}
+              ${renderSpaceDetailPanel(selectedSpaceId)}
+            </div>
             <div class="board-legend" aria-label="Board space legend">
               ${Object.entries(spaceUi)
                 .map(([type, meta]) => `<span class="asset-chip tone-${meta.tone}"><strong>${escapeHtml(meta.icon)}</strong>${escapeHtml(type)}</span>`)
@@ -2216,9 +2707,17 @@
   }
 
   function renderApp() {
+    if (effectiveCompanionMode() === "table") {
+      renderTableDisplayApp();
+      return;
+    }
+    if (effectiveCompanionMode() === "player") {
+      renderPlayerAssistApp();
+      return;
+    }
     const player = currentPlayer();
     const status = sessionStatus();
-    appRoot.className = `app-shell theme-${model.ui.theme}`;
+    appRoot.className = `app-shell theme-${model.ui.theme} ${model.ui.reducedMotion ? "reduced-motion" : ""}`;
     appRoot.innerHTML = `
       <aside class="rail">
         <div class="brand-mark">
@@ -2249,6 +2748,7 @@
         <div class="rail-footer">
           ${renderSessionStatus(status)}
           <button class="mini-button" type="button" data-action="copy-session-code">Copy code</button>
+          ${renderCompanionModeToggle()}
           ${renderThemeToggle()}
           <button class="button-ghost" type="button" data-action="logout">Logout</button>
         </div>
@@ -2267,6 +2767,7 @@
             <span class="status-pill">Player <strong>${escapeHtml(player?.name ?? "None")}</strong></span>
             <span class="status-pill">Phase <strong>${escapeHtml(model.session.phase)}</strong></span>
             <span class="status-pill status-${status.state}">${escapeHtml(status.label)} <strong>${escapeHtml(status.state === "saving" ? "now" : status.state === "synced" ? relativeTime(model.backend.lastSavedAt) : "Supabase")}</strong></span>
+            ${renderCompanionModeToggle()}
           </div>
         </header>
         <section class="content">
@@ -2288,6 +2789,155 @@
       </nav>
       ${renderToast()}
       ${renderDialog()}
+    `;
+  }
+
+  function renderTableDisplayApp() {
+    const player = currentPlayer();
+    const pending = model.session.pendingResolution;
+    const space = getSpace(pending?.spaceId ?? `S${String(player?.position ?? 0).padStart(2, "0")}`);
+    const card = pending?.cardDeck && pending.cardId ? getCard(pending.cardDeck, pending.cardId) : null;
+    const status = sessionStatus();
+    appRoot.className = `table-display-shell theme-contrast ${model.ui.reducedMotion ? "reduced-motion" : ""}`;
+    appRoot.innerHTML = `
+      <main class="table-display" aria-live="polite">
+        <header class="display-header">
+          <div>
+            <p class="eyeline">Give And Take Table Display</p>
+            <h1>${escapeHtml(player?.name ?? "Set up players")}</h1>
+          </div>
+          <div class="display-code">
+            <span>${escapeHtml(model.session.code)}</span>
+            <strong>${escapeHtml(status.label)}</strong>
+          </div>
+        </header>
+        <section class="display-grid">
+          <article class="display-main">
+            <span class="display-step">${escapeHtml(model.session.phase)}</span>
+            <h2>${escapeHtml(space?.id ?? "S00")} ${escapeHtml(space?.label ?? "Student Start")}</h2>
+            <p>${escapeHtml(physicalActionForSpace(space))}</p>
+            ${pending ? `<p class="display-next">${escapeHtml(nextPhysicalStepText(pending))}</p>` : `<p class="display-next">Next: roll the physical D6 and enter the result.</p>`}
+          </article>
+          <article class="display-side">
+            <div><span>Turn</span><strong>${escapeHtml(currentTurnLabel())}</strong></div>
+            <div><span>Position</span><strong>S${String(player?.position ?? 0).padStart(2, "0")}</strong></div>
+            <div><span>Cash</span><strong>${money(player?.cash ?? 0)}</strong></div>
+            <div><span>Evidence</span><strong>R${player?.riskEvidence ?? 0} E${player?.ethicsPosition ?? 0} F${player?.reflectionEvidence ?? 0}</strong></div>
+          </article>
+        </section>
+        ${card ? renderDisplayCard(pending.cardDeck, card) : ""}
+        ${renderDisplayPriceChanges(pending)}
+        ${canEditSession() ? `<button class="button-secondary display-exit" type="button" data-action="set-companion-mode" data-mode="host">Exit display</button>` : ""}
+      </main>
+      ${renderToast()}
+      ${renderDialog()}
+    `;
+  }
+
+  function renderPlayerAssistApp() {
+    const player = assistPlayer();
+    const pending = model.session.pendingResolution;
+    const isCurrent = player?.id === currentPlayer()?.id;
+    const space = getSpace(pending?.spaceId && isCurrent ? pending.spaceId : `S${String(player?.position ?? 0).padStart(2, "0")}`);
+    appRoot.className = `player-assist-shell theme-${model.ui.theme} ${model.ui.reducedMotion ? "reduced-motion" : ""}`;
+    appRoot.innerHTML = `
+      <main class="player-assist">
+        <header class="assist-header">
+          <div>
+            <p class="eyeline">Player Assist Mode</p>
+            <h1>${escapeHtml(player?.name ?? "Player")}</h1>
+            <p>${escapeHtml(model.session.code)} - ${escapeHtml(model.backend.clientRole === "player" ? "Joined player view" : "Host preview")}</p>
+          </div>
+          <div class="btn-row">
+            ${canEditSession() ? `${renderAssistPlayerPicker()}<button class="button-secondary" type="button" data-action="set-companion-mode" data-mode="host">Exit assist</button>` : ""}
+            <button class="button-ghost" type="button" data-action="logout">Leave table</button>
+          </div>
+        </header>
+        ${!player ? `<section class="panel"><div class="empty-state">Ask the host to add your name during setup.</div></section>` : `
+          <section class="assist-grid">
+            <article class="assist-card primary">
+              <p class="eyeline">Current instruction</p>
+              <h2>${escapeHtml(space?.id ?? "S00")} ${escapeHtml(space?.label ?? "Student Start")}</h2>
+              <p class="large-readable">${escapeHtml(isCurrent ? physicalActionForSpace(space) : "Watch the current turn. Your pawn and player board stay physical.")}</p>
+              <div class="btn-row">${speakButton(spaceInstruction(space), "Read instruction")}</div>
+            </article>
+            <article class="assist-card">
+              <p class="eyeline">Your board state</p>
+              <div class="metric-grid">
+                <div class="metric-tile"><span>Space</span><strong>S${String(player.position).padStart(2, "0")}</strong></div>
+                <div class="metric-tile"><span>Cash</span><strong>${money(player.cash)}</strong></div>
+                <div class="metric-tile"><span>Value</span><strong>${money(portfolioValue(player))}</strong></div>
+                <div class="metric-tile"><span>Turns</span><strong>${player.turnsTaken}/${model.game.turnLimit}</strong></div>
+              </div>
+              <div class="evidence-strip">
+                <span>Risk <strong>${player.riskEvidence}</strong></span>
+                <span>Ethics <strong>${player.ethicsPosition}</strong></span>
+                <span>Reflection <strong>${player.reflectionEvidence}</strong></span>
+              </div>
+            </article>
+            <article class="assist-card">
+              <p class="eyeline">Holdings</p>
+              ${renderHoldings(player)}
+            </article>
+            <article class="assist-card">
+              <p class="eyeline">Latest note</p>
+              <p>${escapeHtml(player.decisions[0]?.note ?? "No evidence note recorded yet.")}</p>
+            </article>
+          </section>
+        `}
+      </main>
+      ${renderToast()}
+      ${renderDialog()}
+    `;
+  }
+
+  function renderAssistPlayerPicker() {
+    return `
+      <label class="assist-picker">Preview player
+        <select class="select" data-assist-player>
+          ${model.session.players
+            .map((player) => `<option value="${player.id}" ${assistPlayer()?.id === player.id ? "selected" : ""}>${escapeHtml(player.name)}</option>`)
+            .join("")}
+        </select>
+      </label>
+    `;
+  }
+
+  function nextPhysicalStepText(pending = model.session.pendingResolution) {
+    if (!pending) return "Next: roll the physical D6 and enter the result.";
+    if (!pending.physicalPawnConfirmed) return "Next: confirm the pawn is physically on the expected landing space.";
+    if (pending.cardDeck && !pending.cardId) return `Next: draw a printed ${deckLabel(pending.cardDeck)} card and enter its ID.`;
+    if (!pending.completed) return "Next: resolve the shown space or printed card choice.";
+    if (!model.ui.turnNoteDraft.trim()) return "Next: select a quick evidence note or type a short note.";
+    const missing = missingPhysicalChecks();
+    if (missing.length) return `Next: finish checklist item - ${physicalChecklistLabels[missing[0]]}.`;
+    return "Next: end the turn and pass play to the next player.";
+  }
+
+  function renderDisplayCard(deckKey, card) {
+    return `
+      <section class="display-card">
+        <p class="eyeline">${escapeHtml(deckLabel(deckKey))} card</p>
+        <h2>${escapeHtml(card.id)} ${escapeHtml(card.title)}</h2>
+        <p>${escapeHtml(cardExplanation(deckKey, card))}</p>
+      </section>
+    `;
+  }
+
+  function renderDisplayPriceChanges(pending = model.session.pendingResolution) {
+    const effects = pending?.appliedEffects ?? model.session.marketHistory[0]?.appliedEffects ?? {};
+    if (!Object.keys(effects).length) return "";
+    return `
+      <section class="display-price-strip" aria-label="Price changes">
+        ${Object.entries(effects)
+          .map(([assetId, delta]) => {
+            const asset = assetMeta(assetId);
+            const before = pending?.priceBefore?.[assetId] ?? (Number(model.session.prices[assetId] ?? 0) - Number(delta));
+            const after = pending?.priceAfter?.[assetId] ?? model.session.prices[assetId];
+            return `<span class="asset-chip pattern-${asset.pattern}" style="--asset:${cssVar(asset.color)}"><strong>${escapeHtml(asset.icon)} ${escapeHtml(asset.name)}</strong> ${before} -> ${after} (${signed(delta)})</span>`;
+          })
+          .join("")}
+      </section>
     `;
   }
 
@@ -2471,23 +3121,265 @@
       `;
     }
     return `
-      <section class="play-board">
+      <section class="physical-play-board">
         ${hostOnlyNotice()}
-        ${renderPhaseStepper()}
-        <div class="play-layout">
-          <div class="play-primary">
-            ${renderCurrentPlayerCard()}
-            ${renderResolutionPanel()}
-            ${renderTurnLogPanel()}
+        <div class="physical-mode-banner">
+          <div>
+            <p class="eyeline">Physical Play Mode</p>
+            <h2>Run the printed board. Use the app to check, explain, and record.</h2>
+            <p>The physical board, real D6, printed cards, player boards, and host tracker remain the gameplay objects.</p>
           </div>
-          <aside class="play-side">
-            ${renderPathTracker()}
+          ${renderCompanionModeToggle()}
+        </div>
+        ${renderPhaseStepper()}
+        <div class="physical-layout">
+          <main class="physical-primary">
+            ${renderPhysicalTurnPanel()}
+            ${renderPhysicalResolutionPanel()}
+            ${renderPhysicalEvidencePanel()}
+          </main>
+          <aside class="physical-side">
+            ${renderCardLookupPanel()}
+            ${renderSpaceLookupPanel()}
             ${renderDecks()}
             ${renderPriceTracker()}
           </aside>
         </div>
       </section>
-      ${renderLedger()}
+    `;
+  }
+
+  function renderPhysicalTurnPanel() {
+    const player = currentPlayer();
+    const pending = model.session.pendingResolution;
+    const canRoll = Boolean(player && !pending && !model.session.gameOver && !player.finished && player.turnsTaken < model.game.turnLimit);
+    const canUndoRoll = Boolean(model.ui.undoRollSession && pending && !pending.completed && canEditSession());
+    const fromSpaceId = pending?.fromSpaceId ?? `S${String(player?.position ?? 0).padStart(2, "0")}`;
+    const expectedSpaceId = pending?.spaceId ?? fromSpaceId;
+    return `
+      <article class="physical-turn-card" data-phase-section="Roll">
+        <div class="panel-header">
+          <div>
+            <p class="eyeline">Step 1 - physical die and pawn</p>
+            <h2>${escapeHtml(player?.name ?? "No player")}</h2>
+            <p>${escapeHtml(player?.profileTitle ?? "Start setup first")} - currently on S${String(player?.position ?? 0).padStart(2, "0")}</p>
+          </div>
+          <span class="player-token large" style="--token:${cssVar(player?.tokenColor ?? playerTokens[0])}">${escapeHtml(player?.id ?? "P")}</span>
+        </div>
+        <div class="physical-step-list" aria-label="Physical turn steps">
+          <span class="${!pending ? "active" : "done"}">1 Roll physical D6</span>
+          <span class="${pending && !pending.physicalPawnConfirmed ? "active" : pending?.physicalPawnConfirmed ? "done" : ""}">2 Move pawn</span>
+          <span class="${pending?.cardDeck && !pending.cardId ? "active" : pending?.cardId ? "done" : ""}">3 Draw/enter card</span>
+          <span class="${pending?.completed ? "done" : pending ? "active" : ""}">4 Resolve</span>
+          <span class="${pending?.completed ? "active" : ""}">5 Evidence + checklist</span>
+        </div>
+        <div class="metric-grid player-metrics">
+          <div class="metric-tile"><span>Turn</span><strong>${escapeHtml(currentTurnLabel())}</strong></div>
+          <div class="metric-tile"><span>Cash</span><strong>${money(player?.cash ?? 0)}</strong></div>
+          <div class="metric-tile"><span>Value</span><strong>${money(player ? portfolioValue(player) : 0)}</strong></div>
+          <div class="metric-tile"><span>Evidence</span><strong>R${player?.riskEvidence ?? 0} E${player?.ethicsPosition ?? 0} F${player?.reflectionEvidence ?? 0}</strong></div>
+        </div>
+        <div class="physical-roll-panel">
+          <div class="field">
+            <label for="physicalDie">Enter the physical D6 result</label>
+            <input class="input die-input" id="physicalDie" type="number" min="1" max="6" value="${model.session.die ?? ""}" inputmode="numeric" aria-label="Enter physical six-sided die result" ${hostDisabledAttr(!canRoll)} />
+          </div>
+          <div class="quick-rolls" aria-label="Quick physical die entries">
+            ${[1, 2, 3, 4, 5, 6].map((roll) => `<button class="mini-button tap-target" type="button" data-action="manual-roll" data-roll="${roll}" aria-label="Use physical die result ${roll}" ${hostDisabledAttr(!canRoll)}>${roll}</button>`).join("")}
+          </div>
+          <button class="button" type="button" data-action="submit-physical-roll" ${hostDisabledAttr(!canRoll)}>Calculate landing space</button>
+          <button class="button-secondary" type="button" data-action="cancel-roll" ${canUndoRoll ? "" : "disabled"}>Undo roll</button>
+        </div>
+        ${
+          pending
+            ? `
+              <div class="move-confirm">
+                <strong>Physical move check</strong>
+                <span>From ${escapeHtml(fromSpaceId)} + D6 ${escapeHtml(pending.die)} = expected ${escapeHtml(expectedSpaceId)}</span>
+                <button class="button" type="button" data-action="confirm-pawn-space" ${hostDisabledAttr(pending.physicalPawnConfirmed)}>${pending.physicalPawnConfirmed ? "Pawn confirmed" : "Confirm pawn is on " + escapeHtml(expectedSpaceId)}</button>
+              </div>
+            `
+            : `<p class="notice">Roll the real die first, move the physical pawn, then enter the result here.</p>`
+        }
+        <span class="sr-only" aria-live="polite">${pending ? `Expected landing space ${expectedSpaceId}.` : "Waiting for physical die result."}</span>
+      </article>
+    `;
+  }
+
+  function renderPhysicalResolutionPanel() {
+    const pending = model.session.pendingResolution;
+    if (model.session.gameOver) {
+      return `
+        <article class="physical-resolution-card completed" data-phase-section="Resolve">
+          <p class="eyeline">Final review</p>
+          <h2>Game is ready for scoring.</h2>
+          <p>Use the printed boards and host tracker to double-check evidence before final scoring.</p>
+          <button class="button" type="button" data-view="scoring">Open scoring</button>
+        </article>
+      `;
+    }
+    if (!pending) {
+      return `
+        <article class="physical-resolution-card" data-phase-section="Resolve">
+          <p class="eyeline">Step 2 - landed space</p>
+          <h2>Waiting for the physical roll.</h2>
+          <p>After the host enters the die result, this panel will show the expected landing space and the printed-board action.</p>
+        </article>
+      `;
+    }
+    const space = getSpace(pending.spaceId);
+    const card = pending.cardDeck && pending.cardId ? getCard(pending.cardDeck, pending.cardId) : null;
+    return `
+      <article class="physical-resolution-card ${pending.completed ? "completed" : ""}" data-phase-section="Resolve">
+        ${renderSpaceDetailPanel(space.id, true)}
+        ${pending.cardDeck ? renderPendingPhysicalCardPrompt(pending, card) : ""}
+        ${card ? renderLargeCard(pending.cardDeck, card, pending.deckConflict ? [pending.deckConflict] : []) : ""}
+        ${renderResolutionControls(pending, space)}
+        ${renderPhysicalChangeAudit(pending)}
+        ${pending.result.length ? `<ul class="effect-list">${pending.result.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : ""}
+      </article>
+    `;
+  }
+
+  function renderPendingPhysicalCardPrompt(pending, card) {
+    if (card) {
+      return `<p class="notice">${escapeHtml(discardInstruction(pending.cardDeck, card.id))}</p>`;
+    }
+    return `
+      <section class="card-sync-panel">
+        <div>
+          <p class="eyeline">Step 3 - printed card</p>
+          <h3>Draw from the ${escapeHtml(deckLabel(pending.cardDeck))} deck.</h3>
+          <p>Enter the card ID printed on the physical card. The app will warn if it does not match the synced deck state.</p>
+          ${pending.expectedCardId ? `<p class="notice">App expects the next ${escapeHtml(deckLabel(pending.cardDeck))} card to be ${escapeHtml(pending.expectedCardId)}.</p>` : ""}
+        </div>
+        <div class="physical-card-entry">
+          <label class="sr-only" for="physicalCardId">Printed card ID, for example ${escapeHtml(pending.expectedCardId ?? "M08")}</label>
+          <input class="input code-input" id="physicalCardId" value="${escapeHtml(model.ui.cardLookupId)}" aria-label="Enter printed card ID, for example ${escapeHtml(pending.expectedCardId ?? "M08")}" />
+          <button class="button" type="button" data-action="use-card-for-turn" ${hostDisabledAttr()}>Use card for this turn</button>
+          <button class="button-secondary" type="button" data-action="use-next-card" ${hostDisabledAttr()}>Use next synced card</button>
+        </div>
+      </section>
+    `;
+  }
+
+  function renderPhysicalChangeAudit(pending) {
+    if (!pending) return "";
+    const rows = [];
+    if (pending.priceBefore && pending.priceAfter) {
+      Object.entries(pending.appliedEffects ?? {}).forEach(([assetId, delta]) => {
+        const asset = assetMeta(assetId);
+        rows.push(`<span class="asset-chip pattern-${asset.pattern}" style="--asset:${cssVar(asset.color)}"><strong>${escapeHtml(asset.icon)} ${escapeHtml(asset.name)}</strong> ${pending.priceBefore[assetId]} -> ${pending.priceAfter[assetId]} (${signed(delta)})</span>`);
+      });
+    }
+    if (pending.cashBefore !== null && pending.cashAfter !== null) {
+      rows.push(`<span class="asset-chip"><strong>Cash</strong>${money(pending.cashBefore)} -> ${money(pending.cashAfter)}</span>`);
+    }
+    if (!rows.length) return "";
+    return `
+      <section class="change-audit">
+        <p class="eyeline">Before / after check</p>
+        <div class="btn-row">${rows.join("")}</div>
+      </section>
+    `;
+  }
+
+  function renderPhysicalEvidencePanel() {
+    const pending = model.session.pendingResolution;
+    const noteReady = Boolean(pending?.completed && model.ui.turnNoteDraft.trim());
+    const missingChecks = missingPhysicalChecks();
+    return `
+      <section class="turn-log-card physical-evidence-card" data-phase-section="Log">
+        <div class="field">
+          <label for="turnNote">Step 4 - evidence note</label>
+          <p class="notice">Select a chip for routine turns. Type only when the decision needs more context.</p>
+          <div class="note-chip-row">
+            ${evidenceNoteOptions(pending)
+              .map((note) => `<button class="note-chip tap-target" type="button" data-action="use-evidence-note" data-note="${escapeHtml(note)}" ${pending?.completed && canEditSession() ? "" : "disabled"}>${escapeHtml(note)}</button>`)
+              .join("")}
+          </div>
+          <textarea class="textarea" id="turnNote" data-turn-note="true" ${pending?.completed && canEditSession() ? "" : "disabled"}>${escapeHtml(model.ui.turnNoteDraft)}</textarea>
+        </div>
+        ${renderPhysicalChecklist(pending)}
+        <div class="sticky-turn-actions">
+          <span>${pending?.completed ? noteReady && !missingChecks.length ? "Ready to end turn." : nextPhysicalStepText(pending) : "Resolve the space before ending the turn."}</span>
+          <button class="button" type="button" data-action="end-turn" ${hostDisabledAttr(!noteReady || missingChecks.length)}>End turn</button>
+        </div>
+      </section>
+    `;
+  }
+
+  function evidenceNoteOptions(pending) {
+    const primary = pending ? evidenceNotes[pending.type] ?? "Recorded the printed-space result." : "Recorded the physical turn.";
+    return [...new Set([primary, ...commonEvidenceNotes])].slice(0, 8);
+  }
+
+  function renderPhysicalChecklist(pending) {
+    const checks = model.session.physicalChecks ?? defaultPhysicalChecks();
+    const required = new Set(requiredPhysicalChecks(pending));
+    return `
+      <section class="physical-checklist" aria-label="Per-turn physical checklist">
+        <div class="section-head">
+          <div>
+            <p class="eyeline">Step 5 - host mistake check</p>
+            <h3>Physical checklist before End Turn</h3>
+          </div>
+        </div>
+        ${Object.entries(physicalChecklistLabels)
+          .map(([key, label]) => {
+            const applicable = required.has(key);
+            const checked = !applicable || Boolean(checks[key]);
+            return `
+              <label class="${checked ? "checked" : ""} ${!applicable ? "not-applicable" : ""}">
+                <input type="checkbox" data-physical-check="${key}" ${checked ? "checked" : ""} ${!applicable || !pending?.completed || !canEditSession() ? "disabled" : ""} />
+                <span>${escapeHtml(label)}${!applicable ? " - not needed this turn" : ""}</span>
+              </label>
+            `;
+          })
+          .join("")}
+      </section>
+    `;
+  }
+
+  function renderCardLookupPanel() {
+    const pending = model.session.pendingResolution;
+    return `
+      <article class="lookup-card">
+        <div class="section-head">
+          <div>
+            <p class="eyeline">Printed card lookup</p>
+            <h2>Enter card ID</h2>
+          </div>
+        </div>
+        <p>Use IDs printed on cards: M08, I17, A12, E04, R03.</p>
+        <div class="physical-card-entry">
+          <label class="sr-only" for="cardLookupId">Printed card ID lookup, for example M08</label>
+          <input class="input code-input" id="cardLookupId" value="${escapeHtml(model.ui.cardLookupId)}" aria-label="Printed card ID lookup, for example M08" />
+          <button class="button-secondary" type="button" data-action="preview-card-id">Show card</button>
+          <button class="button" type="button" data-action="use-card-for-turn" ${hostDisabledAttr(!pending?.cardDeck)}>Use for turn</button>
+        </div>
+      </article>
+    `;
+  }
+
+  function renderSpaceLookupPanel() {
+    const selected = getSpace(model.ui.selectedBoardSpaceId) ?? getSpace("S00");
+    return `
+      <article class="lookup-card">
+        <div class="section-head">
+          <div>
+            <p class="eyeline">Board space lookup</p>
+            <h2>S00-S43 help</h2>
+          </div>
+          <button class="mini-button" type="button" data-action="expand-board">Board image</button>
+        </div>
+        <div class="physical-card-entry">
+          <label class="sr-only" for="boardLookupId">Board space lookup, for example S14</label>
+          <input class="input code-input" id="boardLookupId" value="${escapeHtml(model.ui.boardLookupId)}" aria-label="Board space lookup, for example S14" />
+          <button class="button-secondary" type="button" data-action="lookup-space-id">Show space</button>
+        </div>
+        ${renderSpaceDetailPanel(selected.id, true)}
+      </article>
     `;
   }
 
@@ -2615,7 +3507,7 @@
                     class="board-space-hotspot tone-${meta.tone} ${isActive ? "active" : ""}"
                     style="${boardBoxStyle(box)}"
                     type="button"
-                    data-action="space-info"
+                    data-action="${mode === "modal" ? "select-board-space" : "space-info"}"
                     data-space-id="${spaceId}"
                     aria-label="${escapeHtml(boardSpaceDescription(space))}"
                     title="${escapeHtml(boardSpaceDescription(space))}">
@@ -2742,8 +3634,12 @@
     if (pending.completed) {
       return `<p class="success-text">Space resolved. Add the required note below, then end the turn.</p>`;
     }
+    if (pending.cardDeck && !pending.cardId) {
+      return `<p class="notice warning">Enter the printed ${escapeHtml(deckLabel(pending.cardDeck))} card ID before resolving this space.</p>`;
+    }
     if (space.type === "Invest") {
       const card = getCard("investments", pending.cardId);
+      if (!card) return `<p class="notice warning">Investment card ID is missing or invalid.</p>`;
       return `
         <div class="btn-row">
           <button class="button" type="button" data-action="buy-investment" data-card-id="${escapeHtml(card?.id)}" ${hostDisabledAttr()}>Buy unit</button>
@@ -2752,6 +3648,7 @@
       `;
     }
     if (space.type === "Ethics Crossroad") {
+      if (!getCard("ethics", pending.cardId)) return `<p class="notice warning">Ethics card ID is missing or invalid.</p>`;
       return `
         <div class="btn-row">
           <button class="button-secondary" type="button" data-action="choose-ethics" data-choice="profit" ${hostDisabledAttr()}>Profit option</button>
@@ -2761,6 +3658,7 @@
     }
     if (space.type === "Research/Action") {
       const card = getCard("actions", pending.cardId);
+      if (!card) return `<p class="notice warning">Action card ID is missing or invalid.</p>`;
       if (card?.type === "loss-limit" || card?.type === "hedge") {
         return `
           <div class="btn-row">
@@ -2773,6 +3671,7 @@
       return `<button class="button" type="button" data-action="resolve-action" ${hostDisabledAttr()}>Apply Action</button>`;
     }
     if (space.type === "Reflection") {
+      if (!getCard("reflection", pending.cardId)) return `<p class="notice warning">Reflection card ID is missing or invalid.</p>`;
       return `
         <div class="btn-row">
           ${[0, 2, 4, 6, 8, 10]
@@ -3060,6 +3959,7 @@
           <span class="status-pill">${escapeHtml(item.sentiment)} <strong>${escapeHtml(item.bias)}</strong></span>
         </div>
         <p>${escapeHtml(marketEventExplanation(item))}</p>
+        <div class="btn-row">${speakButton(`${item.id} ${item.title}. ${marketEventExplanation(item)}`, "Read event")}</div>
         <div class="btn-row">
           ${Object.entries(item.priceEffects ?? {})
             .map(([assetId, delta]) => {
@@ -3207,6 +4107,7 @@
         <details class="rules-accordion" open>
           <summary>How the score is calculated</summary>
           <p>Portfolio 25, diversification 20, risk management 15, ethics 20, reflection 20. Portfolio is normalized against the highest player value.</p>
+          ${speakButton("Portfolio 25, diversification 20, risk management 15, ethics 20, reflection 20. Portfolio is normalized against the highest player value.", "Read scoring")}
         </details>
         <div class="score-grid">
           ${scores
@@ -3225,6 +4126,7 @@
                   <details>
                     <summary>Calculation details</summary>
                     ${renderScoreDetails(score)}
+                    ${speakButton(scoreExplanation(score), "Read score")}
                   </details>
                 </article>
               `
@@ -3277,6 +4179,10 @@
         <div><dt>Reflection score</dt><dd>${score.reflectionScore}/20 = scored reflection evidence</dd></div>
       </dl>
     `;
+  }
+
+  function scoreExplanation(score) {
+    return `${score.player.name} has ${score.total} out of 100. Portfolio ${score.portfolioScore} out of 25. Diversification ${score.diversificationScore} out of 20. Risk ${score.riskManagementScore} out of 15. Ethics ${score.ethicsScore} out of 20. Reflection ${score.reflectionScore} out of 20.`;
   }
 
   function scoreInsight(score) {
@@ -3746,6 +4652,19 @@
         persistUi();
         render();
         break;
+      case "set-companion-mode":
+        model.ui.companionMode = button.dataset.mode || "host";
+        persistUi();
+        render();
+        break;
+      case "toggle-reduced-motion":
+        model.ui.reducedMotion = !model.ui.reducedMotion;
+        persistUi();
+        render();
+        break;
+      case "speak":
+        speak(button.dataset.speak);
+        break;
       case "set-dice-mode":
         model.ui.diceMode = button.dataset.mode || "digital";
         persistUi();
@@ -3840,6 +4759,53 @@
         if (!requireHostAction()) break;
         rollDie(Number(button.dataset.roll));
         break;
+      case "confirm-pawn-space":
+        if (!requireHostAction()) break;
+        if (model.session.pendingResolution) {
+          model.session.pendingResolution.physicalPawnConfirmed = true;
+          model.session.physicalChecks.pawnMoved = true;
+          if (model.session.lastPhysicalMove) {
+            model.session.lastPhysicalMove.confirmed = true;
+          }
+          saveSession();
+          render();
+        }
+        break;
+      case "use-card-for-turn": {
+        if (!requireHostAction()) break;
+        const value = document.getElementById("physicalCardId")?.value || document.getElementById("cardLookupId")?.value || model.ui.cardLookupId;
+        model.ui.cardLookupId = normaliseCardId(value);
+        applyPrintedCardId(value);
+        break;
+      }
+      case "use-next-card":
+        if (!requireHostAction()) break;
+        useSyncedCardForPending();
+        break;
+      case "preview-card-id": {
+        const value = document.getElementById("cardLookupId")?.value || document.getElementById("physicalCardId")?.value || model.ui.cardLookupId;
+        const lookup = findCardByPrintedId(value);
+        model.ui.cardLookupId = normaliseCardId(value);
+        if (!lookup) {
+          setMessage(`No printed card found for ${normaliseCardId(value)}.`);
+          render();
+          break;
+        }
+        openCardLookupDialog(lookup.deckKey, lookup.card, []);
+        break;
+      }
+      case "lookup-space-id": {
+        const value = normaliseSpaceId(document.getElementById("boardLookupId")?.value || model.ui.boardLookupId);
+        if (!getSpace(value)) {
+          setMessage(`No board space found for ${value}. Use S00-S43.`);
+          render();
+          break;
+        }
+        model.ui.boardLookupId = value;
+        model.ui.selectedBoardSpaceId = value;
+        render();
+        break;
+      }
       case "buy-investment":
         if (!requireHostAction()) break;
         buyInvestment(button.dataset.cardId);
@@ -3911,6 +4877,7 @@
         const note = button.dataset.note ?? "";
         const input = document.getElementById("turnNote");
         model.ui.turnNoteDraft = note;
+        model.session.physicalChecks.evidenceNote = true;
         if (input) {
           input.value = note;
           input.focus();
@@ -3981,12 +4948,22 @@
       case "space-info": {
         const space = getSpace(button.dataset.spaceId);
         const meta = spaceMeta(space?.type);
+        model.ui.selectedBoardSpaceId = space?.id ?? "S00";
         openDialog({
           eyeline: space?.type ?? "Board space",
           title: `${space?.id ?? ""} ${space?.label ?? ""}`,
           body: `${meta.help} ${space?.effect ?? space?.choices?.join(" ") ?? ""}`.trim(),
           helpTopic: space?.type ?? "Movement"
         });
+        break;
+      }
+      case "select-board-space": {
+        const spaceId = button.dataset.spaceId ?? "S00";
+        model.ui.selectedBoardSpaceId = spaceId;
+        if (model.ui.dialog?.type === "board") {
+          model.ui.dialog = { ...model.ui.dialog, selectedSpaceId: spaceId };
+        }
+        render();
         break;
       }
       case "dialog-help-topic": {
@@ -4044,6 +5021,17 @@
       model.ui.marketFilters[event.target.dataset.marketFilter] = event.target.value;
       render();
     }
+    if (event.target.matches("[data-physical-check]")) {
+      const key = event.target.dataset.physicalCheck;
+      model.session.physicalChecks[key] = Boolean(event.target.checked);
+      saveSession();
+      render();
+    }
+    if (event.target.matches("[data-assist-player]")) {
+      model.ui.selectedAssistPlayerId = event.target.value;
+      persistUi();
+      render();
+    }
   }
 
   function handleInput(event) {
@@ -4052,10 +5040,17 @@
     }
     if (event.target.matches("[data-turn-note]")) {
       model.ui.turnNoteDraft = event.target.value;
+      model.session.physicalChecks.evidenceNote = Boolean(event.target.value.trim());
       render();
       const note = document.getElementById("turnNote");
       note?.focus();
       note?.setSelectionRange(note.value.length, note.value.length);
+    }
+    if (event.target.id === "cardLookupId" || event.target.id === "physicalCardId") {
+      model.ui.cardLookupId = normaliseCardId(event.target.value);
+    }
+    if (event.target.id === "boardLookupId") {
+      model.ui.boardLookupId = normaliseSpaceId(event.target.value);
     }
     if (event.target.matches("[data-rules-search]")) {
       model.ui.rulesQuery = event.target.value;
@@ -4082,6 +5077,35 @@
         return;
       }
       rollDie(value);
+      return;
+    }
+    if (event.key === "Enter" && (event.target?.id === "physicalCardId" || event.target?.id === "cardLookupId")) {
+      event.preventDefault();
+      if (event.target.id === "physicalCardId" && model.session.pendingResolution) {
+        if (!requireHostAction()) return;
+        applyPrintedCardId(event.target.value);
+      } else {
+        const lookup = findCardByPrintedId(event.target.value);
+        if (lookup) {
+          openCardLookupDialog(lookup.deckKey, lookup.card, []);
+        } else {
+          setMessage(`No printed card found for ${normaliseCardId(event.target.value)}.`);
+          render();
+        }
+      }
+      return;
+    }
+    if (event.key === "Enter" && event.target?.id === "boardLookupId") {
+      event.preventDefault();
+      const value = normaliseSpaceId(event.target.value);
+      if (getSpace(value)) {
+        model.ui.boardLookupId = value;
+        model.ui.selectedBoardSpaceId = value;
+        render();
+      } else {
+        setMessage(`No board space found for ${value}. Use S00-S43.`);
+        render();
+      }
       return;
     }
     if (event.key !== "Tab" || !model.ui.dialog) {
@@ -4112,7 +5136,7 @@
       model.ui.lastPhase = phase;
       window.setTimeout(() => {
         const target = appRoot.querySelector(`[data-phase-section="${phase}"]`);
-        target?.scrollIntoView({ behavior: "smooth", block: "start" });
+        target?.scrollIntoView({ behavior: model.ui.reducedMotion ? "auto" : "smooth", block: "start" });
       }, 0);
     }
   }
