@@ -10,7 +10,7 @@
     auth: "give-and-take:auth:v1",
     backend: "give-and-take:backend:v1",
     client: "give-and-take:client:v1",
-    session: "give-and-take:session:v3",
+    session: "give-and-take:session-cache:v4",
     ui: "give-and-take:ui:v1"
   };
 
@@ -91,8 +91,8 @@
     session: null,
     backend: {
       online: false,
-      provider: "local",
-      label: "Local browser",
+      provider: "supabase",
+      label: "Supabase",
       client: null,
       sessionId: null,
       revision: 0,
@@ -103,15 +103,24 @@
       clientRole: null,
       lastSyncedJson: "",
       unavailableReason: "",
-      saveState: "local",
+      saveState: "connecting",
       lastSavedAt: null
     },
     ui: {
       theme: readStore(STORAGE.ui, {})?.theme ?? (window.matchMedia?.("(prefers-color-scheme: light)")?.matches ? "classroom" : "table"),
       diceMode: readStore(STORAGE.ui, {})?.diceMode ?? "digital",
       boardExpanded: false,
+      boardZoom: Number(readStore(STORAGE.ui, {})?.boardZoom ?? 1),
       ledgerEditMode: false,
       rulesQuery: "",
+      marketFilters: {
+        sentiment: "all",
+        asset: "all",
+        bias: "all"
+      },
+      turnNoteDraft: "",
+      undoRollSession: null,
+      lastPhase: "",
       dialog: null
     },
     message: "",
@@ -123,12 +132,12 @@
   const round = (value) => Math.round(value);
   const nowIso = () => new Date().toISOString();
 
-  function readStore(key, fallback) {
+  function readStore(key, defaultValue) {
     try {
       const raw = localStorage.getItem(key);
-      return raw ? JSON.parse(raw) : fallback;
+      return raw ? JSON.parse(raw) : defaultValue;
     } catch {
-      return fallback;
+      return defaultValue;
     }
   }
 
@@ -136,21 +145,22 @@
     try {
       localStorage.setItem(key, JSON.stringify(value));
     } catch {
-      setMessage("This browser blocked local storage. The app can run, but refresh persistence may fail.");
+      setMessage("Browser storage is blocked. Supabase saving still controls the table state.");
     }
   }
 
   function persistUi() {
     writeStore(STORAGE.ui, {
       theme: model.ui.theme,
-      diceMode: model.ui.diceMode
+      diceMode: model.ui.diceMode,
+      boardZoom: model.ui.boardZoom
     });
   }
 
   function setSaveState(state, detail = "") {
     model.backend.saveState = state;
     model.backend.unavailableReason = detail || model.backend.unavailableReason || "";
-    if (state === "synced" || state === "local") {
+    if (state === "synced" || state === "connected") {
       model.backend.lastSavedAt = nowIso();
     }
   }
@@ -176,38 +186,32 @@
   }
 
   function saveModeLabel() {
-    if (model.backend.provider === "supabase" && model.backend.online) {
-      return "Live table";
-    }
-    if (model.backend.online) {
-      return "Local network";
-    }
-    return "This browser";
+    return "Backend: Supabase";
   }
 
   function sessionStatus() {
     if (model.backend.saving || model.backend.saveState === "saving") {
-      return { state: "saving", label: "Saving", detail: "Writing the latest table state.", action: "" };
+      return { state: "saving", label: "Saving", detail: "Writing the latest table state to Supabase.", action: "" };
     }
     if (model.backend.saveState === "failed") {
       return {
         state: "failed",
-        label: "Save failed",
-        detail: "Saved in this browser. Retry when the connection is back.",
+        label: "Error - Supabase save failed",
+        detail: model.backend.unavailableReason || "Supabase did not accept the latest table state.",
         action: `<button class="mini-button" type="button" data-action="retry-sync">Retry</button>`
       };
     }
     if (model.backend.online && model.backend.saveState === "synced") {
-      return { state: "synced", label: "Synced", detail: `Last saved ${relativeTime(model.backend.lastSavedAt)}.`, action: "" };
+      return { state: "synced", label: "Saved", detail: `Last saved to Supabase ${relativeTime(model.backend.lastSavedAt)}.`, action: "" };
     }
     if (model.backend.online) {
-      return { state: "synced", label: "Ready", detail: `${saveModeLabel()} is ready.`, action: "" };
+      return { state: "connected", label: "Connected", detail: "Connected to Supabase.", action: "" };
     }
     return {
-      state: "local",
-      label: "Local only",
-      detail: "This table is stored in the current browser.",
-      action: ""
+      state: "failed",
+      label: "Error - Supabase unavailable",
+      detail: model.backend.unavailableReason || "Connect to Supabase before hosting or joining a table.",
+      action: `<button class="mini-button" type="button" data-action="retry-sync">Retry</button>`
     };
   }
 
@@ -221,6 +225,59 @@
 
   function spaceMeta(type) {
     return spaceUi[type] ?? { icon: "SP", tone: "generic", help: "Resolve the printed board space." };
+  }
+
+  function boardSpaceBoxes() {
+    const boxes = [["S00", 24, 24, 282, 332]];
+    let x = 304;
+    let y = 38;
+    let w = 214;
+    let h = 286;
+    let gap = 8;
+    for (let index = 1; index <= 12; index += 1) {
+      boxes.push([`S${String(index).padStart(2, "0")}`, x + (index - 1) * (w + gap), y, x + (index - 1) * (w + gap) + w, y + h]);
+    }
+    x = 2716;
+    y = 354;
+    w = 252;
+    h = 235;
+    gap = 14;
+    for (let index = 13; index <= 21; index += 1) {
+      const offset = index - 13;
+      boxes.push([`S${String(index).padStart(2, "0")}`, x, y + offset * (h + gap), x + w, y + offset * (h + gap) + h]);
+    }
+    x = 2686;
+    y = 2708;
+    w = 190;
+    h = 252;
+    gap = 8;
+    for (let index = 22; index <= 34; index += 1) {
+      const offset = index - 22;
+      const xx = x - offset * (w + gap);
+      boxes.push([`S${String(index).padStart(2, "0")}`, xx, y, xx + w, y + h]);
+    }
+    x = 42;
+    y = 2680;
+    w = 232;
+    h = 280;
+    gap = 20;
+    for (let index = 35; index <= 42; index += 1) {
+      const offset = index - 35;
+      boxes.push([`S${String(index).padStart(2, "0")}`, x, y - offset * (h + gap), x + w, y - offset * (h + gap) + h]);
+    }
+    boxes.push(["S43", 42, 338, 274, 532]);
+    return boxes;
+  }
+
+  function boardBoxStyle(box) {
+    const [, x1, y1, x2, y2] = box;
+    return `left:${(x1 / 3000) * 100}%;top:${(y1 / 3000) * 100}%;width:${((x2 - x1) / 3000) * 100}%;height:${((y2 - y1) / 3000) * 100}%;`;
+  }
+
+  function boardSpaceDescription(space) {
+    const meta = spaceMeta(space?.type);
+    const details = [meta.help, space?.effect, ...(space?.choices ?? [])].filter(Boolean).join(" ");
+    return `${space?.id ?? ""} ${space?.label ?? ""}: ${space?.type ?? "Board space"}. ${details}`.trim();
   }
 
   function profileUi(profileId) {
@@ -443,22 +500,14 @@
           return;
         }
       }
-
-      const health = await apiRequest("/health");
-      model.backend.online = Boolean(health.ok);
-      model.backend.provider = health.provider ?? "node-json";
-      model.backend.label = health.label ?? "Session server";
-      model.backend.client = null;
-      model.backend.unavailableReason = "";
-      setSaveState("synced");
     } catch (error) {
-      model.backend.online = false;
-      model.backend.provider = "local";
-      model.backend.label = "Local browser";
-      model.backend.client = null;
-      model.backend.unavailableReason = error.message ?? "Session server unavailable.";
-      setSaveState("local", model.backend.unavailableReason);
+      model.backend.unavailableReason = error.message ?? "Supabase configuration could not be loaded.";
     }
+    model.backend.online = false;
+    model.backend.provider = "supabase";
+    model.backend.label = "Supabase";
+    model.backend.client = null;
+    setSaveState("failed", model.backend.unavailableReason || "Supabase configuration is missing.");
   }
 
   async function initSupabaseClient(config) {
@@ -480,11 +529,11 @@
       return true;
     } catch (error) {
       model.backend.online = false;
-      model.backend.provider = "local";
-      model.backend.label = "Local browser";
+      model.backend.provider = "supabase";
+      model.backend.label = "Supabase";
       model.backend.client = null;
-      model.backend.unavailableReason = error.message ?? "Online table service could not load.";
-      setSaveState("local", model.backend.unavailableReason);
+      model.backend.unavailableReason = error.message ?? "Supabase client could not load.";
+      setSaveState("failed", model.backend.unavailableReason);
       return false;
     }
   }
@@ -498,7 +547,7 @@
 
   function queueBackendSync() {
     if (!model.backend.online || !model.auth || !model.session) {
-      setSaveState("local");
+      setSaveState("failed", "Supabase connection is required before saving this table.");
       return;
     }
     if (model.backend.saving) {
@@ -515,46 +564,12 @@
       if (model.backend.saving) {
         model.backend.needsSave = true;
       }
-      return;
-    }
-    if (model.backend.provider === "supabase") {
-      await syncSessionToSupabase();
-      return;
-    }
-    const localJson = JSON.stringify(model.session);
-    if (localJson === model.backend.lastSyncedJson) {
-      return;
-    }
-    model.backend.saving = true;
-    try {
-      const result = await apiRequest(`/sessions/${encodeURIComponent(model.session.code)}`, {
-        method: "PUT",
-        body: {
-          auth: publicAuth(),
-          session: model.session,
-          revision: model.backend.revision
-        }
-      });
-      model.backend.revision = Number(result.revision ?? model.backend.revision);
-      model.backend.lastSyncedJson = JSON.stringify(result.session ?? model.session);
-      model.backend.unavailableReason = "";
-      setSaveState("synced");
-    } catch (error) {
-      model.backend.online = false;
-      model.backend.provider = "local";
-      model.backend.label = "Local browser";
-      model.backend.unavailableReason = error.message ?? "Session server unavailable.";
-      setSaveState("failed", model.backend.unavailableReason);
-      setMessage("Could not save online. The table is still saved in this browser.");
-    } finally {
-      model.backend.saving = false;
-      if (model.backend.needsSave) {
-        model.backend.needsSave = false;
-        queueBackendSync();
-      } else {
-        render();
+      if (!model.backend.online) {
+        setSaveState("failed", "Supabase connection is required before saving this table.");
       }
+      return;
     }
+    await syncSessionToSupabase();
   }
 
   async function pullSessionFromBackend() {
@@ -564,33 +579,11 @@
     if (model.backend.clientRole === "host") {
       return;
     }
-    if (model.backend.provider === "supabase") {
-      await pullSessionFromSupabase();
-      return;
-    }
-    try {
-      const result = await apiRequest(`/sessions/${encodeURIComponent(model.session.code)}`);
-      const remoteRevision = Number(result.revision ?? 0);
-      if (remoteRevision > model.backend.revision && result.session) {
-        model.session = ensureSessionShape(result.session);
-        model.backend.revision = remoteRevision;
-        model.backend.lastSyncedJson = JSON.stringify(model.session);
-        writeStore(STORAGE.session, model.session);
-        render();
-      }
-    } catch {
-      // Keep the local session usable if another device has not created the code yet.
-    }
+    await pullSessionFromSupabase();
   }
 
   async function loadBackendSession(code) {
-    if (model.backend.provider === "supabase") {
-      return loadSupabaseSession(code);
-    }
-    const result = await apiRequest(`/sessions/${encodeURIComponent(code)}`);
-    model.backend.revision = Number(result.revision ?? 0);
-    model.backend.lastSyncedJson = JSON.stringify(result.session ?? {});
-    return ensureSessionShape(result.session);
+    return loadSupabaseSession(code);
   }
 
   function applySupabaseRecord(record) {
@@ -656,7 +649,7 @@
       setSaveState("synced");
     } catch (error) {
       setSaveState("failed", error.message ?? "Online save failed.");
-      setMessage("Could not save online. The table is still saved in this browser.");
+      setMessage("Supabase save failed. Retry before continuing important table actions.");
     } finally {
       model.backend.saving = false;
       if (model.backend.needsSave) {
@@ -691,8 +684,8 @@
         writeStore(STORAGE.session, model.session);
         render();
       }
-    } catch {
-      // Keep local interaction responsive if the network drops mid-session.
+    } catch (error) {
+      setSaveState("failed", error.message ?? "Supabase refresh failed.");
     }
   }
 
@@ -743,6 +736,13 @@
     return copy;
   }
 
+  function cloneSession(session) {
+    if (typeof structuredClone === "function") {
+      return structuredClone(session);
+    }
+    return JSON.parse(JSON.stringify(session));
+  }
+
   async function loadGame() {
     try {
       const response = await fetch(CONFIG_URL, { cache: "no-store" });
@@ -761,7 +761,7 @@
           prototypeContract: {
             turnLimit: legacy.meta.turnLimit,
             movement: legacy.meta.movement,
-            dashboardRole: "Legacy event tracker fallback."
+            dashboardRole: "Legacy event tracker mode."
           },
           componentCounts: { boardSpaces: 44, totalCards: 81 },
           assets: legacy.assets,
@@ -1138,6 +1138,7 @@
       return;
     }
 
+    model.ui.undoRollSession = cloneSession(session);
     const die = value ?? Math.floor(1 + Math.random() * 6);
     const nextPosition = Math.min(43, player.position + die);
     player.position = nextPosition;
@@ -1194,7 +1195,7 @@
         pending.cardDeck = "ethics";
         pending.cardId = drawCard("ethics");
         if (!pending.cardId) {
-          pending.result.push("Ethics deck is empty. Gain +1 ethics for discussing the printed fallback.");
+          pending.result.push("Ethics deck is empty. Gain +1 ethics for discussing the printed space instruction.");
           player.ethicsPosition += 1;
           completeResolution();
         }
@@ -1233,7 +1234,22 @@
       pending.result.push(extraText);
     }
     pending.completed = true;
+    model.ui.undoRollSession = null;
     model.session.phase = "Log";
+  }
+
+  function cancelRoll() {
+    if (!model.ui.undoRollSession || !model.session.pendingResolution || model.session.pendingResolution.completed) {
+      setMessage("There is no unresolved roll to undo.");
+      render();
+      return;
+    }
+    model.session = ensureSessionShape(model.ui.undoRollSession);
+    model.ui.undoRollSession = null;
+    model.ui.turnNoteDraft = "";
+    setMessage("Roll cancelled. Pawn and deck state restored.");
+    saveSession();
+    render();
   }
 
   function resolveMarketPulse(source) {
@@ -1320,6 +1336,7 @@
       source,
       playerId: currentPlayer()?.id ?? null,
       playerName: currentPlayer()?.name ?? null,
+      turn: currentPlayer() ? currentPlayer().turnsTaken + 1 : null,
       id: event.id,
       title: event.title,
       sentiment: event.sentiment,
@@ -1622,7 +1639,7 @@
       render();
       return;
     }
-    const note = document.getElementById("turnNote")?.value.trim();
+    const note = (model.ui.turnNoteDraft || document.getElementById("turnNote")?.value || "").trim();
     if (!note) {
       setMessage("Record one decision, finance term, or evidence note before ending the turn.");
       render();
@@ -1648,6 +1665,8 @@
     session.pendingResolution = null;
     session.die = null;
     session.peekedEventId = null;
+    model.ui.undoRollSession = null;
+    model.ui.turnNoteDraft = "";
     if (isGameOver()) {
       session.gameOver = true;
       session.phase = "Scoring";
@@ -1743,9 +1762,7 @@
         boardSpaces: model.game.boardSpaces.length,
         cardCounts: model.game.componentCounts,
         scoreWeights: model.game.scoreWeights
-      },
-      physicalFallback:
-        "The website can run the full local session, but the physical board, cards, D6, and physical player boards remain valid if the QR site is unavailable."
+      }
     };
     model.exportText = JSON.stringify(payload, null, 2);
     return model.exportText;
@@ -1761,6 +1778,129 @@
     link.click();
     URL.revokeObjectURL(url);
     render();
+  }
+
+  function csvEscape(value) {
+    const text = String(value ?? "");
+    return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+  }
+
+  function exportCsv() {
+    const scoresByPlayer = new Map(calculateScores().map((score) => [score.player.id, score]));
+    const rows = [
+      [
+        "player",
+        "turns_taken",
+        "cash",
+        "portfolio_value",
+        "asset_categories",
+        "risk_evidence",
+        "ethics_position",
+        "reflection_evidence",
+        "notes",
+        "portfolio_score",
+        "diversification_score",
+        "risk_score",
+        "ethics_score",
+        "reflection_score",
+        "total_score",
+        "missing_evidence"
+      ]
+    ];
+    model.session.players.forEach((player) => {
+      const score = scoresByPlayer.get(player.id);
+      rows.push([
+        player.name,
+        `${player.turnsTaken}/${model.game.turnLimit}`,
+        player.cash,
+        score?.value ?? portfolioValue(player),
+        uniqueHoldingCount(player),
+        player.riskEvidence,
+        player.ethicsPosition,
+        player.reflectionEvidence,
+        player.decisions.length,
+        score?.portfolioScore ?? 0,
+        score?.diversificationScore ?? 0,
+        score?.riskManagementScore ?? 0,
+        score?.ethicsScore ?? 0,
+        score?.reflectionScore ?? 0,
+        score?.total ?? 0,
+        missingEvidence(player).join("; ")
+      ]);
+    });
+    return rows.map((row) => row.map(csvEscape).join(",")).join("\n");
+  }
+
+  function downloadCsv() {
+    const blob = new Blob([exportCsv()], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${model.session.code.toLowerCase()}-give-and-take-summary.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function printSummary() {
+    const scores = calculateScores();
+    const html = `
+      <!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>${escapeHtml(model.session.code)} Give And Take Summary</title>
+          <style>
+            body { font-family: Inter, Arial, sans-serif; margin: 24px; color: #172026; }
+            h1, h2 { margin-bottom: 6px; }
+            table { width: 100%; border-collapse: collapse; margin: 18px 0; }
+            th, td { border: 1px solid #9a8a68; padding: 8px; text-align: left; font-size: 12px; }
+            th { background: #efe5d0; }
+            .note { color: #5b4a2e; }
+          </style>
+        </head>
+        <body>
+          <h1>Give And Take Session Summary</h1>
+          <p class="note">Table ${escapeHtml(model.session.code)} - ${escapeHtml(scoreStateLabel())} - ${escapeHtml(saveModeLabel())} - last saved ${escapeHtml(relativeTime(model.backend.lastSavedAt))}</p>
+          <h2>Scores</h2>
+          <table>
+            <thead><tr><th>Player</th><th>Total</th><th>Portfolio</th><th>Diversify</th><th>Risk</th><th>Ethics</th><th>Reflect</th><th>Missing evidence</th></tr></thead>
+            <tbody>
+              ${scores
+                .map((score) => `<tr><td>${escapeHtml(score.player.name)}</td><td>${score.total}/100</td><td>${score.portfolioScore}/25</td><td>${score.diversificationScore}/20</td><td>${score.riskManagementScore}/15</td><td>${score.ethicsScore}/20</td><td>${score.reflectionScore}/20</td><td>${escapeHtml(missingEvidence(score.player).join("; ") || "Complete")}</td></tr>`)
+                .join("")}
+            </tbody>
+          </table>
+          <h2>Latest Market Events</h2>
+          <table>
+            <thead><tr><th>Card</th><th>Sentiment</th><th>Bias</th><th>Player</th><th>Effects</th></tr></thead>
+            <tbody>
+              ${model.session.marketHistory
+                .slice(0, 10)
+                .map((item) => `<tr><td>${escapeHtml(item.id)} ${escapeHtml(item.title)}</td><td>${escapeHtml(item.sentiment)}</td><td>${escapeHtml(item.bias)}</td><td>${escapeHtml(item.playerName ?? "Host")}</td><td>${escapeHtml(marketEventExplanation(item))}</td></tr>`)
+                .join("")}
+            </tbody>
+          </table>
+          <script>window.print();</script>
+        </body>
+      </html>
+    `;
+    const win = window.open("", "_blank", "noopener,noreferrer");
+    if (!win) {
+      setMessage("Pop-up blocked. Allow pop-ups to print the summary.");
+      render();
+      return;
+    }
+    win.document.write(html);
+    win.document.close();
+  }
+
+  function missingEvidence(player) {
+    const missing = [];
+    if (!player.decisions.length) missing.push("no turn notes");
+    if (player.reflectionEvidence <= 0) missing.push("zero reflection notes");
+    if (player.riskEvidence <= 0) missing.push("zero risk evidence");
+    if (player.turnsTaken < model.game.turnLimit && !player.finished && !model.session.gameOver) missing.push("incomplete turns");
+    return missing;
   }
 
   function signed(value) {
@@ -1785,9 +1925,11 @@
     }
     if (!model.auth) {
       renderAuth();
+      afterRender();
       return;
     }
     renderApp();
+    afterRender();
   }
 
   function renderFatal(error) {
@@ -1921,12 +2063,17 @@
 
   function renderThemeToggle() {
     const labels = { table: "Table", classroom: "Classroom", contrast: "Contrast" };
+    const descriptions = {
+      table: "Beige board-game table theme.",
+      classroom: "Light theme optimized for projection.",
+      contrast: "Dark high-contrast theme with reduced pattern intensity."
+    };
     return `
       <div class="theme-toggle" role="group" aria-label="Visual theme">
         ${["table", "classroom", "contrast"]
           .map(
             (theme) => `
-              <button class="theme-button" type="button" data-action="set-theme" data-theme="${theme}" aria-pressed="${model.ui.theme === theme}">
+              <button class="theme-button" type="button" data-action="set-theme" data-theme="${theme}" aria-pressed="${model.ui.theme === theme}" aria-label="${escapeHtml(labels[theme])}: ${escapeHtml(descriptions[theme])}" title="${escapeHtml(descriptions[theme])}">
                 ${labels[theme]}
               </button>
             `
@@ -1983,7 +2130,7 @@
             <button class="dialog-close" type="button" data-action="close-dialog" aria-label="Close dialog">x</button>
             <p class="eyeline">Ledger correction</p>
             <h2 id="adjustDialogTitle">${escapeHtml(player?.name ?? "Player")} - ${escapeHtml(dialog.label)}</h2>
-            <p>Manual edits are for corrections or physical fallback. They are recorded in the export log.</p>
+            <p>Manual edits are for corrections after checking the physical board or cards. They are recorded in the export log.</p>
             <input type="hidden" name="playerId" value="${escapeHtml(dialog.playerId)}" />
             <input type="hidden" name="field" value="${escapeHtml(dialog.field)}" />
             <div class="field">
@@ -1999,7 +2146,7 @@
             </div>
             <div class="field">
               <label for="adjustReason">Reason</label>
-              <textarea class="textarea" id="adjustReason" name="reason" required>Correction from physical board.</textarea>
+              <textarea class="textarea" id="adjustReason" name="reason" required></textarea>
             </div>
             <div class="btn-row">
               <button class="button-secondary" type="button" data-action="close-dialog">Cancel</button>
@@ -2026,6 +2173,12 @@
       `;
     }
     if (dialog.type === "board") {
+      const occupied = new Map();
+      model.session.players.forEach((player) => {
+        const list = occupied.get(player.position) ?? [];
+        list.push(player.id);
+        occupied.set(player.position, list);
+      });
       return `
         <div class="dialog-backdrop" data-action="close-dialog">
           <section class="dialog-card board-dialog" role="dialog" aria-modal="true" aria-labelledby="boardDialogTitle" data-dialog-card>
@@ -2033,7 +2186,12 @@
             <p class="eyeline">${escapeHtml(dialog.eyeline)}</p>
             <h2 id="boardDialogTitle">${escapeHtml(dialog.title)}</h2>
             <p>${escapeHtml(dialog.body)}</p>
-            <img src="${BOARD_IMAGE_URL}" alt="Give And Take board with QR code" />
+            ${renderInteractiveBoard(occupied, "modal")}
+            <div class="board-legend" aria-label="Board space legend">
+              ${Object.entries(spaceUi)
+                .map(([type, meta]) => `<span class="asset-chip tone-${meta.tone}"><strong>${escapeHtml(meta.icon)}</strong>${escapeHtml(type)}</span>`)
+                .join("")}
+            </div>
             <div class="btn-row">
               <button class="button" type="button" data-action="close-dialog">Close</button>
             </div>
@@ -2049,6 +2207,7 @@
           <h2 id="infoDialogTitle">${escapeHtml(dialog.title ?? "Give And Take")}</h2>
           <p>${escapeHtml(dialog.body ?? "")}</p>
           <div class="btn-row">
+            ${dialog.helpTopic ? `<button class="button-secondary" type="button" data-action="dialog-help-topic" data-topic="${escapeHtml(dialog.helpTopic)}">Open help</button>` : ""}
             <button class="button" type="button" data-action="close-dialog">Close</button>
           </div>
         </section>
@@ -2107,7 +2266,7 @@
             <span class="status-pill">Turn <strong>${escapeHtml(currentTurnLabel())}</strong></span>
             <span class="status-pill">Player <strong>${escapeHtml(player?.name ?? "None")}</strong></span>
             <span class="status-pill">Phase <strong>${escapeHtml(model.session.phase)}</strong></span>
-            <span class="status-pill status-${status.state}">${escapeHtml(status.label)} <strong>${escapeHtml(status.state === "saving" ? "now" : status.state === "synced" ? relativeTime(model.backend.lastSavedAt) : saveModeLabel())}</strong></span>
+            <span class="status-pill status-${status.state}">${escapeHtml(status.label)} <strong>${escapeHtml(status.state === "saving" ? "now" : status.state === "synced" ? relativeTime(model.backend.lastSavedAt) : "Supabase")}</strong></span>
           </div>
         </header>
         <section class="content">
@@ -2230,17 +2389,20 @@
             <img src="${BOARD_IMAGE_URL}" alt="Give And Take physical game board" />
             <figcaption>Use this as the visual reference while the website tracks the playable state.</figcaption>
           </figure>
-          <div class="checklist">
-            ${[
-              "Shuffle Investment, Market/Life, Ethics, Action, and Reflection decks.",
-              "Put pawns on S00 Student Start.",
-              "Keep the D6 and price tracker near the host.",
-              "Share the GT code with players.",
-              "Confirm player boards and pencils are ready."
-            ]
-              .map((item, index) => `<label><input type="checkbox" /> <span>${index + 1}. ${escapeHtml(item)}</span></label>`)
-              .join("")}
-          </div>
+          <details class="rules-accordion setup-checklist" open>
+            <summary>Physical setup checklist</summary>
+            <div class="checklist">
+              ${[
+                "Shuffle Investment, Market/Life, Ethics, Action, and Reflection decks.",
+                "Put pawns on S00 Student Start.",
+                "Keep the D6 and price tracker near the host.",
+                "Share the GT code with players.",
+              "Confirm physical player boards and pencils are ready."
+              ]
+                .map((item, index) => `<label><input type="checkbox" /> <span>${index + 1}. ${escapeHtml(item)}</span></label>`)
+                .join("")}
+            </div>
+          </details>
         </section>
       </div>
     `;
@@ -2277,6 +2439,20 @@
           <span><strong>Cash</strong>${money(profile.cash)}</span>
           <span><strong>Trait</strong>${escapeHtml(profile.trait)}</span>
           <span><strong>Bonus</strong>${escapeHtml(profile.bonus)}</span>
+        </div>
+        <div class="profile-option-grid" aria-label="Starter Profile preview options">
+          ${starterProfiles
+            .map((item) => {
+              const optionMeta = profileUi(item.id);
+              return `
+                <button class="profile-option ${item.id === profile.id ? "selected" : ""}" type="button" data-action="select-profile" data-index="${index}" data-profile-id="${item.id}" ${hostDisabledAttr(model.session.started)}>
+                  <strong>${escapeHtml(optionMeta.icon)} ${escapeHtml(item.title)}</strong>
+                  <span>${money(item.cash)} - ${escapeHtml(item.trait)}</span>
+                  <small>${escapeHtml(item.bonus)}</small>
+                </button>
+              `;
+            })
+            .join("")}
         </div>
       </article>
     `;
@@ -2338,9 +2514,10 @@
   function renderCurrentPlayerCard() {
     const player = currentPlayer();
     const canRoll = Boolean(player && !model.session.pendingResolution && !model.session.gameOver && !player.finished && player.turnsTaken < model.game.turnLimit);
+    const canUndoRoll = Boolean(model.ui.undoRollSession && model.session.pendingResolution && !model.session.pendingResolution.completed && canEditSession());
     const space = getSpace(`S${String(player?.position ?? 0).padStart(2, "0")}`);
     return `
-      <article class="current-player-card">
+      <article class="current-player-card" data-phase-section="Roll">
         <div class="panel-header">
           <div>
             <p class="eyeline">Current player</p>
@@ -2365,15 +2542,19 @@
               ? `
                 <div class="physical-roll">
                   <label for="physicalDie">Enter D6 result</label>
-                  <input class="input die-input" id="physicalDie" type="number" min="1" max="6" value="${model.session.die ?? 1}" ${hostDisabledAttr(!canRoll)} />
+                  <input class="input die-input" id="physicalDie" type="number" min="1" max="6" value="${model.session.die ?? 1}" aria-label="Enter physical six-sided die result" ${hostDisabledAttr(!canRoll)} />
                   <button class="button" type="button" data-action="submit-physical-roll" ${hostDisabledAttr(!canRoll)}>Move pawn</button>
                 </div>
                 <div class="quick-rolls" aria-label="Quick physical die entries">
-                  ${[1, 2, 3, 4, 5, 6].map((roll) => `<button class="mini-button" type="button" data-action="manual-roll" data-roll="${roll}" ${hostDisabledAttr(!canRoll)}>${roll}</button>`).join("")}
+                  ${[1, 2, 3, 4, 5, 6].map((roll) => `<button class="mini-button" type="button" data-action="manual-roll" data-roll="${roll}" aria-label="Use physical die result ${roll}" ${hostDisabledAttr(!canRoll)}>${roll}</button>`).join("")}
                 </div>
               `
               : `<button class="die-button" type="button" data-action="roll-die" aria-label="Roll digital six-sided die. Current result ${model.session.die ?? "none"}" ${hostDisabledAttr(!canRoll)}>${model.session.die ?? "D6"}</button>`
           }
+          <div class="btn-row">
+            <button class="button-secondary" type="button" data-action="cancel-roll" ${canUndoRoll ? "" : "disabled"}>Undo roll</button>
+            <span class="sr-only" aria-live="polite">${model.session.die ? `Die result ${model.session.die}.` : "No die result yet."}</span>
+          </div>
         </div>
       </article>
     `;
@@ -2391,29 +2572,64 @@
         <div class="section-head">
           <div>
             <p class="eyeline">Board path</p>
-            <h2>S00 to S43</h2>
+            <h2>Interactive S00-S43 board</h2>
           </div>
           <button class="mini-button" type="button" data-action="expand-board">Board image</button>
         </div>
-        <div class="path-track" aria-label="Board position tracker">
-          ${model.game.boardSpaces
-            .map((space, index) => {
-              const players = occupied.get(index) ?? [];
-              const isActive = currentPlayer()?.position === index;
-              const isFinish = index === 43;
-              const meta = spaceMeta(space.type);
-              return `
-                <button class="path-dot ${isActive ? "active" : ""} ${isFinish ? "finished" : ""} tone-${meta.tone}" type="button" data-action="space-info" data-space-id="${space.id}" aria-label="${space.id} ${escapeHtml(space.label)}: ${escapeHtml(space.type)}">
-                  <span class="path-id">${space.id}</span>
-                  <span class="path-icon">${meta.icon}</span>
-                  <span class="path-label">${escapeHtml(space.label)}</span>
-                  <span class="pawn-markers">${players.map((playerId) => `<span class="pawn-marker" title="${playerId}"></span>`).join("")}</span>
-                </button>
-              `;
-            })
-            .join("")}
-        </div>
+        ${renderInteractiveBoard(occupied, "compact")}
       </article>
+    `;
+  }
+
+  function renderInteractiveBoard(occupied = new Map(), mode = "compact") {
+    const zoom = mode === "modal" ? clamp(model.ui.boardZoom, 0.75, 2.2) : 1;
+    return `
+      <div class="board-map-shell ${mode === "modal" ? "modal-board-map" : ""}" aria-label="Interactive board spaces">
+        <div class="board-map-tools">
+          <span class="table-label">Tap, focus, or hover spaces for details</span>
+          ${
+            mode === "modal"
+              ? `
+                <div class="btn-row">
+                  <button class="mini-button" type="button" data-action="board-zoom" data-zoom="-0.2" aria-label="Zoom board out">-</button>
+                  <span class="status-pill">Zoom <strong>${Math.round(zoom * 100)}%</strong></span>
+                  <button class="mini-button" type="button" data-action="board-zoom" data-zoom="0.2" aria-label="Zoom board in">+</button>
+                </div>
+              `
+              : ""
+          }
+        </div>
+        <div class="board-map-scroll">
+          <div class="board-map-stage" style="--board-zoom:${zoom}">
+            <img src="${BOARD_IMAGE_URL}" alt="Give And Take board with QR code and S00-S43 path" />
+            ${boardSpaceBoxes()
+              .map((box) => {
+                const [spaceId] = box;
+                const space = getSpace(spaceId);
+                const index = Number(spaceId.slice(1));
+                const players = occupied.get(index) ?? [];
+                const meta = spaceMeta(space?.type);
+                const isActive = currentPlayer()?.position === index;
+                return `
+                  <button
+                    class="board-space-hotspot tone-${meta.tone} ${isActive ? "active" : ""}"
+                    style="${boardBoxStyle(box)}"
+                    type="button"
+                    data-action="space-info"
+                    data-space-id="${spaceId}"
+                    aria-label="${escapeHtml(boardSpaceDescription(space))}"
+                    title="${escapeHtml(boardSpaceDescription(space))}">
+                    <span class="path-id">${spaceId}</span>
+                    <span class="path-icon" aria-hidden="true">${escapeHtml(meta.icon)}</span>
+                    <span class="board-tooltip" role="tooltip">${escapeHtml(boardSpaceDescription(space))}</span>
+                    <span class="pawn-markers">${players.map((playerId) => `<span class="pawn-marker" title="${playerId}"></span>`).join("")}</span>
+                  </button>
+                `;
+              })
+              .join("")}
+          </div>
+        </div>
+      </div>
     `;
   }
 
@@ -2421,7 +2637,7 @@
     const pending = model.session.pendingResolution;
     if (model.session.gameOver) {
       return `
-        <article class="resolution-card completed">
+        <article class="resolution-card completed" data-phase-section="Resolve">
           <p class="eyeline">Scoring</p>
           <h2>Game is ready for final scoring.</h2>
           <p>All active players reached S43 or hit the 12-turn limit.</p>
@@ -2431,7 +2647,7 @@
     }
     if (!pending) {
       return `
-        <article class="resolution-card">
+        <article class="resolution-card" data-phase-section="Resolve">
           <p class="eyeline">Resolve space</p>
           <h2>Ready to roll.</h2>
           <p>Roll one D6 or enter the physical die result. Movement is capped at S43.</p>
@@ -2441,7 +2657,7 @@
     const space = getSpace(pending.spaceId);
     const meta = spaceMeta(space.type);
     return `
-      <article class="resolution-card ${pending.completed ? "completed" : ""} tone-${meta.tone}">
+      <article class="resolution-card ${pending.completed ? "completed" : ""} tone-${meta.tone}" data-phase-section="Resolve">
         <div class="resolver-head">
           <span class="space-badge tone-${meta.tone}">${escapeHtml(meta.icon)}</span>
           <div>
@@ -2603,8 +2819,9 @@
   function renderTurnLogPanel() {
     const pending = model.session.pendingResolution;
     const suggested = pending ? evidenceNotes[pending.type] ?? "Recorded the turn result and reasoning." : "";
+    const noteReady = Boolean(pending?.completed && model.ui.turnNoteDraft.trim());
     return `
-      <section class="turn-log-card">
+      <section class="turn-log-card" data-phase-section="Log">
         <div class="field">
           <label for="turnNote">Required decision, finance term, or evidence note</label>
           <p class="notice">Use a suggested note or write your own. The note is saved in the evidence export.</p>
@@ -2613,11 +2830,11 @@
               ? `<div class="note-chip-row"><button class="note-chip" type="button" data-action="use-evidence-note" data-note="${escapeHtml(suggested)}" ${pending?.completed && canEditSession() ? "" : "disabled"}>${escapeHtml(suggested)}</button></div>`
               : ""
           }
-          <textarea class="textarea" id="turnNote" ${pending?.completed && canEditSession() ? "" : "disabled"}></textarea>
+          <textarea class="textarea" id="turnNote" data-turn-note="true" ${pending?.completed && canEditSession() ? "" : "disabled"}>${escapeHtml(model.ui.turnNoteDraft)}</textarea>
         </div>
         <div class="sticky-turn-actions">
-          <span>${pending?.completed ? "Ready to end turn." : "Resolve the space before ending the turn."}</span>
-          <button class="button" type="button" data-action="end-turn" ${hostDisabledAttr(!pending?.completed)}>End turn</button>
+          <span>${pending?.completed ? noteReady ? "Ready to end turn." : "Add or select one note to end the turn." : "Resolve the space before ending the turn."}</span>
+          <button class="button" type="button" data-action="end-turn" ${hostDisabledAttr(!noteReady)}>End turn</button>
         </div>
       </section>
     `;
@@ -2671,8 +2888,10 @@
               const width = clamp((index / Math.max(1, start + 12)) * 100, 7, 100);
               return `
                 <div class="asset-row pattern-${meta.pattern}" role="listitem" style="--asset:${cssVar(asset.color)}">
-                  <div class="asset-name"><span>${escapeHtml(meta.icon)}</span><strong>${escapeHtml(asset.name)}</strong><small>Risk ${asset.risk} - ${escapeHtml(meta.label)}</small></div>
-                  <div class="bar" aria-label="${escapeHtml(asset.name)} current index ${index}, start ${start}, delta ${signed(delta)}, last change ${signed(lastDelta)}"><span style="width:${width}%"></span></div>
+                  <div class="asset-name"><span>${escapeHtml(meta.icon)}</span><strong>${escapeHtml(asset.name)}</strong><small>Risk ${asset.risk} - ${escapeHtml(meta.label)} - ${escapeHtml(meta.pattern)} pattern</small></div>
+                  <div class="bar asset-bar" aria-label="${escapeHtml(asset.name)} current index ${index}, start ${start}, total change ${signed(delta)}, last event ${signed(lastDelta)}">
+                    <span style="width:${width}%"><strong>${index}</strong></span>
+                  </div>
                   <div class="index">
                     <strong>${index}</strong>
                     <span>start ${start}</span>
@@ -2748,7 +2967,14 @@
         ${holdings
           .map(([assetId, units]) => {
             const asset = assetMeta(assetId);
-            return `<span class="asset-chip pattern-${asset.pattern}" style="--asset:${cssVar(asset.color)}">${escapeHtml(asset.icon)} ${escapeHtml(asset.name)} x${units}</span>`;
+            const index = Number(model.session.prices[assetId] ?? asset.startIndex ?? 0);
+            const value = Number(units) * index * 1000;
+            return `
+              <span class="asset-chip holding-chip pattern-${asset.pattern}" style="--asset:${cssVar(asset.color)}" aria-label="${escapeHtml(asset.name)} ${units} units, index ${index}, value ${money(value)}">
+                <strong>${escapeHtml(asset.icon)} ${escapeHtml(asset.name)}</strong>
+                <small>${units} units / index ${index} / ${money(value)}</small>
+              </span>
+            `;
           })
           .join("")}
       </div>
@@ -2756,51 +2982,90 @@
   }
 
   function renderMarket() {
+    const filtered = filteredMarketHistory();
     return `
       <div class="market-layout">
         <section class="panel stack">
           ${hostOnlyNotice()}
-          <div class="panel-header">
-            <div>
-              <p class="eyeline">Latest Market/Life card</p>
-              <h2>${model.session.activeEvent ? escapeHtml(model.session.activeEvent.title) : "No event revealed yet"}</h2>
-              <p>Market events appear after Market Pulse spaces or an intentional host reveal.</p>
-            </div>
-          </div>
-          ${model.session.activeEvent ? renderEventCard(model.session.activeEvent) : `<div class="empty-state">The first Market/Life card will show here with sentiment, bias watch, and price effects.</div>`}
+          ${renderLatestMarketEvent()}
           ${renderPriceTracker()}
         </section>
         <section class="panel">
           <div class="panel-header">
             <div>
-              <p class="eyeline">Event history</p>
-              <h2>Applied price changes</h2>
+              <p class="eyeline">Event timeline</p>
+              <h2>Market/Life history</h2>
             </div>
-            <button class="button-secondary" type="button" data-action="confirm-host-reveal" ${hostDisabledAttr(!model.session.started)}>Host reveal</button>
           </div>
-          <p class="notice">Use host reveal only when a board space or host flow calls for a Market/Life card.</p>
+          <div class="market-filter-grid">
+            <label>Sentiment
+              <select class="select" data-market-filter="sentiment">
+                ${["all", "Bull", "Bear", "Neutral"].map((value) => `<option value="${value}" ${model.ui.marketFilters.sentiment === value ? "selected" : ""}>${value === "all" ? "All" : value}</option>`).join("")}
+              </select>
+            </label>
+            <label>Asset
+              <select class="select" data-market-filter="asset">
+                <option value="all">All assets</option>
+                ${model.game.assets.map((asset) => `<option value="${asset.id}" ${model.ui.marketFilters.asset === asset.id ? "selected" : ""}>${escapeHtml(asset.name)}</option>`).join("")}
+              </select>
+            </label>
+            <label>Bias watch
+              <select class="select" data-market-filter="bias">
+                <option value="all">All bias types</option>
+                ${[...new Set(model.game.cards.events.map((event) => event.bias).filter(Boolean))]
+                  .map((bias) => `<option value="${escapeHtml(bias)}" ${model.ui.marketFilters.bias === bias ? "selected" : ""}>${escapeHtml(bias)}</option>`)
+                  .join("")}
+              </select>
+            </label>
+          </div>
           <div class="stack">
             ${
-              model.session.marketHistory.length
-                ? model.session.marketHistory.map(renderMarketHistoryRow).join("")
-                : `<div class="empty-state">History starts after the first Market/Life card. Each entry records source, sentiment, bias, and applied deltas.</div>`
+              filtered.length
+                ? filtered.map(renderMarketHistoryRow).join("")
+                : `<div class="empty-state">No Market/Life events match the current filters.</div>`
             }
           </div>
+          <section class="host-tools">
+            <div>
+              <p class="eyeline">Host tools</p>
+              <h3>Manual reveal</h3>
+              <p>Use this only when the board space or host flow calls for a Market/Life card.</p>
+            </div>
+            <button class="button-secondary" type="button" data-action="confirm-host-reveal" ${hostDisabledAttr(!model.session.started)}>Reveal Market/Life card</button>
+          </section>
         </section>
       </div>
     `;
   }
 
-  function renderMarketHistoryRow(item) {
+  function renderLatestMarketEvent() {
+    const item = model.session.marketHistory[0];
+    if (!item) {
+      return `
+        <article class="latest-event-card">
+          <p class="eyeline">Latest Market/Life card</p>
+          <h2>No event revealed yet</h2>
+          <p>The first Market/Life card will appear here with sentiment, bias watch, player, turn, and price effects.</p>
+        </article>
+      `;
+    }
     return `
-      <article class="event-row">
-        <strong>${escapeHtml(item.id)} ${escapeHtml(item.title)}</strong>
-        <p>${escapeHtml(item.sentiment)} / ${escapeHtml(item.bias)} / ${escapeHtml(item.source)}${item.playerName ? ` / ${escapeHtml(item.playerName)}` : ""}</p>
+      <article class="latest-event-card sentiment-${escapeHtml(String(item.sentiment).toLowerCase())}">
+        <div class="panel-header">
+          <div>
+            <p class="eyeline">Latest Market/Life card</p>
+            <h2>${escapeHtml(item.id)} ${escapeHtml(item.title)}</h2>
+            <p>Turn ${escapeHtml(item.turn ?? "Host")} - ${escapeHtml(item.playerName ?? "Host reveal")} - ${escapeHtml(item.source)}</p>
+          </div>
+          <span class="status-pill">${escapeHtml(item.sentiment)} <strong>${escapeHtml(item.bias)}</strong></span>
+        </div>
+        <p>${escapeHtml(marketEventExplanation(item))}</p>
         <div class="btn-row">
-          ${Object.entries(item.priceEffects)
+          ${Object.entries(item.priceEffects ?? {})
             .map(([assetId, delta]) => {
               const asset = assetMeta(assetId);
-              return `<span class="asset-chip pattern-${asset.pattern}" style="--asset:${cssVar(asset.color)}">${escapeHtml(asset.icon)} ${escapeHtml(asset.name)} <strong>${signed(delta)}</strong></span>`;
+              const applied = Number(item.appliedEffects?.[assetId] ?? delta);
+              return `<span class="asset-chip pattern-${asset.pattern}" style="--asset:${cssVar(asset.color)}" aria-label="${escapeHtml(asset.name)} changed ${signed(applied)}">${escapeHtml(asset.icon)} ${escapeHtml(asset.name)} ${signed(applied)}</span>`;
             })
             .join("")}
         </div>
@@ -2808,21 +3073,65 @@
     `;
   }
 
+  function marketEventExplanation(item) {
+    const effects = Object.entries(item.appliedEffects ?? item.priceEffects ?? {})
+      .map(([assetId, delta]) => `${getAsset(assetId).name} ${signed(delta)}`)
+      .join(", ");
+    return `Sentiment is ${item.sentiment}; bias watch is ${item.bias}. Applied index changes: ${effects || "none"}.`;
+  }
+
+  function filteredMarketHistory() {
+    return model.session.marketHistory.filter((item) => {
+      const filters = model.ui.marketFilters;
+      if (filters.sentiment !== "all" && item.sentiment !== filters.sentiment) return false;
+      if (filters.asset !== "all" && !Object.prototype.hasOwnProperty.call(item.priceEffects ?? {}, filters.asset)) return false;
+      if (filters.bias !== "all" && item.bias !== filters.bias) return false;
+      return true;
+    });
+  }
+
+  function renderMarketHistoryRow(item) {
+    return `
+      <details class="event-row">
+        <summary>
+          <strong>${escapeHtml(item.id)} ${escapeHtml(item.title)}</strong>
+          <span>${escapeHtml(item.sentiment)} / ${escapeHtml(item.bias)} / Turn ${escapeHtml(item.turn ?? "Host")}</span>
+        </summary>
+        <p>${escapeHtml(item.source)}${item.playerName ? ` / ${escapeHtml(item.playerName)}` : ""} / ${new Date(item.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p>
+        <p>${escapeHtml(marketEventExplanation(item))}</p>
+        <div class="btn-row">
+          ${Object.entries(item.priceEffects ?? {})
+            .map(([assetId, delta]) => {
+              const asset = assetMeta(assetId);
+              const before = Number(item.prices?.[assetId] ?? 0) - Number(item.appliedEffects?.[assetId] ?? delta);
+              const after = Number(item.prices?.[assetId] ?? 0);
+              return `<span class="asset-chip pattern-${asset.pattern}" style="--asset:${cssVar(asset.color)}">${escapeHtml(asset.icon)} ${escapeHtml(asset.name)} <strong>${signed(delta)}</strong> ${before} -> ${after}</span>`;
+            })
+            .join("")}
+        </div>
+      </details>
+    `;
+  }
+
   function renderPlayers() {
     if (!model.session.players.length) {
       return `<section class="panel"><div class="empty-state">Start setup before editing player ledgers.</div></section>`;
     }
+    const latestAdjustment = model.session.manualAdjustments[0];
+    const undoTitle = latestAdjustment
+      ? `Undo ${latestAdjustment.playerName} ${latestAdjustment.field} correction ${signed(latestAdjustment.delta)}`
+      : "No correction available to undo";
     return `
       <section class="panel ledger-console">
         <div class="panel-header">
           <div>
             <p class="eyeline">Player ledger</p>
             <h2>Cash, holdings, and evidence</h2>
-            <p>Manual edits are for correction or physical fallback only.</p>
+            <p>Manual edits are for corrections after checking the physical board, cards, or player boards.</p>
           </div>
           <div class="btn-row">
             <button class="button-secondary" type="button" data-action="toggle-ledger-edit" aria-pressed="${model.ui.ledgerEditMode}" ${hostDisabledAttr()}>${model.ui.ledgerEditMode ? "Exit edit mode" : "Edit ledger"}</button>
-            <button class="mini-button" type="button" data-action="undo-adjustment" ${hostDisabledAttr(!model.session.manualAdjustments.length)}>Undo latest</button>
+            <button class="mini-button" type="button" data-action="undo-adjustment" title="${escapeHtml(undoTitle)}" aria-label="${escapeHtml(undoTitle)}" ${hostDisabledAttr(!model.session.manualAdjustments.length)}>Undo latest</button>
           </div>
         </div>
         ${hostOnlyNotice()}
@@ -2915,7 +3224,7 @@
                   ${renderScoreBars(score)}
                   <details>
                     <summary>Calculation details</summary>
-                    <p>Value ${money(score.value)}. Cash ${money(score.player.cash)}. Categories ${uniqueHoldingCount(score.player)}. Risk evidence ${score.player.riskEvidence}. Ethics position ${score.player.ethicsPosition}. Reflection evidence ${score.player.reflectionEvidence}.</p>
+                    ${renderScoreDetails(score)}
                   </details>
                 </article>
               `
@@ -2928,21 +3237,45 @@
 
   function renderScoreBars(score) {
     const rows = [
-      ["Portfolio", score.portfolioScore, Number(model.game.scoreWeights.portfolioValue ?? 25)],
-      ["Diversify", score.diversificationScore, Number(model.game.scoreWeights.diversification ?? 20)],
-      ["Risk", score.riskManagementScore, Number(model.game.scoreWeights.riskManagement ?? 15)],
-      ["Ethics", score.ethicsScore, Number(model.game.scoreWeights.ethics ?? 20)],
-      ["Reflect", score.reflectionScore, Number(model.game.scoreWeights.reflection ?? 20)]
+      ["Portfolio", "leaf", score.portfolioScore, Number(model.game.scoreWeights.portfolioValue ?? 25)],
+      ["Diversify", "pie", score.diversificationScore, Number(model.game.scoreWeights.diversification ?? 20)],
+      ["Risk", "warn", score.riskManagementScore, Number(model.game.scoreWeights.riskManagement ?? 15)],
+      ["Ethics", "scale", score.ethicsScore, Number(model.game.scoreWeights.ethics ?? 20)],
+      ["Reflect", "bulb", score.reflectionScore, Number(model.game.scoreWeights.reflection ?? 20)]
     ];
     return `
       <div class="score-bars">
         ${rows
-          .map(([label, value, max]) => {
+          .map(([label, icon, value, max]) => {
             const width = clamp((value / max) * 100, 0, 100);
-            return `<div class="score-bar"><span>${label}</span><div class="bar" aria-label="${label} ${value} out of ${max}"><span style="width:${width}%"></span></div><strong>${value}/${max}</strong></div>`;
+            return `<div class="score-bar"><span class="score-icon">${icon}</span><span>${label}</span><div class="bar" aria-label="${label} ${value} out of ${max}"><span style="width:${width}%"></span></div><strong>${value}/${max}</strong></div>`;
           })
           .join("")}
       </div>
+    `;
+  }
+
+  function renderScoreDetails(score) {
+    const player = score.player;
+    const startingProfile = model.game.cards.starterProfiles.find((profile) => profile.id === player.profileId);
+    const holdingsValue = score.value - Number(player.cash || 0);
+    const highestValue = Math.max(1, ...model.session.players.map((item) => portfolioValue(item)));
+    return `
+      <dl class="score-detail-grid">
+        <div><dt>Starting cash</dt><dd>${money(startingProfile?.cash ?? 0)}</dd></div>
+        <div><dt>Current cash</dt><dd>${money(player.cash)}</dd></div>
+        <div><dt>Holdings value</dt><dd>${money(holdingsValue)}</dd></div>
+        <div><dt>Current portfolio value</dt><dd>${money(score.value)}</dd></div>
+        <div><dt>Unique asset categories</dt><dd>${uniqueHoldingCount(player)}</dd></div>
+        <div><dt>Risk evidence</dt><dd>${player.riskEvidence}</dd></div>
+        <div><dt>Ethics position</dt><dd>${player.ethicsPosition}</dd></div>
+        <div><dt>Reflection evidence</dt><dd>${player.reflectionEvidence}</dd></div>
+        <div><dt>Portfolio score</dt><dd>${score.portfolioScore}/25 = ${money(score.value)} / ${money(highestValue)} x 25</dd></div>
+        <div><dt>Diversification score</dt><dd>${score.diversificationScore}/20 = ${uniqueHoldingCount(player)} categories x 4</dd></div>
+        <div><dt>Risk score</dt><dd>${score.riskManagementScore}/15 = evidence, cash buffer, and diversification checks</dd></div>
+        <div><dt>Ethics score</dt><dd>${score.ethicsScore}/20 = base 10 plus ethics position</dd></div>
+        <div><dt>Reflection score</dt><dd>${score.reflectionScore}/20 = scored reflection evidence</dd></div>
+      </dl>
     `;
   }
 
@@ -2976,6 +3309,8 @@
           <div class="btn-row">
             <button class="button-secondary" type="button" data-action="refresh-export">Refresh JSON</button>
             <button class="button-secondary" type="button" data-action="copy-export">Copy JSON</button>
+            <button class="button-secondary" type="button" data-action="download-csv">Download CSV</button>
+            <button class="button-secondary" type="button" data-action="print-summary">Print summary</button>
             <button class="button" type="button" data-action="download-evidence">Download JSON</button>
           </div>
         </div>
@@ -2986,21 +3321,24 @@
         </div>
         <div class="evidence-completeness">
           ${model.session.players
-            .map(
-              (player) => `
-                <article>
-                  <strong>${escapeHtml(player.name)}</strong>
+            .map((player) => {
+              const missing = missingEvidence(player);
+              return `
+                <article class="${missing.length ? "warning" : ""}">
+                  <strong>${missing.length ? "!" : "OK"} ${escapeHtml(player.name)}</strong>
                   <span>Notes ${player.decisions.length}</span>
                   <span>Risk ${player.riskEvidence}</span>
                   <span>Ethics ${player.ethicsPosition}</span>
                   <span>Reflection ${player.reflectionEvidence}</span>
+                  <span>${missing.length ? escapeHtml(missing.join(", ")) : "Evidence complete"}</span>
                 </article>
-              `
-            )
+              `;
+            })
             .join("")}
         </div>
-        <details class="rules-accordion">
+        <details class="rules-accordion" open>
           <summary>Raw JSON preview</summary>
+          <button class="mini-button" type="button" data-action="copy-export">Copy formatted JSON</button>
           <pre class="export-box" id="evidenceOutput">${escapeHtml(text)}</pre>
         </details>
       </section>
@@ -3008,11 +3346,10 @@
   }
 
   function renderRules() {
-    const rules = helpSections().filter((section) => {
-      const query = model.ui.rulesQuery.trim().toLowerCase();
-      if (!query) return true;
-      return `${section.title} ${section.body}`.toLowerCase().includes(query);
-    });
+    const query = model.ui.rulesQuery.trim().toLowerCase();
+    const rules = helpSections().filter((section) => !query || `${section.title} ${section.body}`.toLowerCase().includes(query));
+    const glossary = glossaryTerms().filter((term) => !query || `${term.term} ${term.body} ${term.section}`.toLowerCase().includes(query));
+    const hasResults = rules.length || glossary.length;
     return `
       <div class="grid two">
         <section class="panel stack">
@@ -3026,7 +3363,23 @@
             <label for="rulesSearch">Search rules and glossary</label>
             <input class="input" id="rulesSearch" data-rules-search="true" value="${escapeHtml(model.ui.rulesQuery)}" autocomplete="off" />
           </div>
-          ${rules.map((section) => `<details class="rules-accordion" open><summary>${escapeHtml(section.title)}</summary><p>${escapeHtml(section.body)}</p></details>`).join("")}
+          ${!hasResults ? `<div class="empty-state">No results found.</div>` : ""}
+          <div class="diagram-grid" aria-label="Game diagrams">
+            ${renderFlowDiagram("Turn flow", ["Roll", "Move", "Resolve", "Log", "End"])}
+            ${renderFlowDiagram("Scoring formula", ["Portfolio 25", "Diversify 20", "Risk 15", "Ethics 20", "Reflect 20", "Total 100"])}
+            ${renderFlowDiagram("Deck lifecycle", ["Draw", "Resolve", "Discard", "Reshuffle"])}
+          </div>
+          ${rules.map((section) => `<details class="rules-accordion" open id="help-${escapeHtml(section.slug)}"><summary>${highlightMatch(section.title, query)}</summary><p>${highlightMatch(section.body, query)}</p></details>`).join("")}
+          <section class="glossary-panel">
+            <div class="section-head">
+              <div>
+                <p class="eyeline">Glossary</p>
+                <h2>A-Z finance terms</h2>
+              </div>
+            </div>
+            <div class="az-index">${"ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").map((letter) => `<a href="#glossary-${letter}">${letter}</a>`).join("")}</div>
+            ${renderGlossary(glossary, query)}
+          </section>
         </section>
         <section class="panel stack">
           <div class="panel-header">
@@ -3035,11 +3388,11 @@
               <h2>Assets and quick cards</h2>
             </div>
           </div>
-          <div class="asset-legend">
+          <div class="asset-legend-grid">
             ${model.game.assets
               .map((asset) => {
                 const meta = assetMeta(asset.id);
-                return `<span class="asset-chip pattern-${meta.pattern}" style="--asset:${cssVar(asset.color)}">${escapeHtml(meta.icon)} ${escapeHtml(asset.name)} - risk ${asset.risk}</span>`;
+                return `<article class="asset-legend-card pattern-${meta.pattern}" style="--asset:${cssVar(asset.color)}"><strong>${escapeHtml(meta.icon)} ${escapeHtml(asset.name)}</strong><span>Risk ${asset.risk}</span><small>${escapeHtml(meta.label)}</small></article>`;
               })
               .join("")}
           </div>
@@ -3049,6 +3402,64 @@
         </section>
       </div>
     `;
+  }
+
+  function highlightMatch(text, query) {
+    const escaped = escapeHtml(text);
+    if (!query) {
+      return escaped;
+    }
+    const safe = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return escaped.replace(new RegExp(`(${safe})`, "ig"), "<mark>$1</mark>");
+  }
+
+  function renderFlowDiagram(title, steps) {
+    return `
+      <article class="flow-diagram">
+        <strong>${escapeHtml(title)}</strong>
+        <div>
+          ${steps.map((step, index) => `<span>${escapeHtml(step)}</span>${index < steps.length - 1 ? "<b>-></b>" : ""}`).join("")}
+        </div>
+      </article>
+    `;
+  }
+
+  function glossaryTerms() {
+    return [
+      { term: "Asset index", section: "Market", body: "The fictional price level used to value each asset category." },
+      { term: "Bias watch", section: "Market", body: "The behaviour trap highlighted by a Market/Life card." },
+      { term: "Choice Spaces", section: "Movement", body: "Board spaces where the player chooses between two trade-offs." },
+      { term: "Diversification", section: "Scoring", body: "Holding multiple asset categories instead of relying on one category." },
+      { term: "ESG", section: "Ethics", body: "Environmental, social, and governance factors used in responsible investing." },
+      { term: "FOMO", section: "Market", body: "Fear of missing out; in the game it appears in hype-driven choices." },
+      { term: "Liquidity", section: "Risk", body: "How easily cash or an asset can cover expenses without forced selling." },
+      { term: "Market Pulse", section: "Market", body: "A board space that reveals a Market/Life card and updates shared indexes." },
+      { term: "Risk-return", section: "Risk", body: "The trade-off between possible reward and possible loss." },
+      { term: "Volatility", section: "Market", body: "How much an asset price can move up or down." }
+    ].sort((a, b) => a.term.localeCompare(b.term));
+  }
+
+  function renderGlossary(terms, query) {
+    if (!terms.length) {
+      return `<div class="empty-state">No glossary terms match the search.</div>`;
+    }
+    const groups = new Map();
+    terms.forEach((term) => {
+      const letter = term.term[0].toUpperCase();
+      groups.set(letter, [...(groups.get(letter) ?? []), term]);
+    });
+    return [...groups.entries()]
+      .map(
+        ([letter, items]) => `
+          <section class="glossary-group" id="glossary-${letter}">
+            <h3>${letter}</h3>
+            ${items
+              .map((term) => `<button class="glossary-term" type="button" data-action="open-help-topic" data-topic="${escapeHtml(term.section)}"><strong>${highlightMatch(term.term, query)}</strong><span>${highlightMatch(term.body, query)}</span></button>`)
+              .join("")}
+          </section>
+        `
+      )
+      .join("");
   }
 
   function helpSections() {
@@ -3066,8 +3477,8 @@
       { title: "Risk-return", body: "The trade-off between possible reward and possible loss." },
       { title: "FOMO", body: "Fear of missing out. In the game, it appears in hype-driven market choices." },
       { title: "ESG", body: "Environmental, social, and governance factors that can affect ethical and financial decisions." },
-      { title: "Troubleshooting", body: "If live saving fails, keep playing on the host browser and retry from the status panel. The physical board and printed cards remain playable." }
-    ];
+      { title: "Troubleshooting", body: "If Supabase saving fails, retry from the status panel before continuing important table actions. The physical board and printed cards still explain the rules." }
+    ].map((section) => ({ ...section, slug: section.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") }));
   }
 
   function renderToast() {
@@ -3075,81 +3486,60 @@
   }
 
   async function createGuestAuth(name) {
-    if (model.backend.provider === "supabase") {
-      return {
-        mode: "guest",
-        id: getClientId(),
-        name,
-        email: null
-      };
+    if (!model.backend.online || !model.backend.client) {
+      throw new Error("Supabase is not connected. Reload or retry the Supabase connection.");
     }
-    if (!model.backend.online) {
-      return { mode: "guest", name, id: `guest-${Date.now()}` };
-    }
-    const result = await apiRequest("/auth/guest", {
-      method: "POST",
-      body: { name }
-    });
-    return result.auth;
+    return {
+      mode: "guest",
+      id: getClientId(),
+      name,
+      email: null
+    };
   }
 
   async function createAccountAuth(name, email, password) {
-    if (model.backend.provider === "supabase") {
-      const { data, error } = await model.backend.client.auth.signUp({
-        email,
-        password,
-        options: {
-          data: { name },
-          emailRedirectTo: authRedirectUrl()
-        }
-      });
-      if (error) {
-        throw error;
-      }
-      if (!data.session && data.user) {
-        throw new Error("Email confirmation is required before this account can be used.");
-      }
-      return {
-        mode: "account",
-        id: data.user.id,
-        name,
-        email
-      };
+    if (!model.backend.online || !model.backend.client) {
+      throw new Error("Supabase is not connected. Account signup is unavailable.");
     }
-    if (!model.backend.online) {
-      return null;
-    }
-    const result = await apiRequest("/auth/signup", {
-      method: "POST",
-      body: { name, email, password }
+    const { data, error } = await model.backend.client.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { name },
+        emailRedirectTo: authRedirectUrl()
+      }
     });
-    return result.auth;
+    if (error) {
+      throw error;
+    }
+    if (!data.session && data.user) {
+      throw new Error("Email confirmation is required before this account can be used.");
+    }
+    return {
+      mode: "account",
+      id: data.user.id,
+      name,
+      email
+    };
   }
 
   async function loginAccountAuth(email, password) {
-    if (model.backend.provider === "supabase") {
-      const { data, error } = await model.backend.client.auth.signInWithPassword({
-        email,
-        password
-      });
-      if (error) {
-        throw error;
-      }
-      return {
-        mode: "account",
-        id: data.user.id,
-        name: data.user.user_metadata?.name ?? email,
-        email
-      };
+    if (!model.backend.online || !model.backend.client) {
+      throw new Error("Supabase is not connected. Account login is unavailable.");
     }
-    if (!model.backend.online) {
-      return null;
-    }
-    const result = await apiRequest("/auth/login", {
-      method: "POST",
-      body: { email, password }
+    const { data, error } = await model.backend.client.auth.signInWithPassword({
+      email,
+      password
     });
-    return result.auth;
+    if (error) {
+      throw error;
+    }
+    return {
+      mode: "account",
+      id: data.user.id,
+      name: data.user.user_metadata?.name ?? email,
+      email
+    };
   }
 
   async function joinSessionFromAuth(formData) {
@@ -3166,37 +3556,19 @@
       return;
     }
 
-    if (model.backend.online) {
-      try {
-        model.auth = await createGuestAuth(name);
-        writeStore(STORAGE.auth, model.auth);
-        model.session = await loadBackendSession(code);
-        writeStore(STORAGE.session, model.session);
-        persistBackendState();
-        startBackendPoller();
-        setMessage(`Joined ${code}.`);
-        render();
-      } catch (error) {
-        setMessage(error.message ?? `Could not join ${code}.`);
-        render();
-      }
-      return;
-    }
-
-    const stored = readStore(STORAGE.session, null);
-    if (stored && normaliseSessionCode(stored.code) === code) {
-      model.auth = { mode: "guest", name, id: `guest-${Date.now()}` };
+    try {
+      model.auth = await createGuestAuth(name);
       writeStore(STORAGE.auth, model.auth);
-      model.backend.clientRole = "player";
-      model.session = ensureSessionShape(stored);
+      model.session = await loadBackendSession(code);
       writeStore(STORAGE.session, model.session);
-      setMessage(`Joined ${code} in local mode.`);
+      persistBackendState();
+      startBackendPoller();
+      setMessage(`Joined ${code}.`);
       render();
-      return;
+    } catch (error) {
+      setMessage(error.message ?? `Could not join ${code} through Supabase.`);
+      render();
     }
-
-    setMessage("That code is not stored in this browser. Start the session server for cross-device joins.");
-    render();
   }
 
   async function copySessionCode() {
@@ -3232,9 +3604,10 @@
       try {
         model.auth = await createGuestAuth(name);
       } catch (error) {
-        model.backend.online = false;
-        model.auth = { mode: "guest", name, id: `guest-${Date.now()}` };
-        setMessage("Online table setup is unavailable. This browser can still host locally.");
+        setSaveState("failed", error.message ?? "Supabase guest hosting failed.");
+        setMessage(error.message ?? "Supabase guest hosting failed.");
+        render();
+        return;
       }
       writeStore(STORAGE.auth, model.auth);
       beginFreshHostSession();
@@ -3256,38 +3629,28 @@
         render();
         return;
       }
-      if (model.backend.online) {
-        try {
-          model.auth = await createAccountAuth(name, email, password);
-          writeStore(STORAGE.auth, model.auth);
-          beginFreshHostSession();
-          return;
-        } catch (error) {
-          setMessage("Account creation is unavailable right now. Use guest hosting for this play session.");
-          render();
-          return;
-        }
-      }
-      setMessage("Account creation needs the hosted account service. Use guest hosting on this device.");
-      render();
-      return;
-    }
-
-    if (model.backend.online) {
       try {
-        model.auth = await loginAccountAuth(email, password);
+        model.auth = await createAccountAuth(name, email, password);
         writeStore(STORAGE.auth, model.auth);
         beginFreshHostSession();
         return;
       } catch (error) {
-        setMessage("Account login is unavailable or the credentials are incorrect. Use guest hosting for this play session.");
+        setMessage(error.message ?? "Supabase account creation is unavailable right now.");
         render();
         return;
       }
     }
 
-    setMessage("Account login needs the hosted account service. Use guest hosting on this device.");
-    render();
+    try {
+      model.auth = await loginAccountAuth(email, password);
+      writeStore(STORAGE.auth, model.auth);
+      beginFreshHostSession();
+      return;
+    } catch (error) {
+      setMessage(error.message ?? "Supabase login is unavailable or the credentials are incorrect.");
+      render();
+      return;
+    }
   }
 
   function adjustPlayer(playerId, field, delta, reason = "Manual correction.") {
@@ -3387,6 +3750,14 @@
         model.ui.diceMode = button.dataset.mode || "digital";
         persistUi();
         render();
+        if (model.ui.diceMode === "physical") {
+          window.setTimeout(() => document.getElementById("physicalDie")?.focus(), 0);
+        }
+        break;
+      case "board-zoom":
+        model.ui.boardZoom = clamp(model.ui.boardZoom + Number(button.dataset.zoom ?? 0), 0.75, 2.2);
+        persistUi();
+        render();
         break;
       case "retry-sync":
         if (!requireHostAction()) break;
@@ -3398,7 +3769,7 @@
           openDialog({
             type: "confirm-action",
             title: "Leave this table?",
-            body: "There may be unsynced changes. Leaving now keeps the local copy, but this browser will exit the table view.",
+            body: "There may be unsaved Supabase changes. Leaving now exits the table view.",
             confirmAction: "confirm-logout",
             confirmLabel: "Leave table"
           });
@@ -3423,7 +3794,7 @@
         render();
         break;
       case "new-session":
-        if (!window.confirm("Create a new table? Current local table state will be replaced in this browser.")) {
+        if (!window.confirm("Create a new Supabase table? Current table state will be replaced on this device.")) {
           break;
         }
         resetSession();
@@ -3435,9 +3806,24 @@
         if (!requireHostAction()) break;
         startSession();
         break;
+      case "select-profile": {
+        if (!requireHostAction()) break;
+        const index = Number(button.dataset.index);
+        const profileId = button.dataset.profileId;
+        if (model.session.draft.players[index] && profileId) {
+          model.session.draft.players[index].profileId = profileId;
+          saveSession();
+          render();
+        }
+        break;
+      }
       case "roll-die":
         if (!requireHostAction()) break;
         rollDie();
+        break;
+      case "cancel-roll":
+        if (!requireHostAction()) break;
+        cancelRoll();
         break;
       case "submit-physical-roll": {
         if (!requireHostAction()) break;
@@ -3524,10 +3910,12 @@
       case "use-evidence-note": {
         const note = button.dataset.note ?? "";
         const input = document.getElementById("turnNote");
+        model.ui.turnNoteDraft = note;
         if (input) {
           input.value = note;
           input.focus();
         }
+        render();
         break;
       }
       case "host-reveal-event":
@@ -3596,8 +3984,28 @@
         openDialog({
           eyeline: space?.type ?? "Board space",
           title: `${space?.id ?? ""} ${space?.label ?? ""}`,
-          body: `${meta.help} ${space?.effect ?? space?.choices?.join(" ") ?? ""}`.trim()
+          body: `${meta.help} ${space?.effect ?? space?.choices?.join(" ") ?? ""}`.trim(),
+          helpTopic: space?.type ?? "Movement"
         });
+        break;
+      }
+      case "dialog-help-topic": {
+        const topic = button.dataset.topic ?? "";
+        closeDialog();
+        model.session.view = "rules";
+        model.ui.rulesQuery = topic;
+        saveSession();
+        render();
+        break;
+      }
+      case "open-help-topic": {
+        const topic = String(button.dataset.topic ?? "").toLowerCase();
+        const section = helpSections().find((item) => item.title.toLowerCase().includes(topic));
+        if (section) {
+          model.ui.rulesQuery = "";
+          render();
+          window.setTimeout(() => document.getElementById(`help-${section.slug}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+        }
         break;
       }
       case "refresh-export":
@@ -3614,6 +4022,12 @@
       case "download-evidence":
         downloadEvidence();
         break;
+      case "download-csv":
+        downloadCsv();
+        break;
+      case "print-summary":
+        printSummary();
+        break;
       default:
         break;
     }
@@ -3626,11 +4040,22 @@
         render();
       }
     }
+    if (event.target.matches("[data-market-filter]")) {
+      model.ui.marketFilters[event.target.dataset.marketFilter] = event.target.value;
+      render();
+    }
   }
 
   function handleInput(event) {
     if (event.target.matches('[data-draft="name"]')) {
       updateDraftFromInputs();
+    }
+    if (event.target.matches("[data-turn-note]")) {
+      model.ui.turnNoteDraft = event.target.value;
+      render();
+      const note = document.getElementById("turnNote");
+      note?.focus();
+      note?.setSelectionRange(note.value.length, note.value.length);
     }
     if (event.target.matches("[data-rules-search]")) {
       model.ui.rulesQuery = event.target.value;
@@ -3638,6 +4063,57 @@
       const search = document.getElementById("rulesSearch");
       search?.focus();
       search?.setSelectionRange(search.value.length, search.value.length);
+    }
+  }
+
+  function handleKeydown(event) {
+    if (event.key === "Escape" && model.ui.dialog) {
+      event.preventDefault();
+      closeDialog();
+      return;
+    }
+    if (event.key === "Enter" && event.target?.id === "physicalDie") {
+      event.preventDefault();
+      if (!requireHostAction()) return;
+      const value = Number(event.target.value);
+      if (!Number.isInteger(value) || value < 1 || value > 6) {
+        setMessage("Enter a physical D6 result from 1 to 6.");
+        render();
+        return;
+      }
+      rollDie(value);
+      return;
+    }
+    if (event.key !== "Tab" || !model.ui.dialog) {
+      return;
+    }
+    const focusable = Array.from(appRoot.querySelectorAll("[data-dialog-card] button, [data-dialog-card] input, [data-dialog-card] textarea, [data-dialog-card] select, [data-dialog-card] summary, [data-dialog-card] [tabindex]:not([tabindex='-1'])"))
+      .filter((item) => !item.disabled && item.offsetParent !== null);
+    if (!focusable.length) {
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  function afterRender() {
+    if (!model.session) {
+      return;
+    }
+    const phase = model.session.phase;
+    if (phase && phase !== model.ui.lastPhase) {
+      model.ui.lastPhase = phase;
+      window.setTimeout(() => {
+        const target = appRoot.querySelector(`[data-phase-section="${phase}"]`);
+        target?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 0);
     }
   }
 
@@ -3673,24 +4149,25 @@
     appRoot.addEventListener("input", handleInput);
     appRoot.addEventListener("change", handleChange);
     appRoot.addEventListener("submit", handleSubmit);
+    appRoot.addEventListener("keydown", handleKeydown);
 
     try {
       model.game = await loadGame();
       model.indexes = buildIndexes(model.game);
       await probeBackend();
       model.auth = readStore(STORAGE.auth, null);
-      model.session = ensureSessionShape(readStore(STORAGE.session, null) ?? createSession());
       if (!model.auth) {
         model.session = createSession();
         model.backend.clientRole = null;
       } else {
+        model.session = ensureSessionShape(readStore(STORAGE.session, null) ?? createSession());
         restoreBackendState();
         if (!model.backend.clientRole && !model.backend.sessionId) {
           model.backend.clientRole = "host";
         }
+        saveSession();
+        startBackendPoller();
       }
-      saveSession();
-      startBackendPoller();
     } catch (error) {
       model.configError = error;
     }

@@ -12,7 +12,7 @@ window.GIVE_AND_TAKE_DATA = {
     "movement": "Roll one six-sided die and move forward on the linear S00-S43 path.",
     "turnLimit": 12,
     "endCondition": "Score when all players reach S43 Finish Review or after 12 turns per player, whichever happens first.",
-    "dashboardRole": "QR web app can run a playable session with guest/account access, join-by-session-code, setup, turns, decks, prices, player ledgers, scoring, and evidence export; it falls back to browser-local mode when the session backend is unavailable; physical player boards remain the fallback."
+    "dashboardRole": "QR web app runs playable sessions with guest/account access, Supabase session-code joining, setup, turns, decks, prices, player ledgers, scoring, and evidence export; physical player boards remain the printed table companion."
   },
   "componentCounts": {
     "players": "2-5",
@@ -79,7 +79,7 @@ window.GIVE_AND_TAKE_DATA = {
       "Record one decision, finance term, or evidence note on the Player Board.",
       "Discard any drawn card face-up after it resolves."
     ],
-    "deckExhaustion": "When a draw deck runs out, shuffle its discard pile into a new draw deck. If both draw deck and discard pile are empty, use the printed fallback for that space and continue.",
+    "deckExhaustion": "When a draw deck runs out, shuffle its discard pile into a new draw deck. If both draw deck and discard pile are empty, use the printed instruction for that space and continue.",
     "choiceTiming": "Risky Choice effects that advance a pawn one extra space do not resolve the new space until that player's next turn.",
     "marketPrices": "Asset price indexes cannot fall below 1.",
     "endCondition": "Score when all players reach S43 Finish Review or after 12 turns per player, whichever happens first.",
