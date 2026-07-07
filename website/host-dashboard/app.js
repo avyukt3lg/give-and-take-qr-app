@@ -145,6 +145,7 @@
       selectedBoardSpaceId: "S00",
       selectedAssistPlayerId: "",
       pendingPhysicalDie: null,
+      setupChecklist: readStore(STORAGE.ui, {})?.setupChecklist ?? {},
       announcement: "",
       marketFilters: {
         sentiment: "all",
@@ -189,7 +190,8 @@
       diceMode: model.ui.diceMode,
       boardZoom: model.ui.boardZoom,
       companionMode: model.ui.companionMode,
-      reducedMotion: model.ui.reducedMotion
+      reducedMotion: model.ui.reducedMotion,
+      setupChecklist: model.ui.setupChecklist
     });
   }
 
@@ -671,7 +673,7 @@
 
   function backendNotice(mode = model.authTab) {
     if (mode === "signup") {
-      return "Create an account for repeat hosting. Email confirmations return to the live GitHub Pages app.";
+      return "Create an account when you want repeat hosting and access to past Supabase tables.";
     }
     if (mode === "guest") {
       return "Host a table without an account, then share the GT code with players.";
@@ -2444,7 +2446,7 @@
             <p class="eyeline">Table entry</p>
             <h2>${model.authTab === "join" ? "Join a table" : model.authTab === "signup" ? "Create account" : model.authTab === "login" ? "Login" : "Host a table"}</h2>
           </div>
-          ${renderThemeToggle()}
+          ${renderSettingsControl({ includeMode: false, label: "Display" })}
         </div>
         <div class="auth-tabs" role="tablist" aria-label="Access mode">
           ${["guest", "join", "login", "signup"]
@@ -2470,15 +2472,22 @@
         <form class="stack" data-auth-form="signup">
           <div class="field">
             <label for="signupName">Name</label>
-            <input class="input" id="signupName" name="name" autocomplete="name" required />
+            <input class="input" id="signupName" name="name" autocomplete="name" aria-describedby="signupNameHelp" required />
+            <span class="field-help" id="signupNameHelp">Enter your name.</span>
           </div>
           <div class="field">
             <label for="signupEmail">Email</label>
-            <input class="input" id="signupEmail" name="email" type="email" autocomplete="email" required />
+            <input class="input" id="signupEmail" name="email" type="email" autocomplete="email" aria-describedby="signupEmailHelp" required />
+            <span class="field-help" id="signupEmailHelp">Use the email you want tied to hosted tables.</span>
           </div>
           <div class="field">
             <label for="signupPassword">Password</label>
-            <input class="input" id="signupPassword" name="password" type="password" autocomplete="new-password" minlength="6" required />
+            <input class="input" id="signupPassword" name="password" type="password" autocomplete="new-password" minlength="6" aria-describedby="signupPasswordHelp" required />
+            <span class="field-help" id="signupPasswordHelp">Use at least 6 characters.</span>
+          </div>
+          <div class="entry-preview">
+            <strong>Why create an account?</strong>
+            <span>Use the same identity for repeat hosting and returning to past Supabase tables.</span>
           </div>
           <p class="notice">${escapeHtml(backendNotice("signup"))}</p>
           <button class="button" type="submit">Create account</button>
@@ -2490,11 +2499,12 @@
         <form class="stack" data-auth-form="guest">
           <div class="field">
             <label for="guestName">Host name</label>
-            <input class="input" id="guestName" name="name" autocomplete="name" required />
+            <input class="input" id="guestName" name="name" autocomplete="name" aria-describedby="guestNameHelp" required />
+            <span class="field-help" id="guestNameHelp">Enter your host name.</span>
           </div>
           <div class="entry-preview">
             <strong>Host flow</strong>
-            <span>Create a GT code, set 2-5 players, then run turns from the Play table.</span>
+            <span>A GT code is the shared table code players enter to join this physical game session.</span>
           </div>
           <p class="notice">${escapeHtml(backendNotice("guest"))}</p>
           <button class="button" type="submit">Host table</button>
@@ -2506,11 +2516,13 @@
         <form class="stack" data-auth-form="join">
           <div class="field">
             <label for="joinName">Player name</label>
-            <input class="input" id="joinName" name="name" autocomplete="name" required />
+            <input class="input" id="joinName" name="name" autocomplete="name" aria-describedby="joinNameHelp" required />
+            <span class="field-help" id="joinNameHelp">Enter your player name.</span>
           </div>
           <div class="field">
             <label for="joinCode">Session code</label>
-            <input class="input code-input" id="joinCode" name="code" value="GT-" inputmode="text" autocomplete="off" required />
+            <input class="input code-input" id="joinCode" name="code" value="GT-" pattern="GT-[0-9]{4}" maxlength="7" inputmode="text" autocomplete="off" aria-describedby="joinCodeHelp" required />
+            <span class="field-help" id="joinCodeHelp">Use the format GT-0000. The host sees this code after creating the table.</span>
           </div>
           <div class="entry-preview">
             <strong>Where is the code?</strong>
@@ -2525,16 +2537,64 @@
       <form class="stack" data-auth-form="login">
         <div class="field">
           <label for="loginEmail">Email</label>
-          <input class="input" id="loginEmail" name="email" type="email" autocomplete="email" required />
+          <input class="input" id="loginEmail" name="email" type="email" autocomplete="email" aria-describedby="loginEmailHelp" required />
+          <span class="field-help" id="loginEmailHelp">Use your host account email.</span>
         </div>
         <div class="field">
           <label for="loginPassword">Password</label>
-          <input class="input" id="loginPassword" name="password" type="password" autocomplete="current-password" required />
+          <input class="input" id="loginPassword" name="password" type="password" autocomplete="current-password" aria-describedby="loginPasswordHelp" required />
+          <span class="field-help" id="loginPasswordHelp">Enter your password.</span>
+        </div>
+        <div class="entry-preview">
+          <strong>Account benefit</strong>
+          <span>Login when you want to host with the same account and keep access to past Supabase tables.</span>
         </div>
         <p class="notice">${escapeHtml(backendNotice("login"))}</p>
         <button class="button" type="submit">Login</button>
       </form>
     `;
+  }
+
+  function renderSettingsControl(options = {}) {
+    const includeMode = options.includeMode ?? true;
+    const label = options.label ?? "Settings";
+    return `
+      <details class="settings-popover">
+        <summary class="settings-trigger" aria-label="Open display and mode settings">
+          <span aria-hidden="true">${heroIcon("cog")}</span>
+          <strong>${escapeHtml(label)}</strong>
+        </summary>
+        <div class="settings-panel">
+          <section class="settings-group">
+            <div>
+              <p class="eyeline">Display theme</p>
+              <h3>Choose the room style</h3>
+            </div>
+            ${renderThemeToggle()}
+          </section>
+          ${
+            includeMode
+              ? `
+                <section class="settings-group">
+                  <div>
+                    <p class="eyeline">Companion mode</p>
+                    <h3>Pick the screen role</h3>
+                  </div>
+                  ${renderCompanionModeToggle()}
+                </section>
+              `
+              : ""
+          }
+        </div>
+      </details>
+    `;
+  }
+
+  function heroIcon(name) {
+    const paths = {
+      cog: "M11.42 2.62a1.5 1.5 0 0 1 2.16 0l.78.81a1.5 1.5 0 0 0 1.38.43l1.1-.23a1.5 1.5 0 0 1 1.76 1.02l.35 1.07a1.5 1.5 0 0 0 1.03 1l1.08.32a1.5 1.5 0 0 1 1.06 1.74l-.2 1.1a1.5 1.5 0 0 0 .46 1.37l.83.76a1.5 1.5 0 0 1 .03 2.16l-.81.78a1.5 1.5 0 0 0-.43 1.38l.23 1.1a1.5 1.5 0 0 1-1.02 1.76l-1.07.35a1.5 1.5 0 0 0-1 1.03l-.32 1.08a1.5 1.5 0 0 1-1.74 1.06l-1.1-.2a1.5 1.5 0 0 0-1.37.46l-.76.83a1.5 1.5 0 0 1-2.16.03l-.78-.81a1.5 1.5 0 0 0-1.38-.43l-1.1.23a1.5 1.5 0 0 1-1.76-1.02l-.35-1.07a1.5 1.5 0 0 0-1.03-1l-1.08-.32a1.5 1.5 0 0 1-1.06-1.74l.2-1.1a1.5 1.5 0 0 0-.46-1.37l-.83-.76a1.5 1.5 0 0 1-.03-2.16l.81-.78a1.5 1.5 0 0 0 .43-1.38l-.23-1.1a1.5 1.5 0 0 1 1.02-1.76l1.07-.35a1.5 1.5 0 0 0 1-1.03l.32-1.08a1.5 1.5 0 0 1 1.74-1.06l1.1.2a1.5 1.5 0 0 0 1.37-.46l.76-.83ZM12.5 15.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"
+    };
+    return `<svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="${paths[name] ?? paths.cog}"/></svg>`;
   }
 
   function renderThemeToggle() {
@@ -2545,17 +2605,18 @@
       contrast: "Dark high-contrast theme with reduced pattern intensity."
     };
     return `
-      <div class="theme-toggle" role="group" aria-label="Visual theme">
+      <div class="theme-toggle segmented-control" role="group" aria-label="Visual theme">
         ${["table", "classroom", "contrast"]
           .map(
             (theme) => `
               <button class="theme-button" type="button" data-action="set-theme" data-theme="${theme}" aria-pressed="${model.ui.theme === theme}" aria-label="${escapeHtml(labels[theme])}: ${escapeHtml(descriptions[theme])}" title="${escapeHtml(descriptions[theme])}">
-                ${labels[theme]}
+                <strong>${labels[theme]}</strong>
+                <span>${descriptions[theme]}</span>
               </button>
             `
           )
           .join("")}
-        <button class="theme-button" type="button" data-action="toggle-reduced-motion" aria-pressed="${model.ui.reducedMotion}" title="Reduce animation and smooth scrolling">Reduced motion</button>
+        <button class="theme-button" type="button" data-action="toggle-reduced-motion" aria-pressed="${model.ui.reducedMotion}" title="Reduce animation and smooth scrolling"><strong>Reduced motion</strong><span>Limit animation and smooth scrolling.</span></button>
       </div>
     `;
   }
@@ -2578,13 +2639,19 @@
       return `<span class="status-pill">Mode <strong>Player Assist</strong></span>`;
     }
     return `
-      <div class="mode-toggle" role="group" aria-label="Companion mode">
+      <div class="mode-toggle segmented-control" role="group" aria-label="Companion mode">
         ${Object.entries(physicalModeLabels)
-          .map(
-            ([mode, label]) => `
-              <button class="theme-button" type="button" data-action="set-companion-mode" data-mode="${mode}" aria-pressed="${effectiveCompanionMode() === mode}" title="${mode === "host" ? "Host workflow for physical turns" : mode === "table" ? "Large classroom projection view" : "Student-focused player assist view"}">${label}</button>
-            `
-          )
+          .map(([mode, label]) => {
+            const current = effectiveCompanionMode() === mode;
+            const disabled = current || (mode !== "host" && !model.session.started);
+            const description = mode === "host" ? "Host workflow for physical turns." : mode === "table" ? "Large classroom projection view." : "Student-only assist screen.";
+            return `
+              <button class="theme-button" type="button" data-action="set-companion-mode" data-mode="${mode}" aria-pressed="${current}" title="${description}" ${disabled ? "disabled" : ""}>
+                <strong>${label}</strong>
+                <span>${description}</span>
+              </button>
+            `;
+          })
           .join("")}
       </div>
     `;
@@ -2738,6 +2805,39 @@
         </div>
       `;
     }
+    if (dialog.type === "profile-picker") {
+      const starterProfiles = model.game.cards.starterProfiles;
+      const index = Number(dialog.index ?? 0);
+      const draft = model.session.draft.players[index] ?? {};
+      const selectedId = draft.profileId ?? starterProfiles[index]?.id;
+      return `
+        <div class="dialog-backdrop">
+          <section class="dialog-card profile-dialog" role="dialog" aria-modal="true" aria-labelledby="profileDialogTitle" data-dialog-card>
+            <button class="dialog-close" type="button" data-action="close-dialog" aria-label="Close dialog">x</button>
+            <p class="eyeline">Starter Profile</p>
+            <h2 id="profileDialogTitle">Choose Player ${index + 1} profile</h2>
+            <p>Pick one printed Starter Profile. Cash, trait, and bonus apply when the game starts.</p>
+            <div class="profile-option-grid modal-profile-grid" aria-label="Starter Profile choices">
+              ${starterProfiles
+                .map((item) => {
+                  const optionMeta = profileUi(item.id);
+                  return `
+                    <button class="profile-option ${item.id === selectedId ? "selected" : ""}" type="button" data-action="select-profile" data-index="${index}" data-profile-id="${item.id}" ${hostDisabledAttr(model.session.started)}>
+                      <strong>${escapeHtml(optionMeta.icon)} ${escapeHtml(item.id)} ${escapeHtml(item.title)}</strong>
+                      <span>${money(item.cash)} - ${escapeHtml(item.trait)}</span>
+                      <small>${escapeHtml(item.bonus)}</small>
+                    </button>
+                  `;
+                })
+                .join("")}
+            </div>
+            <div class="btn-row">
+              <button class="button-secondary" type="button" data-action="close-dialog">Cancel</button>
+            </div>
+          </section>
+        </div>
+      `;
+    }
     if (dialog.type === "board") {
       const occupied = new Map();
       model.session.players.forEach((player) => {
@@ -2827,8 +2927,7 @@
         <div class="rail-footer">
           ${renderSessionStatus(status)}
           <button class="mini-button" type="button" data-action="copy-session-code">Copy code</button>
-          ${renderCompanionModeToggle()}
-          ${renderThemeToggle()}
+          ${renderSettingsControl()}
           <button class="button-ghost" type="button" data-action="logout">Logout</button>
         </div>
       </aside>
@@ -2846,7 +2945,6 @@
             <span class="status-pill">Player <strong>${escapeHtml(player?.name ?? "None")}</strong></span>
             <span class="status-pill">Phase <strong>${escapeHtml(model.session.phase)}</strong></span>
             <span class="status-pill status-${status.state}">${escapeHtml(status.label)} <strong>${escapeHtml(status.state === "saving" ? "now" : status.state === "synced" ? relativeTime(model.backend.lastSavedAt) : "Supabase")}</strong></span>
-            ${renderCompanionModeToggle()}
           </div>
         </header>
         <section class="content">
@@ -3119,22 +3217,38 @@
             <img src="${BOARD_IMAGE_URL}" alt="Give And Take physical game board" />
             <figcaption>Use this as the visual reference while the website tracks the playable state.</figcaption>
           </figure>
-          <details class="rules-accordion setup-checklist" open>
+          ${renderSetupChecklist()}
+        </section>
+      </div>
+    `;
+  }
+
+  function renderSetupChecklist() {
+    const items = [
+      "Shuffle Investment, Market/Life, Ethics, Action, and Reflection decks.",
+      "Put pawns on S00 Student Start.",
+      "Keep the D6 and price tracker near the host.",
+      "Share the GT code with players.",
+      "Confirm physical player boards and pencils are ready."
+    ];
+    const complete = items.filter((_, index) => model.ui.setupChecklist[`setup-${index}`]).length;
+    return `
+          <details class="rules-accordion setup-checklist" ${complete < items.length ? "open" : ""}>
             <summary>Physical setup checklist</summary>
+            <div class="setup-checklist-meter" aria-label="${complete} of ${items.length} setup items complete">
+              <strong>${complete}/${items.length}</strong>
+              <span>${complete === items.length ? "Physical table ready" : "Check the table before starting"}</span>
+            </div>
             <div class="checklist">
-              ${[
-                "Shuffle Investment, Market/Life, Ethics, Action, and Reflection decks.",
-                "Put pawns on S00 Student Start.",
-                "Keep the D6 and price tracker near the host.",
-                "Share the GT code with players.",
-              "Confirm physical player boards and pencils are ready."
-              ]
-                .map((item, index) => `<label><input type="checkbox" /> <span>${index + 1}. ${escapeHtml(item)}</span></label>`)
+              ${items
+                .map((item, index) => {
+                  const key = `setup-${index}`;
+                  const checked = Boolean(model.ui.setupChecklist[key]);
+                  return `<label class="${checked ? "checked" : ""}"><input type="checkbox" data-setup-check="${key}" ${checked ? "checked" : ""} /> <span>${index + 1}. ${escapeHtml(item)}</span></label>`;
+                })
                 .join("")}
             </div>
           </details>
-        </section>
-      </div>
     `;
   }
 
@@ -3159,30 +3273,17 @@
         </div>
         <div class="field">
           <label for="playerProfile${index}">Starter Profile</label>
-          <select class="select" id="playerProfile${index}" data-draft="profile" data-index="${index}" ${hostDisabledAttr(model.session.started)}>
-            ${starterProfiles
-              .map((item) => `<option value="${item.id}" ${item.id === profile.id ? "selected" : ""}>${item.id} ${escapeHtml(item.title)} - ${money(item.cash)}</option>`)
-              .join("")}
-          </select>
+          <input type="hidden" id="playerProfile${index}" data-draft="profile" data-index="${index}" value="${escapeHtml(profile.id)}" />
+          <button class="profile-select-button" type="button" data-action="open-profile-picker" data-index="${index}" ${hostDisabledAttr(model.session.started)} aria-label="Change Starter Profile for Player ${index + 1}">
+            <span>${escapeHtml(profile.id)}</span>
+            <strong>${escapeHtml(profile.title)}</strong>
+            <small>Change profile</small>
+          </button>
         </div>
         <div class="profile-summary">
           <span><strong>Cash</strong>${money(profile.cash)}</span>
           <span><strong>Trait</strong>${escapeHtml(profile.trait)}</span>
           <span><strong>Bonus</strong>${escapeHtml(profile.bonus)}</span>
-        </div>
-        <div class="profile-option-grid" aria-label="Starter Profile preview options">
-          ${starterProfiles
-            .map((item) => {
-              const optionMeta = profileUi(item.id);
-              return `
-                <button class="profile-option ${item.id === profile.id ? "selected" : ""}" type="button" data-action="select-profile" data-index="${index}" data-profile-id="${item.id}" ${hostDisabledAttr(model.session.started)}>
-                  <strong>${escapeHtml(optionMeta.icon)} ${escapeHtml(item.title)}</strong>
-                  <span>${money(item.cash)} - ${escapeHtml(item.trait)}</span>
-                  <small>${escapeHtml(item.bonus)}</small>
-                </button>
-              `;
-            })
-            .join("")}
         </div>
       </article>
     `;
@@ -3209,7 +3310,7 @@
             <h2>Run the printed board. Use the app to check, explain, and record.</h2>
             <p>The physical board, real D6, printed cards, player boards, and host tracker remain the gameplay objects.</p>
           </div>
-          ${renderCompanionModeToggle()}
+          <span class="status-pill">Mode <strong>${escapeHtml(physicalModeLabels[effectiveCompanionMode()] ?? "Physical Play")}</strong></span>
         </div>
         ${renderPhaseStepper()}
         <div class="physical-layout">
@@ -4875,6 +4976,13 @@
       case "copy-session-code":
         copySessionCode();
         break;
+      case "open-profile-picker":
+        if (!requireHostAction()) break;
+        openDialog({
+          type: "profile-picker",
+          index: Number(button.dataset.index ?? 0)
+        });
+        break;
       case "start-session":
         if (!requireHostAction()) break;
         startSession();
@@ -4885,6 +4993,7 @@
         const profileId = button.dataset.profileId;
         if (model.session.draft.players[index] && profileId) {
           model.session.draft.players[index].profileId = profileId;
+          model.ui.dialog = null;
           saveSession();
           render();
         }
@@ -5193,6 +5302,12 @@
       saveSession();
       render();
     }
+    if (event.target.matches("[data-setup-check]")) {
+      const key = event.target.dataset.setupCheck;
+      model.ui.setupChecklist[key] = Boolean(event.target.checked);
+      persistUi();
+      render();
+    }
     if (event.target.matches("[data-assist-player]")) {
       model.ui.selectedAssistPlayerId = event.target.value;
       persistUi();
@@ -5226,6 +5341,16 @@
     }
     if (event.target.id === "boardLookupId") {
       model.ui.boardLookupId = normaliseSpaceId(event.target.value);
+    }
+    if (event.target.id === "joinCode") {
+      const raw = String(event.target.value ?? "").toUpperCase().replace(/[^GT0-9]/g, "");
+      const digits = raw.replace(/[^0-9]/g, "").slice(0, 4);
+      event.target.value = digits ? `GT-${digits}` : "GT-";
+      if (digits.length === 4) {
+        event.target.setCustomValidity("");
+      } else {
+        event.target.setCustomValidity("Use a session code like GT-4827.");
+      }
     }
     if (event.target.matches("[data-rules-search]")) {
       model.ui.rulesQuery = event.target.value;
