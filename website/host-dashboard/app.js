@@ -10,7 +10,7 @@
     auth: "give-and-take:auth:v1",
     backend: "give-and-take:backend:v1",
     client: "give-and-take:client:v1",
-    session: "give-and-take:session-cache:v4",
+    session: "give-and-take:table:v5",
     ui: "give-and-take:ui:v1"
   };
 
@@ -144,11 +144,14 @@
       boardLookupId: "",
       selectedBoardSpaceId: "S00",
       selectedAssistPlayerId: "",
+      pendingPhysicalDie: null,
+      announcement: "",
       marketFilters: {
         sentiment: "all",
         asset: "all",
         bias: "all"
       },
+      selectedMarketEventId: "",
       turnNoteDraft: "",
       undoRollSession: null,
       lastPhase: "",
@@ -196,6 +199,30 @@
     if (state === "synced" || state === "connected") {
       model.backend.lastSavedAt = nowIso();
     }
+  }
+
+  function announce(message) {
+    model.ui.announcement = String(message ?? "");
+  }
+
+  function physicalDieDraft() {
+    return model.session?.pendingResolution?.die ?? model.ui.pendingPhysicalDie ?? "";
+  }
+
+  function setPhysicalDieDraft(value) {
+    const die = Number(value);
+    if (!Number.isInteger(die) || die < 1 || die > 6) {
+      model.ui.pendingPhysicalDie = null;
+      return false;
+    }
+    model.ui.pendingPhysicalDie = die;
+    announce(`Physical die result ${die} selected. Confirm movement when the pawn has been moved.`);
+    return true;
+  }
+
+  function clearPhysicalDieDraft() {
+    model.ui.pendingPhysicalDie = null;
+    announce("Physical die selection cleared.");
   }
 
   function withTimeout(promise, ms, message) {
@@ -1427,6 +1454,7 @@
     model.session.currentPlayerIndex = 0;
     model.session.pendingResolution = null;
     model.session.view = "play";
+    clearPhysicalDieDraft();
     logActivity(`Session started with ${players.length} players.`);
     saveSession();
     render();
@@ -1494,6 +1522,7 @@
     model.ui.undoRollSession = cloneSession(session);
     const fromPosition = player.position;
     const die = value ?? Math.floor(1 + Math.random() * 6);
+    clearPhysicalDieDraft();
     const nextPosition = Math.min(43, fromPosition + die);
     player.position = nextPosition;
     player.finished = nextPosition >= 43;
@@ -1626,6 +1655,7 @@
     }
     model.session = ensureSessionShape(model.ui.undoRollSession);
     model.ui.undoRollSession = null;
+    clearPhysicalDieDraft();
     model.ui.turnNoteDraft = "";
     setMessage("Roll cancelled. Pawn and deck state restored.");
     saveSession();
@@ -2135,12 +2165,13 @@
   }
 
   function exportEvidence() {
+    const sessionSnapshot = exportSessionSnapshot();
     const payload = {
       exportedAt: nowIso(),
       app: "Give And Take QR session app",
       accessModel: "Host and players use the table code shown on the physical board or shared by the host.",
       summary: exportSummary(),
-      session: model.session,
+      session: sessionSnapshot,
       manualAdjustments: model.session.manualAdjustments,
       scorePreview: calculateScores().map((score) => ({
         playerId: score.player.id,
@@ -2165,6 +2196,12 @@
     return model.exportText;
   }
 
+  function exportSessionSnapshot() {
+    const snapshot = cloneSession(model.session);
+    delete snapshot.schema;
+    return snapshot;
+  }
+
   function downloadEvidence() {
     const text = exportEvidence();
     const blob = new Blob([text], { type: "application/json" });
@@ -2182,6 +2219,31 @@
     return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
   }
 
+  function playerNotesText(player) {
+    return player.decisions
+      .map((decision) => {
+        const turn = Number(decision.turn ?? 0);
+        const prefix = turn ? `Turn ${turn}` : "Setup";
+        return `${prefix} ${decision.spaceId ?? ""}: ${decision.note ?? ""}${decision.result ? ` (${decision.result})` : ""}`.trim();
+      })
+      .join(" | ");
+  }
+
+  function holdingsSummaryText(player) {
+    return model.game.assets
+      .map((asset) => {
+        const units = Number(player.holdings?.[asset.id] ?? 0);
+        const index = Number(model.session.prices[asset.id] ?? asset.startIndex ?? 0);
+        const value = units * index * 1000;
+        return `${asset.name}: ${units} units, index ${index}, value ${money(value)}`;
+      })
+      .join(" | ");
+  }
+
+  function scoreBreakdownText(score) {
+    return `Portfolio ${score.portfolioScore}/25; Diversify ${score.diversificationScore}/20; Risk ${score.riskManagementScore}/15; Ethics ${score.ethicsScore}/20; Reflection ${score.reflectionScore}/20; Total ${score.total}/100`;
+  }
+
   function exportCsv() {
     const scoresByPlayer = new Map(calculateScores().map((score) => [score.player.id, score]));
     const rows = [
@@ -2195,12 +2257,15 @@
         "ethics_position",
         "reflection_evidence",
         "notes",
+        "player_notes",
+        "holdings_summary",
         "portfolio_score",
         "diversification_score",
         "risk_score",
         "ethics_score",
         "reflection_score",
         "total_score",
+        "score_breakdown",
         "missing_evidence"
       ]
     ];
@@ -2216,12 +2281,15 @@
         player.ethicsPosition,
         player.reflectionEvidence,
         player.decisions.length,
+        playerNotesText(player),
+        holdingsSummaryText(player),
         score?.portfolioScore ?? 0,
         score?.diversificationScore ?? 0,
         score?.riskManagementScore ?? 0,
         score?.ethicsScore ?? 0,
         score?.reflectionScore ?? 0,
         score?.total ?? 0,
+        score ? scoreBreakdownText(score) : "",
         missingEvidence(player).join("; ")
       ]);
     });
@@ -2267,6 +2335,15 @@
                 .join("")}
             </tbody>
           </table>
+          <h2>Player Notes And Holdings</h2>
+          <table>
+            <thead><tr><th>Player</th><th>Holdings summary</th><th>Evidence notes</th></tr></thead>
+            <tbody>
+              ${model.session.players
+                .map((player) => `<tr><td>${escapeHtml(player.name)}</td><td>${escapeHtml(holdingsSummaryText(player))}</td><td>${escapeHtml(playerNotesText(player) || "No notes recorded")}</td></tr>`)
+                .join("")}
+            </tbody>
+          </table>
           <h2>Latest Market Events</h2>
           <table>
             <thead><tr><th>Card</th><th>Sentiment</th><th>Bias</th><th>Player</th><th>Effects</th></tr></thead>
@@ -2281,7 +2358,7 @@
         </body>
       </html>
     `;
-    const win = window.open("", "_blank", "noopener,noreferrer");
+    const win = window.open("about:blank", "_blank");
     if (!win) {
       setMessage("Pop-up blocked. Allow pop-ups to print the summary.");
       render();
@@ -2293,9 +2370,11 @@
 
   function missingEvidence(player) {
     const missing = [];
+    const notes = playerNotesText(player).toLowerCase();
     if (!player.decisions.length) missing.push("no turn notes");
-    if (player.reflectionEvidence <= 0) missing.push("zero reflection notes");
-    if (player.riskEvidence <= 0) missing.push("zero risk evidence");
+    if (player.reflectionEvidence <= 0 && !notes.includes("reflect")) missing.push("missing reflection note");
+    if (player.riskEvidence <= 0 && !notes.includes("risk")) missing.push("missing risk note");
+    if (player.ethicsPosition <= 0 && !notes.includes("ethic")) missing.push("missing ethics note");
     if (player.turnsTaken < model.game.turnLimit && !player.finished && !model.session.gameOver) missing.push("incomplete turns");
     return missing;
   }
@@ -2736,7 +2815,7 @@
           ${navItems
             .map(
               ([view, label, icon]) => `
-                <button class="nav-button" type="button" data-view="${view}" aria-current="${model.session.view === view ? "page" : "false"}">
+                <button class="nav-button" type="button" data-view="${view}" aria-current="${model.session.view === view ? "page" : "false"}" aria-label="Open ${escapeHtml(label)} section">
                   <span class="nav-icon" aria-hidden="true">${icon}</span>
                   <span>${label}</span>
                   <span>${view === "play" && model.session.pendingResolution ? "Live" : ""}</span>
@@ -2779,7 +2858,7 @@
           .slice(0, 5)
           .map(
             ([view, label, icon]) => `
-              <button class="mobile-nav-button" type="button" data-view="${view}" aria-current="${model.session.view === view ? "page" : "false"}">
+              <button class="mobile-nav-button" type="button" data-view="${view}" aria-current="${model.session.view === view ? "page" : "false"}" aria-label="Open ${escapeHtml(label)} section">
                 <span>${icon}</span>
                 <strong>${label}</strong>
               </button>
@@ -2789,6 +2868,7 @@
       </nav>
       ${renderToast()}
       ${renderDialog()}
+      <span class="sr-only" aria-live="polite">${escapeHtml(model.ui.announcement)}</span>
     `;
   }
 
@@ -3156,6 +3236,8 @@
     const canUndoRoll = Boolean(model.ui.undoRollSession && pending && !pending.completed && canEditSession());
     const fromSpaceId = pending?.fromSpaceId ?? `S${String(player?.position ?? 0).padStart(2, "0")}`;
     const expectedSpaceId = pending?.spaceId ?? fromSpaceId;
+    const selectedDie = physicalDieDraft();
+    const canSubmitRoll = Boolean(canRoll && selectedDie);
     return `
       <article class="physical-turn-card" data-phase-section="Roll">
         <div class="panel-header">
@@ -3182,12 +3264,17 @@
         <div class="physical-roll-panel">
           <div class="field">
             <label for="physicalDie">Enter the physical D6 result</label>
-            <input class="input die-input" id="physicalDie" type="number" min="1" max="6" value="${model.session.die ?? ""}" inputmode="numeric" aria-label="Enter physical six-sided die result" ${hostDisabledAttr(!canRoll)} />
+            <input class="input die-input" id="physicalDie" type="number" min="1" max="6" value="${escapeHtml(selectedDie)}" inputmode="numeric" aria-label="Enter physical six-sided die result" ${hostDisabledAttr(!canRoll)} />
           </div>
           <div class="quick-rolls" aria-label="Quick physical die entries">
-            ${[1, 2, 3, 4, 5, 6].map((roll) => `<button class="mini-button tap-target" type="button" data-action="manual-roll" data-roll="${roll}" aria-label="Use physical die result ${roll}" ${hostDisabledAttr(!canRoll)}>${roll}</button>`).join("")}
+            ${[1, 2, 3, 4, 5, 6].map((roll) => `<button class="mini-button tap-target ${Number(selectedDie) === roll && !pending ? "selected" : ""}" type="button" data-action="manual-roll" data-roll="${roll}" aria-pressed="${Number(selectedDie) === roll && !pending}" aria-label="Select physical die result ${roll}" ${hostDisabledAttr(!canRoll)}>${roll}</button>`).join("")}
           </div>
-          <button class="button" type="button" data-action="submit-physical-roll" ${hostDisabledAttr(!canRoll)}>Calculate landing space</button>
+          <div class="selected-die-readout" aria-live="polite">
+            <span>Selected D6</span>
+            <strong>${selectedDie || "-"}</strong>
+          </div>
+          <button class="button" type="button" data-action="submit-physical-roll" ${hostDisabledAttr(!canSubmitRoll)}>Confirm move</button>
+          <button class="button-secondary" type="button" data-action="clear-physical-roll" ${hostDisabledAttr(!canRoll || !model.ui.pendingPhysicalDie)}>Clear</button>
           <button class="button-secondary" type="button" data-action="cancel-roll" ${canUndoRoll ? "" : "disabled"}>Undo roll</button>
         </div>
         ${
@@ -3201,7 +3288,7 @@
             `
             : `<p class="notice">Roll the real die first, move the physical pawn, then enter the result here.</p>`
         }
-        <span class="sr-only" aria-live="polite">${pending ? `Expected landing space ${expectedSpaceId}.` : "Waiting for physical die result."}</span>
+        <span class="sr-only" aria-live="polite">${escapeHtml(model.ui.announcement || (pending ? `Expected landing space ${expectedSpaceId}.` : selectedDie ? `Physical die ${selectedDie} selected.` : "Waiting for physical die result."))}</span>
       </article>
     `;
   }
@@ -3408,6 +3495,8 @@
     const canRoll = Boolean(player && !model.session.pendingResolution && !model.session.gameOver && !player.finished && player.turnsTaken < model.game.turnLimit);
     const canUndoRoll = Boolean(model.ui.undoRollSession && model.session.pendingResolution && !model.session.pendingResolution.completed && canEditSession());
     const space = getSpace(`S${String(player?.position ?? 0).padStart(2, "0")}`);
+    const selectedDie = physicalDieDraft();
+    const canSubmitRoll = Boolean(canRoll && selectedDie);
     return `
       <article class="current-player-card" data-phase-section="Roll">
         <div class="panel-header">
@@ -3434,18 +3523,19 @@
               ? `
                 <div class="physical-roll">
                   <label for="physicalDie">Enter D6 result</label>
-                  <input class="input die-input" id="physicalDie" type="number" min="1" max="6" value="${model.session.die ?? 1}" aria-label="Enter physical six-sided die result" ${hostDisabledAttr(!canRoll)} />
-                  <button class="button" type="button" data-action="submit-physical-roll" ${hostDisabledAttr(!canRoll)}>Move pawn</button>
+                  <input class="input die-input" id="physicalDie" type="number" min="1" max="6" value="${escapeHtml(selectedDie)}" aria-label="Enter physical six-sided die result" ${hostDisabledAttr(!canRoll)} />
+                  <button class="button" type="button" data-action="submit-physical-roll" ${hostDisabledAttr(!canSubmitRoll)}>Confirm move</button>
+                  <button class="button-secondary" type="button" data-action="clear-physical-roll" ${hostDisabledAttr(!canRoll || !model.ui.pendingPhysicalDie)}>Clear</button>
                 </div>
                 <div class="quick-rolls" aria-label="Quick physical die entries">
-                  ${[1, 2, 3, 4, 5, 6].map((roll) => `<button class="mini-button" type="button" data-action="manual-roll" data-roll="${roll}" aria-label="Use physical die result ${roll}" ${hostDisabledAttr(!canRoll)}>${roll}</button>`).join("")}
+                  ${[1, 2, 3, 4, 5, 6].map((roll) => `<button class="mini-button ${Number(selectedDie) === roll && !model.session.pendingResolution ? "selected" : ""}" type="button" data-action="manual-roll" data-roll="${roll}" aria-pressed="${Number(selectedDie) === roll && !model.session.pendingResolution}" aria-label="Select physical die result ${roll}" ${hostDisabledAttr(!canRoll)}>${roll}</button>`).join("")}
                 </div>
               `
               : `<button class="die-button" type="button" data-action="roll-die" aria-label="Roll digital six-sided die. Current result ${model.session.die ?? "none"}" ${hostDisabledAttr(!canRoll)}>${model.session.die ?? "D6"}</button>`
           }
           <div class="btn-row">
             <button class="button-secondary" type="button" data-action="cancel-roll" ${canUndoRoll ? "" : "disabled"}>Undo roll</button>
-            <span class="sr-only" aria-live="polite">${model.session.die ? `Die result ${model.session.die}.` : "No die result yet."}</span>
+            <span class="sr-only" aria-live="polite">${escapeHtml(model.ui.announcement || (selectedDie ? `Physical die ${selectedDie} selected.` : model.session.die ? `Die result ${model.session.die}.` : "No die result yet."))}</span>
           </div>
         </div>
       </article>
@@ -3475,6 +3565,7 @@
 
   function renderInteractiveBoard(occupied = new Map(), mode = "compact") {
     const zoom = mode === "modal" ? clamp(model.ui.boardZoom, 0.75, 2.2) : 1;
+    const selectedSpaceId = model.ui.selectedBoardSpaceId ?? `S${String(currentPlayer()?.position ?? 0).padStart(2, "0")}`;
     return `
       <div class="board-map-shell ${mode === "modal" ? "modal-board-map" : ""}" aria-label="Interactive board spaces">
         <div class="board-map-tools">
@@ -3502,9 +3593,10 @@
                 const players = occupied.get(index) ?? [];
                 const meta = spaceMeta(space?.type);
                 const isActive = currentPlayer()?.position === index;
+                const isSelected = selectedSpaceId === spaceId;
                 return `
                   <button
-                    class="board-space-hotspot tone-${meta.tone} ${isActive ? "active" : ""}"
+                    class="board-space-hotspot tone-${meta.tone} ${isActive ? "active" : ""} ${isSelected ? "selected" : ""}"
                     style="${boardBoxStyle(box)}"
                     type="button"
                     data-action="${mode === "modal" ? "select-board-space" : "space-info"}"
@@ -3521,6 +3613,37 @@
               .join("")}
           </div>
         </div>
+        ${mode === "compact" ? renderReadableMiniMap(occupied) : ""}
+      </div>
+    `;
+  }
+
+  function renderReadableMiniMap(occupied = new Map()) {
+    return `
+      <div class="readable-mini-map" role="list" aria-label="Readable board mini-map S00 to S43">
+        ${model.game.boardSpaces
+          .map((space) => {
+            const index = Number(space.id.slice(1));
+            const players = occupied.get(index) ?? [];
+            const meta = spaceMeta(space.type);
+            const active = currentPlayer()?.position === index;
+            return `
+              <button
+                class="mini-map-space tone-${meta.tone} ${active ? "active" : ""}"
+                type="button"
+                data-action="space-info"
+                data-space-id="${space.id}"
+                role="listitem"
+                title="${escapeHtml(boardSpaceDescription(space))}"
+                aria-label="${escapeHtml(boardSpaceDescription(space))}">
+                <strong>${escapeHtml(space.id)}</strong>
+                <span>${escapeHtml(meta.icon)}</span>
+                <small>${escapeHtml(space.type)}</small>
+                ${players.length ? `<em>${players.map(escapeHtml).join(", ")}</em>` : ""}
+              </button>
+            `;
+          })
+          .join("")}
       </div>
     `;
   }
@@ -3788,8 +3911,9 @@
               return `
                 <div class="asset-row pattern-${meta.pattern}" role="listitem" style="--asset:${cssVar(asset.color)}">
                   <div class="asset-name"><span>${escapeHtml(meta.icon)}</span><strong>${escapeHtml(asset.name)}</strong><small>Risk ${asset.risk} - ${escapeHtml(meta.label)} - ${escapeHtml(meta.pattern)} pattern</small></div>
-                  <div class="bar asset-bar" aria-label="${escapeHtml(asset.name)} current index ${index}, start ${start}, total change ${signed(delta)}, last event ${signed(lastDelta)}">
-                    <span style="width:${width}%"><strong>${index}</strong></span>
+                  <div class="bar asset-bar" role="progressbar" aria-label="${escapeHtml(asset.name)} current index ${index}, start ${start}, total change ${signed(delta)}, last event ${signed(lastDelta)}" aria-valuenow="${index}" aria-valuemin="1" aria-valuemax="${Math.max(1, start + 12)}">
+                    <span style="width:${width}%"></span>
+                    <strong class="asset-bar-number">${index}</strong>
                   </div>
                   <div class="index">
                     <strong>${index}</strong>
@@ -3857,21 +3981,18 @@
   }
 
   function renderHoldings(player) {
-    const holdings = Object.entries(player.holdings ?? {}).filter(([, units]) => Number(units) > 0);
-    if (!holdings.length) {
-      return `<span class="muted">Cash only</span>`;
-    }
     return `
       <div class="holding-list">
-        ${holdings
-          .map(([assetId, units]) => {
-            const asset = assetMeta(assetId);
-            const index = Number(model.session.prices[assetId] ?? asset.startIndex ?? 0);
+        ${model.game.assets
+          .map((baseAsset) => {
+            const asset = assetMeta(baseAsset.id);
+            const units = Number(player.holdings?.[baseAsset.id] ?? 0);
+            const index = Number(model.session.prices[baseAsset.id] ?? baseAsset.startIndex ?? 0);
             const value = Number(units) * index * 1000;
             return `
-              <span class="asset-chip holding-chip pattern-${asset.pattern}" style="--asset:${cssVar(asset.color)}" aria-label="${escapeHtml(asset.name)} ${units} units, index ${index}, value ${money(value)}">
+              <span class="asset-chip holding-chip pattern-${asset.pattern} ${units ? "" : "empty-holding"}" style="--asset:${cssVar(asset.color)}" aria-label="${escapeHtml(asset.name)} ${units} units, index ${index}, value ${money(value)}">
                 <strong>${escapeHtml(asset.icon)} ${escapeHtml(asset.name)}</strong>
-                <small>${units} units / index ${index} / ${money(value)}</small>
+                <small>${units} units / index ${index} / value ${money(value)}</small>
               </span>
             `;
           })
@@ -3960,15 +4081,7 @@
         </div>
         <p>${escapeHtml(marketEventExplanation(item))}</p>
         <div class="btn-row">${speakButton(`${item.id} ${item.title}. ${marketEventExplanation(item)}`, "Read event")}</div>
-        <div class="btn-row">
-          ${Object.entries(item.priceEffects ?? {})
-            .map(([assetId, delta]) => {
-              const asset = assetMeta(assetId);
-              const applied = Number(item.appliedEffects?.[assetId] ?? delta);
-              return `<span class="asset-chip pattern-${asset.pattern}" style="--asset:${cssVar(asset.color)}" aria-label="${escapeHtml(asset.name)} changed ${signed(applied)}">${escapeHtml(asset.icon)} ${escapeHtml(asset.name)} ${signed(applied)}</span>`;
-            })
-            .join("")}
-        </div>
+        ${renderMarketEffectChips(item)}
       </article>
     `;
   }
@@ -3991,25 +4104,46 @@
   }
 
   function renderMarketHistoryRow(item) {
+    const eventKey = `${item.id}-${item.at}`;
     return `
-      <details class="event-row">
+      <details class="event-row" ${model.ui.selectedMarketEventId === eventKey ? "open" : ""}>
         <summary>
           <strong>${escapeHtml(item.id)} ${escapeHtml(item.title)}</strong>
-          <span>${escapeHtml(item.sentiment)} / ${escapeHtml(item.bias)} / Turn ${escapeHtml(item.turn ?? "Host")}</span>
+          <span>${escapeHtml(item.sentiment)} / ${escapeHtml(item.bias)} / Turn ${escapeHtml(item.turn ?? "Host")} / ${escapeHtml(item.playerName ?? "Host reveal")}</span>
         </summary>
-        <p>${escapeHtml(item.source)}${item.playerName ? ` / ${escapeHtml(item.playerName)}` : ""} / ${new Date(item.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p>
+        <dl class="event-detail-grid">
+          <div><dt>Card ID</dt><dd>${escapeHtml(item.id)}</dd></div>
+          <div><dt>Title</dt><dd>${escapeHtml(item.title)}</dd></div>
+          <div><dt>Sentiment</dt><dd>${escapeHtml(item.sentiment)}</dd></div>
+          <div><dt>Bias watch</dt><dd>${escapeHtml(item.bias)}</dd></div>
+          <div><dt>Turn</dt><dd>${escapeHtml(item.turn ?? "Host reveal")}</dd></div>
+          <div><dt>Player</dt><dd>${escapeHtml(item.playerName ?? "Host reveal")}</dd></div>
+          <div><dt>Source</dt><dd>${escapeHtml(item.source)}</dd></div>
+          <div><dt>Time</dt><dd>${escapeHtml(new Date(item.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }))}</dd></div>
+        </dl>
         <p>${escapeHtml(marketEventExplanation(item))}</p>
-        <div class="btn-row">
-          ${Object.entries(item.priceEffects ?? {})
-            .map(([assetId, delta]) => {
-              const asset = assetMeta(assetId);
-              const before = Number(item.prices?.[assetId] ?? 0) - Number(item.appliedEffects?.[assetId] ?? delta);
-              const after = Number(item.prices?.[assetId] ?? 0);
-              return `<span class="asset-chip pattern-${asset.pattern}" style="--asset:${cssVar(asset.color)}">${escapeHtml(asset.icon)} ${escapeHtml(asset.name)} <strong>${signed(delta)}</strong> ${before} -> ${after}</span>`;
-            })
-            .join("")}
-        </div>
+        ${renderMarketEffectChips(item)}
       </details>
+    `;
+  }
+
+  function renderMarketEffectChips(item) {
+    const entries = Object.entries(item.appliedEffects ?? item.priceEffects ?? {});
+    if (!entries.length) {
+      return `<div class="btn-row"><span class="asset-chip">No index changes</span></div>`;
+    }
+    return `
+      <div class="btn-row market-effect-row" aria-label="Market price changes">
+        ${entries
+          .map(([assetId, delta]) => {
+            const asset = assetMeta(assetId);
+            const applied = Number(delta);
+            const after = Number(item.prices?.[assetId] ?? model.session.prices[assetId] ?? 0);
+            const before = after - applied;
+            return `<span class="asset-chip pattern-${asset.pattern}" style="--asset:${cssVar(asset.color)}" aria-label="${escapeHtml(asset.name)} index ${before} to ${after}, change ${signed(applied)}"><strong>${escapeHtml(asset.icon)} ${escapeHtml(asset.name)}</strong> ${before} -> ${after} <em>${signed(applied)}</em></span>`;
+          })
+          .join("")}
+      </div>
     `;
   }
 
@@ -4123,7 +4257,7 @@
                     <strong class="score-total">${score.total}<span>/100</span></strong>
                   </header>
                   ${renderScoreBars(score)}
-                  <details>
+                  <details class="score-details" open>
                     <summary>Calculation details</summary>
                     ${renderScoreDetails(score)}
                     ${speakButton(scoreExplanation(score), "Read score")}
@@ -4139,18 +4273,18 @@
 
   function renderScoreBars(score) {
     const rows = [
-      ["Portfolio", "leaf", score.portfolioScore, Number(model.game.scoreWeights.portfolioValue ?? 25)],
-      ["Diversify", "pie", score.diversificationScore, Number(model.game.scoreWeights.diversification ?? 20)],
-      ["Risk", "warn", score.riskManagementScore, Number(model.game.scoreWeights.riskManagement ?? 15)],
-      ["Ethics", "scale", score.ethicsScore, Number(model.game.scoreWeights.ethics ?? 20)],
-      ["Reflect", "bulb", score.reflectionScore, Number(model.game.scoreWeights.reflection ?? 20)]
+      ["Portfolio", "PF", score.portfolioScore, Number(model.game.scoreWeights.portfolioValue ?? 25)],
+      ["Diversify", "DV", score.diversificationScore, Number(model.game.scoreWeights.diversification ?? 20)],
+      ["Risk", "RK", score.riskManagementScore, Number(model.game.scoreWeights.riskManagement ?? 15)],
+      ["Ethics", "ET", score.ethicsScore, Number(model.game.scoreWeights.ethics ?? 20)],
+      ["Reflection", "RF", score.reflectionScore, Number(model.game.scoreWeights.reflection ?? 20)]
     ];
     return `
-      <div class="score-bars">
+      <div class="score-bars" aria-label="Scoring category bars">
         ${rows
           .map(([label, icon, value, max]) => {
             const width = clamp((value / max) * 100, 0, 100);
-            return `<div class="score-bar"><span class="score-icon">${icon}</span><span>${label}</span><div class="bar" aria-label="${label} ${value} out of ${max}"><span style="width:${width}%"></span></div><strong>${value}/${max}</strong></div>`;
+            return `<div class="score-bar" aria-label="${label} score ${value} out of ${max}"><span class="score-icon" aria-hidden="true">${icon}</span><span class="score-label">${label}</span><div class="bar" role="progressbar" aria-valuenow="${value}" aria-valuemin="0" aria-valuemax="${max}" aria-label="${label} ${value} out of ${max}"><span style="width:${width}%"></span></div><strong>${value}/${max}</strong></div>`;
           })
           .join("")}
       </div>
@@ -4210,22 +4344,35 @@
           <div>
             <p class="eyeline">Evidence</p>
             <h2>Session export</h2>
-            <p>This export supports process evidence and debugging. Real student feedback and observations should still be recorded separately.</p>
+            <p>Export the session record for teacher review, player notes, evidence counters, holdings, and scoring.</p>
           </div>
           <div class="btn-row">
             <button class="button-secondary" type="button" data-action="refresh-export">Refresh JSON</button>
             <button class="button-secondary" type="button" data-action="copy-export">Copy JSON</button>
             <button class="button-secondary" type="button" data-action="download-csv">Download CSV</button>
-            <button class="button-secondary" type="button" data-action="print-summary">Print summary</button>
+            <button class="button-secondary" type="button" data-action="print-summary">Printable HTML/PDF</button>
             <button class="button" type="button" data-action="download-evidence">Download JSON</button>
           </div>
         </div>
+        <section class="session-status status-${sessionStatus().state}" aria-label="Export save status">
+          <div>
+            <span class="label">${escapeHtml(saveModeLabel())}</span>
+            <strong>${escapeHtml(sessionStatus().label)}</strong>
+            <p>Last saved timestamp: ${escapeHtml(relativeTime(model.backend.lastSavedAt))}</p>
+          </div>
+        </section>
         <div class="export-summary-grid">
           ${Object.entries(summary)
             .map(([key, value]) => `<div class="metric-tile"><span>${escapeHtml(key.replace(/([A-Z])/g, " $1"))}</span><strong>${escapeHtml(value)}</strong></div>`)
             .join("")}
         </div>
         <div class="evidence-completeness">
+          <div class="section-head">
+            <div>
+              <p class="eyeline">Before export</p>
+              <h3>Evidence completeness check</h3>
+            </div>
+          </div>
           ${model.session.players
             .map((player) => {
               const missing = missingEvidence(player);
@@ -4270,6 +4417,9 @@
             <input class="input" id="rulesSearch" data-rules-search="true" value="${escapeHtml(model.ui.rulesQuery)}" autocomplete="off" />
           </div>
           ${!hasResults ? `<div class="empty-state">No results found.</div>` : ""}
+          <div class="help-cross-links" aria-label="Help quick links">
+            ${["Turn flow", "Scoring", "Deck lifecycle", "Market", "Risk management"].map((topic) => `<button class="mini-button" type="button" data-action="open-help-topic" data-topic="${escapeHtml(topic)}">${escapeHtml(topic)}</button>`).join("")}
+          </div>
           <div class="diagram-grid" aria-label="Game diagrams">
             ${renderFlowDiagram("Turn flow", ["Roll", "Move", "Resolve", "Log", "End"])}
             ${renderFlowDiagram("Scoring formula", ["Portfolio 25", "Diversify 20", "Risk 15", "Ethics 20", "Reflect 20", "Total 100"])}
@@ -4320,8 +4470,9 @@
   }
 
   function renderFlowDiagram(title, steps) {
+    const label = `${title}: ${steps.join(" to ")}`;
     return `
-      <article class="flow-diagram">
+      <article class="flow-diagram" role="img" tabindex="0" aria-label="${escapeHtml(label)}">
         <strong>${escapeHtml(title)}</strong>
         <div>
           ${steps.map((step, index) => `<span>${escapeHtml(step)}</span>${index < steps.length - 1 ? "<b>-></b>" : ""}`).join("")}
@@ -4340,6 +4491,7 @@
       { term: "FOMO", section: "Market", body: "Fear of missing out; in the game it appears in hype-driven choices." },
       { term: "Liquidity", section: "Risk", body: "How easily cash or an asset can cover expenses without forced selling." },
       { term: "Market Pulse", section: "Market", body: "A board space that reveals a Market/Life card and updates shared indexes." },
+      { term: "Risk management", section: "Scoring", body: "The score category for evidence, cash buffer, diversification, and avoiding unmanaged losses." },
       { term: "Risk-return", section: "Risk", body: "The trade-off between possible reward and possible loss." },
       { term: "Volatility", section: "Market", body: "How much an asset price can move up or down." }
     ].sort((a, b) => a.term.localeCompare(b.term));
@@ -4377,6 +4529,8 @@
       { title: "Market", body: "Market/Life cards update shared asset indexes. Asset price indexes cannot fall below 1." },
       { title: "Scoring", body: "Score when all players reach S43 or after 12 turns per player. Value 25, diversification 20, risk 15, ethics 20, reflection 20." },
       { title: "Evidence", body: "Each turn needs one decision, finance term, or evidence note. Suggested notes are allowed; custom notes are better when the decision needs context." },
+      { title: "FAQ: physical deck mismatch", body: "If the entered card ID does not match the app-synced deck, check the printed draw pile and discard pile, then continue only after the host agrees which card was drawn." },
+      { title: "FAQ: ending a turn", body: "End Turn is available after the space is resolved, one evidence note is selected or typed, and the physical checklist is complete." },
       { title: "Volatility", body: "How much an asset price can move up or down. High volatility can raise gains and losses." },
       { title: "Diversification", body: "Holding multiple asset categories instead of relying on one category." },
       { title: "Liquidity", body: "How easily cash or an asset can cover expenses without forced selling." },
@@ -4746,7 +4900,7 @@
         break;
       case "submit-physical-roll": {
         if (!requireHostAction()) break;
-        const value = Number(document.getElementById("physicalDie")?.value);
+        const value = Number(model.ui.pendingPhysicalDie ?? document.getElementById("physicalDie")?.value);
         if (!Number.isInteger(value) || value < 1 || value > 6) {
           setMessage("Enter a physical D6 result from 1 to 6.");
           render();
@@ -4757,7 +4911,14 @@
       }
       case "manual-roll":
         if (!requireHostAction()) break;
-        rollDie(Number(button.dataset.roll));
+        setPhysicalDieDraft(button.dataset.roll);
+        render();
+        window.setTimeout(() => document.getElementById("physicalDie")?.focus(), 0);
+        break;
+      case "clear-physical-roll":
+        if (!requireHostAction()) break;
+        clearPhysicalDieDraft();
+        render();
         break;
       case "confirm-pawn-space":
         if (!requireHostAction()) break;
@@ -4977,7 +5138,12 @@
       }
       case "open-help-topic": {
         const topic = String(button.dataset.topic ?? "").toLowerCase();
-        const section = helpSections().find((item) => item.title.toLowerCase().includes(topic));
+        const aliases = {
+          "risk management": "scoring",
+          "scoring formula": "scoring"
+        };
+        const target = aliases[topic] ?? topic;
+        const section = helpSections().find((item) => item.title.toLowerCase().includes(target));
         if (section) {
           model.ui.rulesQuery = "";
           render();
@@ -5049,6 +5215,15 @@
     if (event.target.id === "cardLookupId" || event.target.id === "physicalCardId") {
       model.ui.cardLookupId = normaliseCardId(event.target.value);
     }
+    if (event.target.id === "physicalDie") {
+      const value = Number(event.target.value);
+      if (Number.isInteger(value) && value >= 1 && value <= 6) {
+        setPhysicalDieDraft(value);
+      } else {
+        model.ui.pendingPhysicalDie = null;
+        announce("Physical die entry cleared.");
+      }
+    }
     if (event.target.id === "boardLookupId") {
       model.ui.boardLookupId = normaliseSpaceId(event.target.value);
     }
@@ -5070,7 +5245,7 @@
     if (event.key === "Enter" && event.target?.id === "physicalDie") {
       event.preventDefault();
       if (!requireHostAction()) return;
-      const value = Number(event.target.value);
+      const value = Number(model.ui.pendingPhysicalDie ?? event.target.value);
       if (!Number.isInteger(value) || value < 1 || value > 6) {
         setMessage("Enter a physical D6 result from 1 to 6.");
         render();
