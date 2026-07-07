@@ -145,7 +145,7 @@
       selectedBoardSpaceId: "S00",
       selectedAssistPlayerId: "",
       pendingPhysicalDie: null,
-      setupChecklist: readStore(STORAGE.ui, {})?.setupChecklist ?? {},
+      setupChecklistBySession: readStore(STORAGE.ui, {})?.setupChecklistBySession ?? {},
       announcement: "",
       marketFilters: {
         sentiment: "all",
@@ -191,8 +191,29 @@
       boardZoom: model.ui.boardZoom,
       companionMode: model.ui.companionMode,
       reducedMotion: model.ui.reducedMotion,
-      setupChecklist: model.ui.setupChecklist
+      setupChecklistBySession: model.ui.setupChecklistBySession
     });
+  }
+
+  function setupChecklistKey() {
+    return model.session?.code ?? "unassigned";
+  }
+
+  function currentSetupChecklist() {
+    return model.ui.setupChecklistBySession?.[setupChecklistKey()] ?? {};
+  }
+
+  function setSetupChecklistItem(key, checked) {
+    const tableKey = setupChecklistKey();
+    const current = currentSetupChecklist();
+    model.ui.setupChecklistBySession = {
+      ...(model.ui.setupChecklistBySession ?? {}),
+      [tableKey]: {
+        ...current,
+        [key]: Boolean(checked)
+      }
+    };
+    persistUi();
   }
 
   function setSaveState(state, detail = "") {
@@ -3217,6 +3238,11 @@
             <img src="${BOARD_IMAGE_URL}" alt="Give And Take physical game board" />
             <figcaption>Use this as the visual reference while the website tracks the playable state.</figcaption>
           </figure>
+          <details class="rules-accordion setup-board-map" open>
+            <summary>S00-S43 quick map</summary>
+            <p class="notice">Tap or hover a space to see its name, type, and physical action. Use the printed board for pawn movement.</p>
+            ${renderReadableMiniMap(new Map())}
+          </details>
           ${renderSetupChecklist()}
         </section>
       </div>
@@ -3231,7 +3257,8 @@
       "Share the GT code with players.",
       "Confirm physical player boards and pencils are ready."
     ];
-    const complete = items.filter((_, index) => model.ui.setupChecklist[`setup-${index}`]).length;
+    const checks = currentSetupChecklist();
+    const complete = items.filter((_, index) => checks[`setup-${index}`]).length;
     return `
           <details class="rules-accordion setup-checklist" ${complete < items.length ? "open" : ""}>
             <summary>Physical setup checklist</summary>
@@ -3243,7 +3270,7 @@
               ${items
                 .map((item, index) => {
                   const key = `setup-${index}`;
-                  const checked = Boolean(model.ui.setupChecklist[key]);
+                  const checked = Boolean(checks[key]);
                   return `<label class="${checked ? "checked" : ""}"><input type="checkbox" data-setup-check="${key}" ${checked ? "checked" : ""} /> <span>${index + 1}. ${escapeHtml(item)}</span></label>`;
                 })
                 .join("")}
@@ -5304,8 +5331,7 @@
     }
     if (event.target.matches("[data-setup-check]")) {
       const key = event.target.dataset.setupCheck;
-      model.ui.setupChecklist[key] = Boolean(event.target.checked);
-      persistUi();
+      setSetupChecklistItem(key, event.target.checked);
       render();
     }
     if (event.target.matches("[data-assist-player]")) {
