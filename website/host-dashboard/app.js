@@ -2,7 +2,12 @@
   "use strict";
 
   const CONFIG_URL = "../../game_data/game_config.json";
-  const BOARD_IMAGE_URL = "../../outputs/final_assets/board/give_and_take_board_with_qr.png";
+  const BOARD_IMAGE_URL = "../../outputs/final_assets/board/give_and_take_board_web_1280.webp";
+  const BOARD_IMAGE_SRCSET = [
+    "../../outputs/final_assets/board/give_and_take_board_web_640.webp 640w",
+    "../../outputs/final_assets/board/give_and_take_board_web_1280.webp 1280w",
+    "../../outputs/final_assets/board/give_and_take_board_web_1920.webp 1920w"
+  ].join(", ");
   const API_BASE = "/api";
   const BACKEND_POLL_MS = 2500;
   const PRODUCTION_APP_URL = "https://avyukt3lg.github.io/give-and-take-qr-app/website/host-dashboard/";
@@ -156,12 +161,26 @@
       turnNoteDraft: "",
       undoRollSession: null,
       lastPhase: "",
-      dialog: null
+      dialog: null,
+      authPending: false,
+      backendRetryPending: false,
+      settingsOpen: false,
+      authError: "",
+      authDraft: {
+        name: "",
+        email: "",
+        code: "GT-"
+      }
     },
     message: "",
     exportText: "",
     configError: null
   };
+
+  const tickerValueHistory = new Map();
+  let tickerObserver = null;
+  let revealObserver = null;
+  let lastRevealSignature = "";
 
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
   const round = (value) => Math.round(value);
@@ -635,6 +654,18 @@
   }
 
   function openDialog(dialog) {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement) {
+      if (active.id) {
+        model.ui.dialogReturnFocusSelector = `#${CSS.escape(active.id)}`;
+      } else if (active.matches("button")) {
+        const attributes = ["data-action", "data-view", "data-index", "data-player-id", "data-card-id", "data-space-id"]
+          .filter((name) => active.hasAttribute(name))
+          .map((name) => `[${name}="${CSS.escape(active.getAttribute(name))}"]`)
+          .join("");
+        model.ui.dialogReturnFocusSelector = attributes ? `button${attributes}` : "";
+      }
+    }
     model.ui.dialog = dialog;
     render();
     window.setTimeout(() => {
@@ -643,8 +674,13 @@
   }
 
   function closeDialog() {
+    const returnFocusSelector = model.ui.dialogReturnFocusSelector;
     model.ui.dialog = null;
+    model.ui.dialogReturnFocusSelector = "";
     render();
+    if (returnFocusSelector) {
+      window.setTimeout(() => appRoot.querySelector(returnFocusSelector)?.focus(), 0);
+    }
   }
 
   function getClientId() {
@@ -693,8 +729,14 @@
   }
 
   function backendNotice(mode = model.authTab) {
+    if (model.backend.saveState === "connecting") {
+      return "Connecting securely to the shared Supabase table service...";
+    }
+    if (!model.backend.online) {
+      return model.backend.unavailableReason || "Supabase is unavailable. Reload before hosting or joining a table.";
+    }
     if (mode === "signup") {
-      return "Create an account when you want repeat hosting and access to past Supabase tables.";
+      return "Create an account to host with the same Supabase identity across sessions.";
     }
     if (mode === "guest") {
       return "Host a table without an account, then share the GT code with players.";
@@ -702,7 +744,17 @@
     if (mode === "join") {
       return "Enter the GT code from the host to join as a player.";
     }
-    return "Login to host or continue a saved table on the live QR app.";
+    return "Login to host with your saved Supabase identity on the live QR app.";
+  }
+
+  function renderAuthBackendStatus(mode = model.authTab) {
+    const retry = model.backend.saveState !== "connecting" && !model.backend.online;
+    return `
+      <div class="auth-backend-status">
+        <p class="notice">${escapeHtml(backendNotice(mode))}</p>
+        ${retry ? `<button class="button-secondary auth-retry" type="button" data-action="retry-backend" ${model.ui.backendRetryPending ? "disabled" : ""}>${model.ui.backendRetryPending ? "Retrying connection..." : "Retry Supabase connection"}</button>` : ""}
+      </div>
+    `;
   }
 
   function tableRoleLabel() {
@@ -1021,6 +1073,12 @@
     return `INR ${round(value).toLocaleString("en-IN")}`;
   }
 
+  function renderNumberTicker(value, key, format = "integer") {
+    const numericValue = Number(value ?? 0);
+    const finalText = format === "money" ? money(numericValue) : round(numericValue).toLocaleString("en-IN");
+    return `<span class="number-ticker" data-ticker-key="${escapeHtml(key)}" data-ticker-value="${numericValue}" data-ticker-format="${format}" aria-label="${escapeHtml(finalText)}">${escapeHtml(finalText)}</span>`;
+  }
+
   function makeSessionCode() {
     return `GT-${Math.floor(1000 + Math.random() * 9000)}`;
   }
@@ -1232,8 +1290,22 @@
       setMessage.timer = window.setTimeout(() => {
         model.message = "";
         render();
-      }, 4200);
+      }, messageTone(message) === "error" ? 8000 : 4200);
     }
+  }
+
+  function messageTone(message) {
+    const text = String(message ?? "").toLowerCase();
+    if (["failed", "could not", "unavailable", "incorrect", "missing", "not found", "blocked"].some((term) => text.includes(term))) {
+      return "error";
+    }
+    if (["warning", "mismatch", "unsaved", "check the"].some((term) => text.includes(term))) {
+      return "warning";
+    }
+    if (["copied", "joined", "created", "saved", "downloaded", "exported", "complete"].some((term) => text.includes(term))) {
+      return "success";
+    }
+    return "info";
   }
 
   function logActivity(text, detail = {}) {
@@ -1399,6 +1471,13 @@
     model.session.view = view;
     saveSession();
     render();
+    window.requestAnimationFrame(() => {
+      const main = appRoot.querySelector("#main-content");
+      if (main instanceof HTMLElement) {
+        main.focus({ preventScroll: true });
+      }
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    });
   }
 
   function startSession() {
@@ -2407,7 +2486,16 @@
     return number > 0 ? `+${number}` : String(number);
   }
 
+  function syncDocumentTheme() {
+    const theme = effectiveCompanionMode() !== "table" && model.ui.theme === "classroom" ? "classroom" : "table";
+    document.documentElement.dataset.pageTheme = theme;
+    document.body.dataset.pageTheme = theme;
+    const themeMeta = document.querySelector('meta[name="theme-color"]');
+    themeMeta?.setAttribute("content", theme === "classroom" ? "#f3ead7" : "#081412");
+  }
+
   function render() {
+    syncDocumentTheme();
     if (model.configError) {
       renderFatal(model.configError);
       return;
@@ -2448,7 +2536,16 @@
     appRoot.innerHTML = `
       <section class="auth-visual" aria-labelledby="entry-title">
         <div class="table-map">
-          <img src="${BOARD_IMAGE_URL}" alt="Give And Take board with QR code" />
+          <img
+            src="${BOARD_IMAGE_URL}"
+            srcset="${BOARD_IMAGE_SRCSET}"
+            sizes="(max-width: 760px) 70vw, 440px"
+            width="1280"
+            height="1280"
+            fetchpriority="high"
+            decoding="async"
+            alt="Give And Take board with QR code"
+          />
           <div class="map-badge">S00-S43</div>
         </div>
         <p class="kicker">Give And Take</p>
@@ -2461,7 +2558,7 @@
         </div>
         <p class="privacy-line">Uses fictional cash and gameplay notes only. No real investment data.</p>
       </section>
-      <section class="auth-card">
+      <main id="main-content" class="auth-card" tabindex="-1">
         <div class="auth-card-head">
           <div>
             <p class="eyeline">Table entry</p>
@@ -2473,105 +2570,128 @@
           ${["guest", "join", "login", "signup"]
             .map(
               (tab) => `
-                <button class="auth-tab" type="button" data-auth-tab="${tab}" aria-selected="${model.authTab === tab}">
+                <button
+                  class="auth-tab"
+                  id="auth-tab-${tab}"
+                  type="button"
+                  role="tab"
+                  data-auth-tab="${tab}"
+                  aria-controls="auth-panel"
+                  aria-selected="${model.authTab === tab}"
+                  tabindex="${model.authTab === tab ? "0" : "-1"}"
+                  ${model.ui.authPending || model.ui.backendRetryPending ? "disabled" : ""}
+                >
                   ${tab === "signup" ? "Sign up" : tab === "login" ? "Login" : tab === "guest" ? "Host" : "Join"}
                 </button>
               `
             )
             .join("")}
         </div>
-        ${renderAuthPanel()}
-      </section>
+        <div id="auth-panel" role="tabpanel" aria-labelledby="auth-tab-${model.authTab}" tabindex="0">
+          ${renderAuthPanel()}
+        </div>
+      </main>
       ${renderToast()}
       ${renderDialog()}
     `;
   }
 
   function renderAuthPanel() {
+    const draft = model.ui.authDraft;
+    const busy = model.ui.authPending;
+    const connecting = model.backend.saveState === "connecting";
+    const disabled = busy || model.ui.backendRetryPending || connecting ? "disabled" : "";
+    const error = model.ui.authError
+      ? `<p class="notice warning auth-error" role="alert">${escapeHtml(model.ui.authError)}</p>`
+      : "";
     if (model.authTab === "signup") {
       return `
-        <form class="stack" data-auth-form="signup">
+        <form class="stack" data-auth-form="signup" aria-busy="${busy}">
           <div class="field">
             <label for="signupName">Name</label>
-            <input class="input" id="signupName" name="name" autocomplete="name" aria-describedby="signupNameHelp" required />
+            <input class="input" id="signupName" name="name" value="${escapeHtml(draft.name)}" autocomplete="name" aria-describedby="signupNameHelp" ${disabled} required />
             <span class="field-help" id="signupNameHelp">Enter your name.</span>
           </div>
           <div class="field">
             <label for="signupEmail">Email</label>
-            <input class="input" id="signupEmail" name="email" type="email" autocomplete="email" aria-describedby="signupEmailHelp" required />
+            <input class="input" id="signupEmail" name="email" value="${escapeHtml(draft.email)}" type="email" autocomplete="email" aria-describedby="signupEmailHelp" ${disabled} required />
             <span class="field-help" id="signupEmailHelp">Use the email you want tied to hosted tables.</span>
           </div>
           <div class="field">
             <label for="signupPassword">Password</label>
-            <input class="input" id="signupPassword" name="password" type="password" autocomplete="new-password" minlength="6" aria-describedby="signupPasswordHelp" required />
+            <input class="input" id="signupPassword" name="password" type="password" autocomplete="new-password" minlength="6" aria-describedby="signupPasswordHelp" ${disabled} required />
             <span class="field-help" id="signupPasswordHelp">Use at least 6 characters.</span>
           </div>
           <div class="entry-preview">
             <strong>Why create an account?</strong>
-            <span>Use the same identity for repeat hosting and returning to past Supabase tables.</span>
+            <span>Use the same verified identity whenever you host a new Supabase table.</span>
           </div>
-          <p class="notice">${escapeHtml(backendNotice("signup"))}</p>
-          <button class="button" type="submit">Create account</button>
+          ${renderAuthBackendStatus("signup")}
+          ${error}
+          <button class="button auth-submit" type="submit" ${disabled}>${busy ? "Creating account..." : "Create account"}</button>
         </form>
       `;
     }
     if (model.authTab === "guest") {
       return `
-        <form class="stack" data-auth-form="guest">
+        <form class="stack" data-auth-form="guest" aria-busy="${busy}">
           <div class="field">
             <label for="guestName">Host name</label>
-            <input class="input" id="guestName" name="name" autocomplete="name" aria-describedby="guestNameHelp" required />
+            <input class="input" id="guestName" name="name" value="${escapeHtml(draft.name)}" autocomplete="name" aria-describedby="guestNameHelp" ${disabled} required />
             <span class="field-help" id="guestNameHelp">Enter your host name.</span>
           </div>
           <div class="entry-preview">
             <strong>Host flow</strong>
             <span>A GT code is the shared table code players enter to join this physical game session.</span>
           </div>
-          <p class="notice">${escapeHtml(backendNotice("guest"))}</p>
-          <button class="button" type="submit">Host table</button>
+          ${renderAuthBackendStatus("guest")}
+          ${error}
+          <button class="button auth-submit" type="submit" ${disabled}>${busy ? "Creating table..." : "Host table"}</button>
         </form>
       `;
     }
     if (model.authTab === "join") {
       return `
-        <form class="stack" data-auth-form="join">
+        <form class="stack" data-auth-form="join" aria-busy="${busy}">
           <div class="field">
             <label for="joinName">Player name</label>
-            <input class="input" id="joinName" name="name" autocomplete="name" aria-describedby="joinNameHelp" required />
+            <input class="input" id="joinName" name="name" value="${escapeHtml(draft.name)}" autocomplete="name" aria-describedby="joinNameHelp" ${disabled} required />
             <span class="field-help" id="joinNameHelp">Enter your player name.</span>
           </div>
           <div class="field">
             <label for="joinCode">Session code</label>
-            <input class="input code-input" id="joinCode" name="code" value="GT-" pattern="GT-[0-9]{4}" maxlength="7" inputmode="text" autocomplete="off" aria-describedby="joinCodeHelp" required />
+            <input class="input code-input" id="joinCode" name="code" value="${escapeHtml(draft.code || "GT-")}" pattern="GT-[0-9]{4}" maxlength="7" inputmode="text" autocomplete="off" aria-describedby="joinCodeHelp" ${disabled} required />
             <span class="field-help" id="joinCodeHelp">Use the format GT-0000. The host sees this code after creating the table.</span>
           </div>
           <div class="entry-preview">
             <strong>Where is the code?</strong>
             <span>The host shows a code like GT-4827 after creating the table.</span>
           </div>
-          <p class="notice">${escapeHtml(backendNotice("join"))}</p>
-          <button class="button" type="submit">Join session</button>
+          ${renderAuthBackendStatus("join")}
+          ${error}
+          <button class="button auth-submit" type="submit" ${disabled}>${busy ? "Joining table..." : "Join session"}</button>
         </form>
       `;
     }
     return `
-      <form class="stack" data-auth-form="login">
+      <form class="stack" data-auth-form="login" aria-busy="${busy}">
         <div class="field">
           <label for="loginEmail">Email</label>
-          <input class="input" id="loginEmail" name="email" type="email" autocomplete="email" aria-describedby="loginEmailHelp" required />
+          <input class="input" id="loginEmail" name="email" value="${escapeHtml(draft.email)}" type="email" autocomplete="email" aria-describedby="loginEmailHelp" ${disabled} required />
           <span class="field-help" id="loginEmailHelp">Use your host account email.</span>
         </div>
         <div class="field">
           <label for="loginPassword">Password</label>
-          <input class="input" id="loginPassword" name="password" type="password" autocomplete="current-password" aria-describedby="loginPasswordHelp" required />
+          <input class="input" id="loginPassword" name="password" type="password" autocomplete="current-password" aria-describedby="loginPasswordHelp" ${disabled} required />
           <span class="field-help" id="loginPasswordHelp">Enter your password.</span>
         </div>
         <div class="entry-preview">
           <strong>Account benefit</strong>
-          <span>Login when you want to host with the same account and keep access to past Supabase tables.</span>
+          <span>Login when you want to host a new table with the same verified identity.</span>
         </div>
-        <p class="notice">${escapeHtml(backendNotice("login"))}</p>
-        <button class="button" type="submit">Login</button>
+        ${renderAuthBackendStatus("login")}
+        ${error}
+        <button class="button auth-submit" type="submit" ${disabled}>${busy ? "Signing in..." : "Login"}</button>
       </form>
     `;
   }
@@ -2580,7 +2700,7 @@
     const includeMode = options.includeMode ?? true;
     const label = options.label ?? "Settings";
     return `
-      <details class="settings-popover">
+      <details class="settings-popover" ${model.ui.settingsOpen ? "open" : ""}>
         <summary class="settings-trigger" aria-label="Open display and mode settings">
           <span aria-hidden="true">${heroIcon("cog")}</span>
           <strong>${escapeHtml(label)}</strong>
@@ -2906,6 +3026,41 @@
     `;
   }
 
+  function renderMobileNavigation() {
+    const primaryItems = navItems.slice(0, 4);
+    const secondaryItems = navItems.slice(4);
+    const secondaryActive = secondaryItems.some(([view]) => view === model.session.view);
+    const renderButton = ([view, label, icon], extraClass = "") => `
+      <button class="mobile-nav-button ${extraClass}" type="button" data-view="${view}" aria-current="${model.session.view === view ? "page" : "false"}" aria-label="Open ${escapeHtml(label)} section">
+        <span>${icon}</span>
+        <strong>${label}</strong>
+      </button>
+    `;
+    return `
+      <nav class="mobile-nav" aria-label="Mobile game sections">
+        ${primaryItems.map((item) => renderButton(item)).join("")}
+        <details class="mobile-more">
+          <summary class="mobile-nav-button" aria-current="${secondaryActive ? "page" : "false"}" aria-label="Open more game sections">
+            <span aria-hidden="true">++</span>
+            <strong>More</strong>
+          </summary>
+          <section class="mobile-more-sheet" aria-label="More game sections">
+            <div class="mobile-more-header">
+              <div>
+                <p class="eyeline">More sections</p>
+                <h2>Review and export</h2>
+              </div>
+              <span class="status-pill">${secondaryItems.length} tools</span>
+            </div>
+            <div class="mobile-more-grid">
+              ${secondaryItems.map((item) => renderButton(item, "mobile-more-item")).join("")}
+            </div>
+          </section>
+        </details>
+      </nav>
+    `;
+  }
+
   function renderApp() {
     if (effectiveCompanionMode() === "table") {
       renderTableDisplayApp();
@@ -2952,7 +3107,7 @@
           <button class="button-ghost" type="button" data-action="logout">Logout</button>
         </div>
       </aside>
-      <main class="main-shell">
+      <main id="main-content" class="main-shell" tabindex="-1">
         <header class="topbar">
           <div class="topbar-title">
             <div class="brand-token">D6</div>
@@ -2972,19 +3127,7 @@
           ${renderCurrentView()}
         </section>
       </main>
-      <nav class="mobile-nav" aria-label="Mobile game sections">
-        ${navItems
-          .slice(0, 5)
-          .map(
-            ([view, label, icon]) => `
-              <button class="mobile-nav-button" type="button" data-view="${view}" aria-current="${model.session.view === view ? "page" : "false"}" aria-label="Open ${escapeHtml(label)} section">
-                <span>${icon}</span>
-                <strong>${label}</strong>
-              </button>
-            `
-          )
-          .join("")}
-      </nav>
+      ${renderMobileNavigation()}
       ${renderToast()}
       ${renderDialog()}
       <span class="sr-only" aria-live="polite">${escapeHtml(model.ui.announcement)}</span>
@@ -2999,7 +3142,7 @@
     const status = sessionStatus();
     appRoot.className = `table-display-shell theme-contrast ${model.ui.reducedMotion ? "reduced-motion" : ""}`;
     appRoot.innerHTML = `
-      <main class="table-display" aria-live="polite">
+      <main id="main-content" class="table-display" tabindex="-1" aria-live="polite">
         <header class="display-header">
           <div>
             <p class="eyeline">Give And Take Table Display</p>
@@ -3020,8 +3163,6 @@
           <article class="display-side">
             <div><span>Turn</span><strong>${escapeHtml(currentTurnLabel())}</strong></div>
             <div><span>Position</span><strong>S${String(player?.position ?? 0).padStart(2, "0")}</strong></div>
-            <div><span>Cash</span><strong>${money(player?.cash ?? 0)}</strong></div>
-            <div><span>Evidence</span><strong>R${player?.riskEvidence ?? 0} E${player?.ethicsPosition ?? 0} F${player?.reflectionEvidence ?? 0}</strong></div>
           </article>
         </section>
         ${card ? renderDisplayCard(pending.cardDeck, card) : ""}
@@ -3040,7 +3181,7 @@
     const space = getSpace(pending?.spaceId && isCurrent ? pending.spaceId : `S${String(player?.position ?? 0).padStart(2, "0")}`);
     appRoot.className = `player-assist-shell theme-${model.ui.theme} ${model.ui.reducedMotion ? "reduced-motion" : ""}`;
     appRoot.innerHTML = `
-      <main class="player-assist">
+      <main id="main-content" class="player-assist" tabindex="-1">
         <header class="assist-header">
           <div>
             <p class="eyeline">Player Assist Mode</p>
@@ -3064,8 +3205,8 @@
               <p class="eyeline">Your board state</p>
               <div class="metric-grid">
                 <div class="metric-tile"><span>Space</span><strong>S${String(player.position).padStart(2, "0")}</strong></div>
-                <div class="metric-tile"><span>Cash</span><strong>${money(player.cash)}</strong></div>
-                <div class="metric-tile"><span>Value</span><strong>${money(portfolioValue(player))}</strong></div>
+                <div class="metric-tile"><span>Cash</span><strong>${renderNumberTicker(player.cash, `assist:${player.id}:cash`, "money")}</strong></div>
+                <div class="metric-tile"><span>Value</span><strong>${renderNumberTicker(portfolioValue(player), `assist:${player.id}:value`, "money")}</strong></div>
                 <div class="metric-tile"><span>Turns</span><strong>${player.turnsTaken}/${model.game.turnLimit}</strong></div>
               </div>
               <div class="evidence-strip">
@@ -3178,7 +3319,8 @@
     const readyCount = Number(draft.playerCount);
     return `
       <div class="setup-layout">
-        <section class="panel setup-session-panel">
+        <div class="setup-primary">
+          <section class="panel setup-session-panel">
           <div class="panel-header">
             <div>
               <p class="eyeline">Table setup</p>
@@ -3210,9 +3352,9 @@
             <button class="button" type="button" data-action="start-session" ${hostDisabledAttr(model.session.started)}>Start game: ${readyCount} players ready</button>
             <button class="button-secondary" type="button" data-view="play" ${model.session.started ? "" : "disabled"}>Open play table</button>
           </div>
-        </section>
+          </section>
 
-        <section class="panel player-setup-panel">
+          <section class="panel player-setup-panel">
           <div class="panel-header">
             <div>
               <p class="eyeline">Players</p>
@@ -3223,7 +3365,8 @@
           <div class="setup-card-grid">
             ${Array.from({ length: Number(draft.playerCount) }, (_, index) => renderSetupRow(index)).join("")}
           </div>
-        </section>
+          </section>
+        </div>
 
         <section class="panel board-reference">
           <div class="panel-header">
@@ -3235,7 +3378,16 @@
             <button class="mini-button" type="button" data-action="expand-board">Expand</button>
           </div>
           <figure>
-            <img src="${BOARD_IMAGE_URL}" alt="Give And Take physical game board" />
+            <img
+              src="${BOARD_IMAGE_URL}"
+              srcset="${BOARD_IMAGE_SRCSET}"
+              sizes="(max-width: 760px) calc(100vw - 50px), (max-width: 1180px) 720px, 430px"
+              width="1280"
+              height="1280"
+              loading="lazy"
+              decoding="async"
+              alt="Give And Take physical game board"
+            />
             <figcaption>Use this as the visual reference while the website tracks the playable state.</figcaption>
           </figure>
           <details class="rules-accordion setup-board-map" open>
@@ -3262,8 +3414,16 @@
     return `
           <details class="rules-accordion setup-checklist" ${complete < items.length ? "open" : ""}>
             <summary>Physical setup checklist</summary>
-            <div class="setup-checklist-meter" aria-label="${complete} of ${items.length} setup items complete">
-              <strong>${complete}/${items.length}</strong>
+            <div
+              class="setup-checklist-meter"
+              role="progressbar"
+              aria-label="${complete} of ${items.length} setup items complete"
+              aria-valuemin="0"
+              aria-valuemax="${items.length}"
+              aria-valuenow="${complete}"
+              style="--progress:${(complete / items.length) * 100}%"
+            >
+              <strong>${renderNumberTicker(complete, `setup:${setupChecklistKey()}:complete`)}/${items.length}</strong>
               <span>${complete === items.length ? "Physical table ready" : "Check the table before starting"}</span>
             </div>
             <div class="checklist">
@@ -3341,11 +3501,11 @@
         </div>
         ${renderPhaseStepper()}
         <div class="physical-layout">
-          <main class="physical-primary">
+          <div class="physical-primary">
             ${renderPhysicalTurnPanel()}
             ${renderPhysicalResolutionPanel()}
             ${renderPhysicalEvidencePanel()}
-          </main>
+          </div>
           <aside class="physical-side">
             ${renderCardLookupPanel()}
             ${renderSpaceLookupPanel()}
@@ -3385,8 +3545,8 @@
         </div>
         <div class="metric-grid player-metrics">
           <div class="metric-tile"><span>Turn</span><strong>${escapeHtml(currentTurnLabel())}</strong></div>
-          <div class="metric-tile"><span>Cash</span><strong>${money(player?.cash ?? 0)}</strong></div>
-          <div class="metric-tile"><span>Value</span><strong>${money(player ? portfolioValue(player) : 0)}</strong></div>
+          <div class="metric-tile"><span>Cash</span><strong>${renderNumberTicker(player?.cash ?? 0, `turn:${player?.id ?? "none"}:cash`, "money")}</strong></div>
+          <div class="metric-tile"><span>Value</span><strong>${renderNumberTicker(player ? portfolioValue(player) : 0, `turn:${player?.id ?? "none"}:value`, "money")}</strong></div>
           <div class="metric-tile"><span>Evidence</span><strong>R${player?.riskEvidence ?? 0} E${player?.ethicsPosition ?? 0} F${player?.reflectionEvidence ?? 0}</strong></div>
         </div>
         <div class="physical-roll-panel">
@@ -3637,8 +3797,8 @@
         </div>
         <div class="metric-grid player-metrics">
           <div class="metric-tile"><span>Position</span><strong>S${String(player?.position ?? 0).padStart(2, "0")}</strong></div>
-          <div class="metric-tile"><span>Cash</span><strong>${money(player?.cash ?? 0)}</strong></div>
-          <div class="metric-tile"><span>Value</span><strong>${money(player ? portfolioValue(player) : 0)}</strong></div>
+          <div class="metric-tile"><span>Cash</span><strong>${renderNumberTicker(player?.cash ?? 0, `player:${player?.id ?? "none"}:cash`, "money")}</strong></div>
+          <div class="metric-tile"><span>Value</span><strong>${renderNumberTicker(player ? portfolioValue(player) : 0, `player:${player?.id ?? "none"}:value`, "money")}</strong></div>
           <div class="metric-tile"><span>Evidence</span><strong>R${player?.riskEvidence ?? 0} E${player?.ethicsPosition ?? 0} F${player?.reflectionEvidence ?? 0}</strong></div>
         </div>
         <div class="dice-console">
@@ -3712,7 +3872,16 @@
         </div>
         <div class="board-map-scroll">
           <div class="board-map-stage" style="--board-zoom:${zoom}">
-            <img src="${BOARD_IMAGE_URL}" alt="Give And Take board with QR code and S00-S43 path" />
+            <img
+              src="${BOARD_IMAGE_URL}"
+              srcset="${BOARD_IMAGE_SRCSET}"
+              sizes="(max-width: 760px) 620px, 900px"
+              width="1280"
+              height="1280"
+              loading="lazy"
+              decoding="async"
+              alt="Give And Take board with QR code and S00-S43 path"
+            />
             ${boardSpaceBoxes()
               .map((box) => {
                 const [spaceId] = box;
@@ -4319,9 +4488,9 @@
           <span class="status-pill">S<strong>${String(player.position).padStart(2, "0")}</strong></span>
         </header>
         <div class="metric-grid">
-          <div class="metric-tile"><span>Cash</span><strong>${money(player.cash)}</strong></div>
-          <div class="metric-tile"><span>Value</span><strong>${money(portfolioValue(player))}</strong></div>
-          <div class="metric-tile"><span>Categories</span><strong>${uniqueHoldingCount(player)}</strong></div>
+          <div class="metric-tile"><span>Cash</span><strong>${renderNumberTicker(player.cash, `ledger:${player.id}:cash`, "money")}</strong></div>
+          <div class="metric-tile"><span>Value</span><strong>${renderNumberTicker(portfolioValue(player), `ledger:${player.id}:value`, "money")}</strong></div>
+          <div class="metric-tile"><span>Categories</span><strong>${renderNumberTicker(uniqueHoldingCount(player), `ledger:${player.id}:categories`)}</strong></div>
           <div class="metric-tile"><span>Turns</span><strong>${player.turnsTaken}/${model.game.turnLimit}</strong></div>
         </div>
         <div class="evidence-strip">
@@ -4670,7 +4839,18 @@
   }
 
   function renderToast() {
-    return model.message ? `<div class="toast" role="status">${escapeHtml(model.message)}</div>` : "";
+    if (!model.message) {
+      return "";
+    }
+    const tone = messageTone(model.message);
+    const icon = tone === "success" ? "OK" : tone === "error" ? "!" : tone === "warning" ? "?" : "GT";
+    return `
+      <div class="toast toast-${tone}" role="${tone === "error" ? "alert" : "status"}">
+        <span class="toast-symbol" aria-hidden="true">${icon}</span>
+        <span class="toast-copy">${escapeHtml(model.message)}</span>
+        <button class="toast-dismiss" type="button" data-action="dismiss-toast" aria-label="Dismiss notification">x</button>
+      </div>
+    `;
   }
 
   async function createGuestAuth(name) {
@@ -4734,29 +4914,14 @@
     const name = String(formData.get("name") ?? "").trim();
     const code = normaliseSessionCode(formData.get("code"));
     if (!name) {
-      setMessage("Enter a player name.");
-      render();
-      return;
+      throw new Error("Enter a player name.");
     }
     if (!/^GT-[0-9]{4}$/.test(code)) {
-      setMessage("Use a session code like GT-4827.");
-      render();
-      return;
+      throw new Error("Use a session code like GT-4827.");
     }
-
-    try {
-      model.auth = await createGuestAuth(name);
-      writeStore(STORAGE.auth, model.auth);
-      model.session = await loadBackendSession(code);
-      writeStore(STORAGE.session, model.session);
-      persistBackendState();
-      startBackendPoller();
-      setMessage(`Joined ${code}.`);
-      render();
-    } catch (error) {
-      setMessage(error.message ?? `Could not join ${code} through Supabase.`);
-      render();
-    }
+    const auth = await createGuestAuth(name);
+    const session = await loadBackendSession(code);
+    return { auth, session, code };
   }
 
   async function copySessionCode() {
@@ -4774,71 +4939,99 @@
   }
 
   async function handleAuthSubmit(form) {
+    if (model.ui.authPending) {
+      return;
+    }
     const formData = new FormData(form);
     const mode = form.dataset.authForm;
-
-    if (mode === "join") {
-      await joinSessionFromAuth(formData);
-      return;
-    }
-
-    if (mode === "guest") {
-      const name = String(formData.get("name") ?? "").trim();
-      if (!name) {
-        setMessage("Enter a host name.");
-        render();
-        return;
-      }
-      try {
-        model.auth = await createGuestAuth(name);
-      } catch (error) {
-        setSaveState("failed", error.message ?? "Supabase guest hosting failed.");
-        setMessage(error.message ?? "Supabase guest hosting failed.");
-        render();
-        return;
-      }
-      writeStore(STORAGE.auth, model.auth);
-      beginFreshHostSession();
-      return;
-    }
-
+    const name = String(formData.get("name") ?? "").trim();
     const email = String(formData.get("email") ?? "").trim().toLowerCase();
     const password = String(formData.get("password") ?? "");
-    if (!email || !password) {
-      setMessage("Email and password are required.");
-      render();
-      return;
-    }
-
-    if (mode === "signup") {
-      const name = String(formData.get("name") ?? "").trim();
-      if (!name || password.length < 6) {
-        setMessage("Use a name and a password of at least 6 characters.");
+    model.ui.authDraft = {
+      name: name || model.ui.authDraft.name,
+      email: email || model.ui.authDraft.email,
+      code: normaliseSessionCode(formData.get("code") ?? model.ui.authDraft.code) || "GT-"
+    };
+    model.ui.authPending = true;
+    model.ui.authError = "";
+    render();
+    try {
+      if (mode === "join") {
+        const joined = await joinSessionFromAuth(formData);
+        model.auth = joined.auth;
+        model.session = joined.session;
+        writeStore(STORAGE.auth, model.auth);
+        writeStore(STORAGE.session, model.session);
+        persistBackendState();
+        startBackendPoller();
+        model.ui.authPending = false;
+        setMessage(`Joined ${joined.code}.`);
         render();
         return;
       }
-      try {
-        model.auth = await createAccountAuth(name, email, password);
+
+      if (mode === "guest") {
+        if (!name) {
+          throw new Error("Enter a host name.");
+        }
+        model.auth = await createGuestAuth(name);
         writeStore(STORAGE.auth, model.auth);
+        model.ui.authPending = false;
         beginFreshHostSession();
         return;
-      } catch (error) {
-        setMessage(error.message ?? "Supabase account creation is unavailable right now.");
+      }
+
+      if (!email || !password) {
+        throw new Error("Email and password are required.");
+      }
+
+      if (mode === "signup") {
+        if (!name || password.length < 6) {
+          throw new Error("Use a name and a password of at least 6 characters.");
+        }
+        model.auth = await createAccountAuth(name, email, password);
+      } else {
+        model.auth = await loginAccountAuth(email, password);
+      }
+      writeStore(STORAGE.auth, model.auth);
+      model.ui.authPending = false;
+      beginFreshHostSession();
+    } catch (error) {
+      const fallback = mode === "signup"
+        ? "Supabase account creation is unavailable right now."
+        : mode === "login"
+          ? "Supabase login is unavailable or the credentials are incorrect."
+          : mode === "join"
+            ? "Could not join that table through Supabase."
+            : "Supabase guest hosting failed.";
+      const message = error.message ?? fallback;
+      model.auth = null;
+      model.ui.authError = message;
+    } finally {
+      model.ui.authPending = false;
+      if (!model.auth) {
         render();
-        return;
       }
     }
+  }
 
-    try {
-      model.auth = await loginAccountAuth(email, password);
-      writeStore(STORAGE.auth, model.auth);
-      beginFreshHostSession();
-      return;
-    } catch (error) {
-      setMessage(error.message ?? "Supabase login is unavailable or the credentials are incorrect.");
-      render();
+  async function retryBackendConnection() {
+    if (model.ui.backendRetryPending || model.ui.authPending) {
       return;
     }
+    model.ui.backendRetryPending = true;
+    model.ui.authError = "";
+    model.backend.unavailableReason = "";
+    setSaveState("connecting");
+    render();
+    await probeBackend();
+    model.ui.backendRetryPending = false;
+    if (model.backend.online) {
+      setMessage("Supabase connection restored.");
+    } else {
+      model.ui.authError = model.backend.unavailableReason || "Supabase is still unavailable. Check the connection and try again.";
+    }
+    render();
   }
 
   function adjustPlayer(playerId, field, delta, reason = "Manual correction.") {
@@ -4902,6 +5095,19 @@
   }
 
   function handleClick(event) {
+    const settingsSummary = event.target.closest("summary.settings-trigger");
+    if (settingsSummary) {
+      const settings = settingsSummary.closest("details.settings-popover");
+      if (settings instanceof HTMLDetailsElement) {
+        model.ui.settingsOpen = !settings.open;
+      }
+      return;
+    }
+    const openSettings = appRoot.querySelector(".settings-popover[open]");
+    if (openSettings instanceof HTMLDetailsElement && !event.target.closest(".settings-popover")) {
+      openSettings.open = false;
+      model.ui.settingsOpen = false;
+    }
     const button = event.target.closest("button");
     if (!button) {
       return;
@@ -4909,8 +5115,13 @@
 
     const authTab = button.dataset.authTab;
     if (authTab) {
+      if (model.ui.authPending || model.ui.backendRetryPending) {
+        return;
+      }
       model.authTab = authTab;
+      model.ui.authError = "";
       render();
+      window.setTimeout(() => document.getElementById(`auth-tab-${authTab}`)?.focus(), 0);
       return;
     }
 
@@ -4926,23 +5137,37 @@
     }
 
     switch (action) {
+      case "dismiss-toast":
+        window.clearTimeout(setMessage.timer);
+        model.message = "";
+        render();
+        break;
+      case "retry-backend":
+        void retryBackendConnection();
+        break;
       case "close-dialog":
         closeDialog();
         break;
       case "set-theme":
         model.ui.theme = button.dataset.theme || "table";
+        model.ui.settingsOpen = true;
         persistUi();
         render();
+        window.setTimeout(() => appRoot.querySelector(`[data-action="set-theme"][data-theme="${model.ui.theme}"]`)?.focus(), 0);
         break;
       case "set-companion-mode":
         model.ui.companionMode = button.dataset.mode || "host";
+        model.ui.settingsOpen = true;
         persistUi();
         render();
+        window.setTimeout(() => appRoot.querySelector(`[data-action="set-companion-mode"][data-mode="${model.ui.companionMode}"]`)?.focus(), 0);
         break;
       case "toggle-reduced-motion":
         model.ui.reducedMotion = !model.ui.reducedMotion;
+        model.ui.settingsOpen = true;
         persistUi();
         render();
+        window.setTimeout(() => appRoot.querySelector('[data-action="toggle-reduced-motion"]')?.focus(), 0);
         break;
       case "speak":
         speak(button.dataset.speak);
@@ -5342,6 +5567,16 @@
   }
 
   function handleInput(event) {
+    const authForm = event.target instanceof Element ? event.target.closest("form[data-auth-form]") : null;
+    if (authForm && event.target instanceof HTMLInputElement) {
+      if (event.target.name === "name") {
+        model.ui.authDraft.name = event.target.value;
+      }
+      if (event.target.name === "email") {
+        model.ui.authDraft.email = event.target.value;
+      }
+      model.ui.authError = "";
+    }
     if (event.target.matches('[data-draft="name"]')) {
       updateDraftFromInputs();
     }
@@ -5372,6 +5607,7 @@
       const raw = String(event.target.value ?? "").toUpperCase().replace(/[^GT0-9]/g, "");
       const digits = raw.replace(/[^0-9]/g, "").slice(0, 4);
       event.target.value = digits ? `GT-${digits}` : "GT-";
+      model.ui.authDraft.code = event.target.value;
       if (digits.length === 4) {
         event.target.setCustomValidity("");
       } else {
@@ -5388,6 +5624,39 @@
   }
 
   function handleKeydown(event) {
+    const authTabButton = event.target instanceof Element ? event.target.closest('[role="tab"][data-auth-tab]') : null;
+    if (authTabButton && ["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+      event.preventDefault();
+      const tabs = ["guest", "join", "login", "signup"];
+      const currentIndex = Math.max(0, tabs.indexOf(authTabButton.dataset.authTab));
+      const nextIndex = event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? tabs.length - 1
+          : (currentIndex + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+      model.authTab = tabs[nextIndex];
+      model.ui.authError = "";
+      render();
+      window.setTimeout(() => document.getElementById(`auth-tab-${model.authTab}`)?.focus(), 0);
+      return;
+    }
+    if (event.key === "Escape") {
+      const settings = appRoot.querySelector(".settings-popover[open]");
+      if (settings instanceof HTMLDetailsElement) {
+        event.preventDefault();
+        settings.open = false;
+        model.ui.settingsOpen = false;
+        settings.querySelector("summary")?.focus();
+        return;
+      }
+      const mobileMore = appRoot.querySelector(".mobile-more[open]");
+      if (mobileMore instanceof HTMLDetailsElement) {
+        event.preventDefault();
+        mobileMore.open = false;
+        mobileMore.querySelector("summary")?.focus();
+        return;
+      }
+    }
     if (event.key === "Escape" && model.ui.dialog) {
       event.preventDefault();
       closeDialog();
@@ -5453,7 +5722,14 @@
     }
   }
 
+  function handleToggle(event) {
+    if (event.target instanceof HTMLDetailsElement && event.target.isConnected && event.target.matches(".settings-popover")) {
+      model.ui.settingsOpen = event.target.open;
+    }
+  }
+
   function afterRender() {
+    enhanceRenderedMotion();
     if (!model.session) {
       return;
     }
@@ -5465,6 +5741,150 @@
         target?.scrollIntoView({ behavior: model.ui.reducedMotion ? "auto" : "smooth", block: "start" });
       }, 0);
     }
+  }
+
+  function motionIsReduced() {
+    return model.ui.reducedMotion || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  }
+
+  function formatTickerValue(value, format) {
+    return format === "money" ? money(value) : round(value).toLocaleString("en-IN");
+  }
+
+  function animateNumberTicker(element) {
+    const key = element.dataset.tickerKey;
+    const target = Number(element.dataset.tickerValue ?? 0);
+    const format = element.dataset.tickerFormat ?? "integer";
+    if (!key || !Number.isFinite(target)) {
+      return;
+    }
+    const previous = tickerValueHistory.get(key);
+    tickerValueHistory.set(key, target);
+    const finalText = formatTickerValue(target, format);
+    element.textContent = finalText;
+    if (previous === undefined || previous === target || motionIsReduced()) {
+      return;
+    }
+    const startedAt = performance.now();
+    const duration = 360;
+    const frame = (now) => {
+      if (!element.isConnected) {
+        return;
+      }
+      const progress = clamp((now - startedAt) / duration, 0, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      element.textContent = formatTickerValue(previous + (target - previous) * eased, format);
+      if (progress < 1) {
+        window.requestAnimationFrame(frame);
+      } else {
+        element.textContent = finalText;
+      }
+    };
+    window.requestAnimationFrame(frame);
+  }
+
+  function observeNumberTickers() {
+    const tickers = appRoot.querySelectorAll(".number-ticker");
+    tickerObserver?.disconnect();
+    tickerObserver = null;
+    if (motionIsReduced() || !("IntersectionObserver" in window)) {
+      tickers.forEach(animateNumberTicker);
+      return;
+    }
+    tickerObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        animateNumberTicker(entry.target);
+        tickerObserver.unobserve(entry.target);
+      });
+    }, { threshold: 0.2 });
+    tickers.forEach((ticker) => tickerObserver.observe(ticker));
+  }
+
+  function revealSignature() {
+    if (!model.auth) {
+      return `auth:${model.authTab}`;
+    }
+    return `${effectiveCompanionMode()}:${model.session?.view ?? "setup"}`;
+  }
+
+  function observeSectionReveals() {
+    const signature = revealSignature();
+    revealObserver?.disconnect();
+    revealObserver = null;
+    if (signature === lastRevealSignature) {
+      return;
+    }
+    lastRevealSignature = signature;
+    const selector = [
+      ".auth-visual > .table-map",
+      ".auth-visual > .kicker",
+      ".auth-visual > h1",
+      ".auth-visual > .auth-proof",
+      ".auth-card",
+      ".content > *",
+      ".display-header",
+      ".display-grid > *",
+      ".display-card",
+      ".display-price-strip",
+      ".assist-header",
+      ".assist-grid > *"
+    ].join(",");
+    const sections = Array.from(appRoot.querySelectorAll(selector));
+    if (motionIsReduced() || !("IntersectionObserver" in window)) {
+      sections.forEach((section) => section.classList.add("ui-reveal", "is-revealed"));
+      return;
+    }
+    revealObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        entry.target.classList.add("is-revealed");
+        revealObserver.unobserve(entry.target);
+      });
+    }, { threshold: 0.08, rootMargin: "0px 0px -24px" });
+    sections.forEach((section, index) => {
+      section.classList.add("ui-reveal");
+      section.style.setProperty("--reveal-delay", `${Math.min(index, 5) * 45}ms`);
+      revealObserver.observe(section);
+    });
+  }
+
+  function enhanceRenderedMotion() {
+    observeNumberTickers();
+    observeSectionReveals();
+  }
+
+  const spotlightSurfaceSelector = [
+    ".auth-card",
+    ".setup-session-panel",
+    ".physical-turn-card",
+    ".physical-resolution-card",
+    ".current-player-card",
+    ".assist-card.primary",
+    ".display-main",
+    ".score-row.winner"
+  ].join(",");
+
+  function handleSurfacePointerMove(event) {
+    if (model.ui.reducedMotion || !window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
+      return;
+    }
+    const surface = event.target instanceof Element ? event.target.closest(spotlightSurfaceSelector) : null;
+    if (!surface || !appRoot.contains(surface)) {
+      return;
+    }
+    const rect = surface.getBoundingClientRect();
+    surface.style.setProperty("--spot-x", `${event.clientX - rect.left}px`);
+    surface.style.setProperty("--spot-y", `${event.clientY - rect.top}px`);
+  }
+
+  function handleSurfacePointerOut(event) {
+    const surface = event.target instanceof Element ? event.target.closest(spotlightSurfaceSelector) : null;
+    if (!surface || (event.relatedTarget instanceof Node && surface.contains(event.relatedTarget))) {
+      return;
+    }
+    surface.style.removeProperty("--spot-x");
+    surface.style.removeProperty("--spot-y");
   }
 
   function handleSubmit(event) {
@@ -5500,21 +5920,34 @@
     appRoot.addEventListener("change", handleChange);
     appRoot.addEventListener("submit", handleSubmit);
     appRoot.addEventListener("keydown", handleKeydown);
+    appRoot.addEventListener("toggle", handleToggle, true);
+    appRoot.addEventListener("pointermove", handleSurfacePointerMove, { passive: true });
+    appRoot.addEventListener("pointerout", handleSurfacePointerOut, { passive: true });
 
     try {
       model.game = await loadGame();
       model.indexes = buildIndexes(model.game);
-      await probeBackend();
       model.auth = readStore(STORAGE.auth, null);
       if (!model.auth) {
         model.session = createSession();
         model.backend.clientRole = null;
+        render();
       } else {
         model.session = ensureSessionShape(readStore(STORAGE.session, null) ?? createSession());
         restoreBackendState();
         if (!model.backend.clientRole && !model.backend.sessionId) {
           model.backend.clientRole = "host";
         }
+        appRoot.innerHTML = `
+          <section class="boot-card" aria-live="polite">
+            <p class="kicker">Give And Take</p>
+            <h1>Connecting to your saved table...</h1>
+            <p>Restoring the Supabase session before table controls open.</p>
+          </section>
+        `;
+      }
+      await probeBackend();
+      if (model.auth) {
         saveSession();
         startBackendPoller();
       }
