@@ -3,9 +3,11 @@ window.GIVE_AND_TAKE_DATA = {
     "title": "Give And Take",
     "version": "0.4-finalized-current-spec",
     "productType": "Student-to-Investor life-path board game with QR web companion and session-code backend",
-    "targetAudience": "Students ages 14-16",
+    "targetAudience": "MYP 4-5 students, ages 14-16",
     "designStyle": "Modern board-game finance: illustrated 6000px background under vector gameplay layers, navy/gold/category-accent hierarchy, bundled Inter typography, readable school prototype",
-    "evidenceBoundary": "AI simulation verifies mechanics and balance; real student surveys verify target-audience understanding."
+    "evidenceBoundary": "AI simulation verifies mechanics and balance; real student surveys verify target-audience understanding.",
+    "turnLimit": 12,
+    "movement": "Roll one six-sided die and move forward on the linear S00-S43 path."
   },
   "prototypeContract": {
     "scope": "81-card dice-path school prototype.",
@@ -1183,6 +1185,307 @@ window.GIVE_AND_TAKE_DATA = {
       "riskPreference": 0.75,
       "ethicsPreference": 0.15,
       "cashPreference": 0.2
+    }
+  ],
+  "events": [
+    {
+      "id": "M01",
+      "title": "Tech Sector Boom",
+      "sentiment": "Bull",
+      "bias": "FOMO",
+      "priceEffects": {
+        "growth": 4,
+        "crypto": 3,
+        "index": 2,
+        "bond": -1,
+        "ethical": 1,
+        "trend": 3
+      }
+    },
+    {
+      "id": "M02",
+      "title": "Regulatory Shock",
+      "sentiment": "Bear",
+      "bias": "Panic",
+      "priceEffects": {
+        "crypto": -7,
+        "trend": -6,
+        "growth": -3,
+        "index": -2,
+        "bond": 1
+      }
+    },
+    {
+      "id": "M03",
+      "title": "Inflation Surge",
+      "sentiment": "Bear",
+      "bias": "Panic",
+      "priceEffects": {
+        "bond": -2,
+        "growth": -2,
+        "index": -1,
+        "crypto": 1,
+        "ethical": -1
+      }
+    },
+    {
+      "id": "M04",
+      "title": "Global Trade Recovery",
+      "sentiment": "Bull",
+      "bias": "Herd",
+      "priceEffects": {
+        "index": 3,
+        "growth": 2,
+        "ethical": 2,
+        "crypto": 1,
+        "trend": 1
+      }
+    },
+    {
+      "id": "M05",
+      "title": "Supply Chain Disruption",
+      "sentiment": "Bear",
+      "bias": "Panic",
+      "priceEffects": {
+        "growth": -4,
+        "index": -3,
+        "ethical": -2,
+        "bond": 1,
+        "crypto": -1,
+        "trend": -2
+      }
+    },
+    {
+      "id": "M06",
+      "title": "Green Policy Incentive",
+      "sentiment": "Bull",
+      "bias": "None",
+      "priceEffects": {
+        "ethical": 4,
+        "index": 1,
+        "growth": 1,
+        "crypto": -1
+      }
+    },
+    {
+      "id": "M07",
+      "title": "Social Media Hype",
+      "sentiment": "Bull",
+      "bias": "FOMO",
+      "priceEffects": {
+        "trend": 8,
+        "crypto": 5,
+        "growth": 2
+      }
+    },
+    {
+      "id": "M08",
+      "title": "Scam Warning",
+      "sentiment": "Bear",
+      "bias": "Panic",
+      "priceEffects": {
+        "trend": -8,
+        "crypto": -5,
+        "growth": -1,
+        "index": -1,
+        "bond": 1,
+        "ethical": 1
+      }
+    },
+    {
+      "id": "M09",
+      "title": "Interest Rate Cut",
+      "sentiment": "Bull",
+      "bias": "Overconfidence",
+      "priceEffects": {
+        "growth": 3,
+        "index": 2,
+        "bond": 1,
+        "crypto": 2,
+        "ethical": 1,
+        "trend": 2
+      }
+    },
+    {
+      "id": "M10",
+      "title": "Interest Rate Hike",
+      "sentiment": "Bear",
+      "bias": "Panic",
+      "priceEffects": {
+        "growth": -4,
+        "index": -2,
+        "bond": -1,
+        "crypto": -3,
+        "ethical": -1,
+        "trend": -3
+      }
+    },
+    {
+      "id": "M11",
+      "title": "Currency Volatility",
+      "sentiment": "Neutral",
+      "bias": "Herd",
+      "priceEffects": {
+        "index": -2,
+        "growth": -1,
+        "crypto": 2,
+        "ethical": -1,
+        "trend": 1
+      }
+    },
+    {
+      "id": "M12",
+      "title": "Consumer Confidence Rise",
+      "sentiment": "Bull",
+      "bias": "FOMO",
+      "priceEffects": {
+        "growth": 3,
+        "index": 2,
+        "ethical": 1,
+        "trend": 2,
+        "crypto": 1
+      }
+    },
+    {
+      "id": "M13",
+      "title": "Consumer Confidence Drop",
+      "sentiment": "Bear",
+      "bias": "Panic",
+      "priceEffects": {
+        "growth": -3,
+        "index": -2,
+        "ethical": -1,
+        "trend": -3,
+        "crypto": -2,
+        "bond": 1
+      }
+    },
+    {
+      "id": "M14",
+      "title": "Infrastructure Push",
+      "sentiment": "Bull",
+      "bias": "None",
+      "priceEffects": {
+        "bond": 2,
+        "index": 1,
+        "ethical": 2,
+        "growth": 1
+      }
+    },
+    {
+      "id": "M15",
+      "title": "Data Privacy Scandal",
+      "sentiment": "Bear",
+      "bias": "Panic",
+      "priceEffects": {
+        "growth": -3,
+        "crypto": -2,
+        "trend": -3,
+        "index": -1,
+        "ethical": 1
+      }
+    },
+    {
+      "id": "M16",
+      "title": "Clean Energy Breakthrough",
+      "sentiment": "Bull",
+      "bias": "FOMO",
+      "priceEffects": {
+        "ethical": 5,
+        "growth": 2,
+        "index": 1,
+        "trend": 1
+      }
+    },
+    {
+      "id": "M17",
+      "title": "Market Correction",
+      "sentiment": "Bear",
+      "bias": "Panic",
+      "priceEffects": {
+        "growth": -5,
+        "crypto": -6,
+        "trend": -7,
+        "index": -3,
+        "ethical": -2,
+        "bond": 1
+      }
+    },
+    {
+      "id": "M18",
+      "title": "Quiet Market",
+      "sentiment": "Neutral",
+      "bias": "None",
+      "priceEffects": {
+        "bond": 1,
+        "index": 1,
+        "ethical": 1,
+        "trend": -1
+      }
+    }
+  ],
+  "starterProfiles": [
+    {
+      "id": "SP01",
+      "title": "Budget Builder",
+      "cash": 105000,
+      "trait": "Keeps liquidity",
+      "bonus": "Start with +1 risk-management evidence if ending Turn 1 with INR 20000 cash."
+    },
+    {
+      "id": "SP02",
+      "title": "Opportunity Hunter",
+      "cash": 100000,
+      "trait": "Likes growth",
+      "bonus": "First Growth or Index buy costs INR 2000 less."
+    },
+    {
+      "id": "SP03",
+      "title": "Ethical Analyst",
+      "cash": 98000,
+      "trait": "Values impact",
+      "bonus": "Start one step right on the ethics track."
+    },
+    {
+      "id": "SP04",
+      "title": "Balanced Planner",
+      "cash": 100000,
+      "trait": "Diversifies early",
+      "bonus": "If holding three categories by Turn 3, gain +2 reflection evidence."
+    },
+    {
+      "id": "SP05",
+      "title": "Trend Chaser",
+      "cash": 102000,
+      "trait": "Tempted by hype",
+      "bonus": "Trend buy costs INR 1000 less, but first Trend loss costs one extra risk point."
+    }
+  ],
+  "quickReference": [
+    {
+      "id": "Q01",
+      "title": "Turn Order",
+      "text": "Roll one die, move on S00-S43, resolve the landing space, then log one decision."
+    },
+    {
+      "id": "Q02",
+      "title": "Finance Terms",
+      "text": "Volatility, diversification, liquidity, risk-return, FOMO, ESG."
+    },
+    {
+      "id": "Q03",
+      "title": "Scoring",
+      "text": "Value 25, diversification 20, risk 15, ethics 20, reflection 20."
+    },
+    {
+      "id": "Q04",
+      "title": "Choice Spaces",
+      "text": "Safe adds risk evidence, responsible adds ethics, risky may advance one extra space without resolving it this turn."
+    },
+    {
+      "id": "Q05",
+      "title": "Host Role",
+      "text": "Reveal events, track prices, export host evidence. Player boards hold portfolio records and final scoring."
     }
   ]
 };

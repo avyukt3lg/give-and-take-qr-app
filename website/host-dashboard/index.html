@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#081412" />
+    <meta name="theme-color" content="#0b1110" />
     <meta name="color-scheme" content="dark light" />
     <meta name="application-name" content="Give And Take" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -41,27 +41,44 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23081412'/%3E%3Cpath d='M12 12h40v40H12z' fill='none' stroke='%23d8ad55' stroke-width='2'/%3E%3Ctext x='32' y='39' text-anchor='middle' font-family='Arial,sans-serif' font-size='22' font-weight='800' fill='%23f4e7c8'%3EGT%3C/text%3E%3C/svg%3E"
     />
-    <link rel="stylesheet" href="styles.css?v=20260713-9" />
+    <!-- Boot performance: start the slow work during HTML parse instead of after the script chain. -->
+    <link rel="preconnect" href="https://esm.sh" crossorigin />
+    <link rel="dns-prefetch" href="https://esm.sh" />
+    <link rel="preload" href="game-data.js" as="script" />
+    <link rel="preload" href="app.js?v=20260717-17" as="script" />
+    <link rel="preload" href="../../game_data/game_config.json?v=20260717-17" as="fetch" crossorigin />
+    <link rel="stylesheet" href="styles.css?v=20260717-17" />
+    <noscript>
+      <style>
+        #app,
+        .skip-link {
+          display: none;
+        }
+      </style>
+    </noscript>
   </head>
   <body>
     <a class="skip-link" href="#main-content">Skip to game controls</a>
     <noscript>
-      <main id="main-content" class="no-script">
+      <main id="no-script-content" class="no-script">
         <h1>Give And Take</h1>
         <p>This QR app needs JavaScript to run the game session.</p>
       </main>
     </noscript>
 
     <div id="app" class="boot-shell">
-      <section class="boot-card">
+      <main id="main-content" class="boot-card" tabindex="-1">
         <p class="kicker">Give And Take</p>
         <h1>Loading game rules...</h1>
         <p>Reading the current S00-S43 prototype contract.</p>
-      </section>
+      </main>
     </div>
+
+    <div id="live-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+    <div id="live-alert" class="sr-only" role="alert" aria-live="assertive" aria-atomic="true"></div>
 
     <script src="game-data.js"></script>
     <script src="supabase-config.js"></script>
-    <script src="app.js?v=20260713-9"></script>
+    <script src="app.js?v=20260717-17"></script>
   </body>
 </html>

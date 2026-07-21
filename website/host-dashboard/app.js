@@ -1,7 +1,8 @@
 (() => {
   "use strict";
 
-  const CONFIG_URL = "../../game_data/game_config.json";
+  const CONFIG_VERSION = "20260717-17";
+  const CONFIG_URL = `../../game_data/game_config.json?v=${CONFIG_VERSION}`;
   const BOARD_IMAGE_URL = "../../outputs/final_assets/board/give_and_take_board_web_1280.webp";
   const BOARD_IMAGE_SRCSET = [
     "../../outputs/final_assets/board/give_and_take_board_web_640.webp 640w",
@@ -28,13 +29,13 @@
   };
 
   const navItems = [
-    ["setup", "Setup", "TB"],
-    ["play", "Play", "D6"],
-    ["market", "Market", "MK"],
-    ["players", "Ledger", "PL"],
-    ["scoring", "Scores", "SC"],
-    ["export", "Export", "EX"],
-    ["rules", "Help", "HP"]
+    ["setup", "Setup", "sliders"],
+    ["play", "Play", "dice"],
+    ["market", "Market", "trend"],
+    ["players", "Ledger", "book"],
+    ["scoring", "Scores", "trophy"],
+    ["export", "Export", "download"],
+    ["rules", "Help", "help"]
   ];
 
   const playerTokens = ["#d7b45b", "#3fb6a6", "#da6b4f", "#7d6bd6", "#5aa36f"];
@@ -138,7 +139,6 @@
     },
     ui: {
       theme: readStore(STORAGE.ui, {})?.theme ?? (window.matchMedia?.("(prefers-color-scheme: light)")?.matches ? "classroom" : "table"),
-      diceMode: readStore(STORAGE.ui, {})?.diceMode ?? "physical",
       companionMode: readStore(STORAGE.ui, {})?.companionMode ?? "host",
       reducedMotion: Boolean(readStore(STORAGE.ui, {})?.reducedMotion ?? false),
       boardExpanded: false,
@@ -165,6 +165,7 @@
       authPending: false,
       backendRetryPending: false,
       settingsOpen: false,
+      mobileReferenceOpen: false,
       authError: "",
       authDraft: {
         name: "",
@@ -179,8 +180,8 @@
 
   const tickerValueHistory = new Map();
   let tickerObserver = null;
-  let revealObserver = null;
-  let lastRevealSignature = "";
+  let lastAnnouncedMessage = "";
+  let lastAnnouncedGameplay = "";
 
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
   const round = (value) => Math.round(value);
@@ -206,7 +207,6 @@
   function persistUi() {
     writeStore(STORAGE.ui, {
       theme: model.ui.theme,
-      diceMode: model.ui.diceMode,
       boardZoom: model.ui.boardZoom,
       companionMode: model.ui.companionMode,
       reducedMotion: model.ui.reducedMotion,
@@ -296,10 +296,13 @@
       return { state: "saving", label: "Saving to Supabase", detail: "Writing the latest table state to Supabase.", action: "" };
     }
     if (model.backend.saveState === "failed") {
+      const activeTable = Boolean(model.auth && model.session?.started);
       return {
         state: "failed",
-        label: "Supabase error",
-        detail: model.backend.unavailableReason || "Supabase did not accept the latest table state.",
+        label: activeTable ? "Shared sync offline" : "Shared table unavailable",
+        detail: activeTable
+          ? "This device kept the current table. Retry before switching devices."
+          : "The shared table service could not be reached. Retry to host or join.",
         action: `<button class="mini-button" type="button" data-action="retry-sync">Retry</button>`
       };
     }
@@ -311,8 +314,8 @@
     }
     return {
       state: "failed",
-      label: "Supabase error",
-      detail: model.backend.unavailableReason || "Connect to Supabase before hosting or joining a table.",
+      label: "Shared table unavailable",
+      detail: "The shared table service could not be reached. Retry to host or join.",
       action: `<button class="mini-button" type="button" data-action="retry-sync">Retry</button>`
     };
   }
@@ -653,6 +656,93 @@
     };
   }
 
+  function focusSelectorForElement(element) {
+    if (!(element instanceof HTMLElement)) {
+      return "";
+    }
+    if (element.id) {
+      return `#${CSS.escape(element.id)}`;
+    }
+    const authForm = element.closest("form[data-auth-form]");
+    if (authForm && element.getAttribute("name")) {
+      return `form[data-auth-form="${CSS.escape(authForm.dataset.authForm ?? "")}"] [name="${CSS.escape(element.getAttribute("name"))}"]`;
+    }
+    const stableAttributes = [
+      "data-action",
+      "data-view",
+      "data-auth-tab",
+      "data-market-filter",
+      "data-physical-check",
+      "data-setup-check",
+      "data-assist-player",
+      "data-draft",
+      "data-index",
+      "data-player-id",
+      "data-card-id",
+      "data-space-id",
+      "data-theme",
+      "data-mode",
+      "data-zoom"
+    ];
+    const attributes = stableAttributes
+      .filter((name) => element.hasAttribute(name))
+      .map((name) => `[${name}="${CSS.escape(element.getAttribute(name) ?? "")}"]`)
+      .join("");
+    if (attributes) {
+      return `${element.tagName.toLowerCase()}${attributes}`;
+    }
+    if (element.matches(".mobile-more > summary")) {
+      return ".mobile-more > summary";
+    }
+    const stableClass = [...element.classList].find((name) => !["active", "selected", "checked", "done", "completed", "winner"].includes(name));
+    return stableClass ? `${element.tagName.toLowerCase()}.${CSS.escape(stableClass)}` : "";
+  }
+
+  function supportsTextSelection(element) {
+    return element instanceof HTMLTextAreaElement ||
+      (element instanceof HTMLInputElement && ["text", "search", "tel", "url", "password"].includes(element.type));
+  }
+
+  function captureFocusState() {
+    const active = document.activeElement;
+    if (!(active instanceof HTMLElement) || active === document.body || !appRoot.contains(active)) {
+      return null;
+    }
+    const selector = focusSelectorForElement(active);
+    if (!selector) {
+      return null;
+    }
+    const matches = [...document.querySelectorAll(selector)];
+    return {
+      selector,
+      index: Math.max(0, matches.indexOf(active)),
+      selection: supportsTextSelection(active)
+        ? { start: active.selectionStart, end: active.selectionEnd, direction: active.selectionDirection }
+        : null
+    };
+  }
+
+  function restoreFocusState(state) {
+    if (!state?.selector) {
+      return;
+    }
+    window.setTimeout(() => {
+      const matches = [...document.querySelectorAll(state.selector)];
+      const target = matches[state.index] ?? matches[0];
+      if (!(target instanceof HTMLElement) || target.matches(":disabled")) {
+        return;
+      }
+      const modal = document.querySelector("dialog:modal");
+      if (modal && !modal.contains(target)) {
+        return;
+      }
+      target.focus({ preventScroll: true });
+      if (state.selection && supportsTextSelection(target)) {
+        target.setSelectionRange(state.selection.start, state.selection.end, state.selection.direction);
+      }
+    }, 0);
+  }
+
   function openDialog(dialog) {
     const active = document.activeElement;
     if (active instanceof HTMLElement) {
@@ -667,20 +757,93 @@
       }
     }
     model.ui.dialog = dialog;
-    render();
-    window.setTimeout(() => {
-      appRoot.querySelector(".dialog-card button, .dialog-card input, .dialog-card textarea, .dialog-card select")?.focus();
-    }, 0);
+    render({ preserveFocus: false });
   }
 
   function closeDialog() {
     const returnFocusSelector = model.ui.dialogReturnFocusSelector;
     model.ui.dialog = null;
     model.ui.dialogReturnFocusSelector = "";
-    render();
+    render({ preserveFocus: false });
     if (returnFocusSelector) {
       window.setTimeout(() => appRoot.querySelector(returnFocusSelector)?.focus(), 0);
     }
+  }
+
+  function focusAfterRender(selector, options = {}) {
+    if (!selector) {
+      return;
+    }
+    window.setTimeout(() => {
+      const target = document.querySelector(selector);
+      if (!(target instanceof HTMLElement)) {
+        return;
+      }
+      target.focus({ preventScroll: true });
+      if (options.caretToEnd && supportsTextSelection(target)) {
+        target.setSelectionRange(target.value.length, target.value.length);
+      }
+    }, 0);
+  }
+
+  function renderAndRestoreFocus(selector, options = {}) {
+    render({ preserveFocus: false });
+    focusAfterRender(selector, options);
+  }
+
+  function focusFirstAvailable(selectors, options = {}) {
+    window.setTimeout(() => {
+      for (const selector of selectors) {
+        const target = appRoot.querySelector(selector);
+        if (!(target instanceof HTMLElement) || target.matches(":disabled") || !target.getClientRects().length) {
+          continue;
+        }
+        target.focus({ preventScroll: true });
+        if (options.caretToEnd && supportsTextSelection(target)) {
+          target.setSelectionRange(target.value.length, target.value.length);
+        }
+        return;
+      }
+      const main = appRoot.querySelector("#main-content");
+      if (main instanceof HTMLElement) {
+        main.focus({ preventScroll: true });
+      }
+    }, 0);
+  }
+
+  function focusNextPhysicalAction() {
+    const pending = model.session?.pendingResolution;
+    if (model.session?.gameOver || model.session?.view === "scoring") {
+      focusFirstAvailable(['[data-view="scoring"]', "#main-content"]);
+      return;
+    }
+    if (!pending) {
+      focusFirstAvailable(["#physicalDie", "#main-content"]);
+      return;
+    }
+    if (!pending.physicalPawnConfirmed) {
+      focusFirstAvailable(['[data-action="confirm-pawn-space"]', "#main-content"]);
+      return;
+    }
+    if (pending.cardDeck && !pending.cardId) {
+      focusFirstAvailable(["#physicalCardId", '[data-action="use-next-card"]', "#main-content"], { caretToEnd: true });
+      return;
+    }
+    if (!pending.completed) {
+      focusFirstAvailable([
+        '[data-action="buy-investment"]',
+        '[data-action="pass-investment"]',
+        '[data-action="choose-ethics"]',
+        '[data-action="resolve-action"]',
+        '[data-action="score-reflection"]',
+        '[data-action="request-choice"]',
+        '[data-action="complete-rebalance"]',
+        '[data-action="complete-generic"]',
+        "#main-content"
+      ]);
+      return;
+    }
+    focusFirstAvailable(["#turnNote", '[data-action="end-turn"]', "#main-content"], { caretToEnd: true });
   }
 
   function getClientId() {
@@ -803,18 +966,6 @@
     model.backend.sessionId = stored.sessionId ?? null;
     model.backend.revision = Number(stored.revision ?? 0);
     model.backend.clientRole = stored.clientRole ?? null;
-  }
-
-  function publicAuth(auth = model.auth) {
-    if (!auth) {
-      return null;
-    }
-    return {
-      id: auth.id,
-      mode: auth.mode,
-      name: auth.name,
-      email: auth.email ?? null
-    };
   }
 
   async function apiRequest(path, options = {}) {
@@ -999,7 +1150,7 @@
       setSaveState("synced");
     } catch (error) {
       setSaveState("failed", error.message ?? "Online save failed.");
-      setMessage("Supabase save failed. Retry before continuing important table actions.");
+      announce("Shared sync is offline. This device kept the current table; retry before switching devices.");
     } finally {
       model.backend.saving = false;
       if (model.backend.needsSave) {
@@ -1030,7 +1181,17 @@
       const record = Array.isArray(data) ? data[0] : data;
       const remoteRevision = Number(record.revision ?? 0);
       if (remoteRevision > model.backend.revision) {
+        const previousPhase = model.session?.phase ?? "";
+        const previousPlayerId = model.session?.players?.[model.session.currentPlayerIndex]?.id ?? "";
         model.session = applySupabaseRecord(record);
+        const remotePlayer = model.session.players?.[model.session.currentPlayerIndex];
+        const playerChanged = previousPlayerId !== (remotePlayer?.id ?? "");
+        const phaseChanged = previousPhase !== model.session.phase;
+        if (playerChanged) {
+          announce(`Table updated. Turn moved to ${remotePlayer?.name ?? "the next player"}. Phase ${model.session.phase}.`);
+        } else if (phaseChanged) {
+          announce(`Table updated. ${remotePlayer?.name ?? "The current player"} is now in phase ${model.session.phase}.`);
+        }
         writeStore(STORAGE.session, model.session);
         render();
       }
@@ -1101,7 +1262,7 @@
 
   async function loadGame() {
     try {
-      const response = await fetch(CONFIG_URL, { cache: "no-store" });
+      const response = await fetch(CONFIG_URL, { cache: "default" });
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
@@ -1286,11 +1447,11 @@
   function setMessage(message) {
     model.message = message;
     window.clearTimeout(setMessage.timer);
-    if (message) {
+    if (message && messageTone(message) !== "error") {
       setMessage.timer = window.setTimeout(() => {
         model.message = "";
         render();
-      }, messageTone(message) === "error" ? 8000 : 4200);
+      }, messageTone(message) === "warning" ? 6500 : 4200);
     }
   }
 
@@ -1407,7 +1568,11 @@
     const lookup = findCardByPrintedId(rawId);
     if (!lookup) {
       setMessage(`No printed card found for ${normaliseCardId(rawId)}.`);
-      render();
+      if (model.session.pendingResolution) {
+        renderAndRestoreFocus("#physicalCardId", { caretToEnd: true });
+      } else {
+        render();
+      }
       return;
     }
     const pending = model.session.pendingResolution;
@@ -1443,6 +1608,7 @@
     }
     saveSession();
     render();
+    focusNextPhysicalAction();
   }
 
   function openCardLookupDialog(deckKey, card, warnings = []) {
@@ -1470,7 +1636,7 @@
   function setView(view) {
     model.session.view = view;
     saveSession();
-    render();
+    render({ preserveFocus: false });
     window.requestAnimationFrame(() => {
       const main = appRoot.querySelector("#main-content");
       if (main instanceof HTMLElement) {
@@ -1559,7 +1725,9 @@
     clearPhysicalDieDraft();
     logActivity(`Session started with ${players.length} players.`);
     saveSession();
-    render();
+    render({ preserveFocus: false });
+    focusAfterRender("#main-content");
+    window.requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: "auto" }));
   }
 
   function resetSession() {
@@ -1585,7 +1753,9 @@
     writeStore(STORAGE.backend, null);
     saveSession();
     startBackendPoller();
-    render();
+    render({ preserveFocus: false });
+    focusAfterRender("#main-content");
+    window.requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: "auto" }));
   }
 
   function updateDraftFromInputs() {
@@ -1639,8 +1809,10 @@
       confirmed: false
     };
     beginResolution(player, getSpace(`S${String(nextPosition).padStart(2, "0")}`), die, fromPosition);
+    announce(`${player.name} rolled ${die} and moves to S${String(nextPosition).padStart(2, "0")}. Confirm the physical pawn position.`);
     saveSession();
     render();
+    focusNextPhysicalAction();
   }
 
   function beginResolution(player, space, die, fromPosition = player.position) {
@@ -1747,6 +1919,7 @@
     if (pending.cardDeck !== "events") {
       model.session.physicalChecks.priceTrackerUpdated = true;
     }
+    announce("Space resolved. Add an evidence note and finish the physical checklist before ending the turn.");
   }
 
   function cancelRoll() {
@@ -1892,6 +2065,7 @@
     completeResolution(`${player.name} bought ${card.title} for ${money(cost)}.`);
     saveSession();
     render();
+    focusNextPhysicalAction();
   }
 
   function passInvestment(cardId) {
@@ -1902,6 +2076,7 @@
     completeResolution("Investment passed. Cash kept liquid.");
     saveSession();
     render();
+    focusNextPhysicalAction();
   }
 
   function investmentCost(player, card) {
@@ -1969,6 +2144,7 @@
     completeResolution(result);
     saveSession();
     render();
+    focusNextPhysicalAction();
   }
 
   function resolveActionCard(assetId = "") {
@@ -2044,6 +2220,7 @@
     completeResolution(result);
     saveSession();
     render();
+    focusNextPhysicalAction();
   }
 
   function bestHolding(player) {
@@ -2072,6 +2249,7 @@
     completeResolution(`Reflection evidence scored +${clamp(Number(score), 0, 10)}.`);
     saveSession();
     render();
+    focusNextPhysicalAction();
   }
 
   function applyChoice(choiceIndex) {
@@ -2118,7 +2296,6 @@
     }
     completeResolution(result);
     saveSession();
-    render();
   }
 
   function sellHolding(playerId, assetId, silent = false) {
@@ -2149,6 +2326,7 @@
     completeResolution("Rebalance completed: +1 risk-management evidence.");
     saveSession();
     render();
+    focusNextPhysicalAction();
   }
 
   function endTurn() {
@@ -2200,12 +2378,15 @@
       session.gameOver = true;
       session.phase = "Scoring";
       session.view = "scoring";
+      announce("All players have finished. Final scoring is ready.");
     } else {
       advanceCurrentPlayer();
       session.phase = "Roll";
+      announce(`Turn ended. ${currentPlayer()?.name ?? "The next player"} is ready to roll.`);
     }
     saveSession();
     render();
+    focusNextPhysicalAction();
   }
 
   function applyProfileEndTurnBonuses(player) {
@@ -2417,7 +2598,8 @@
           <meta charset="utf-8" />
           <title>${escapeHtml(model.session.code)} Give And Take Summary</title>
           <style>
-            body { font-family: Inter, Arial, sans-serif; margin: 24px; color: #172026; }
+            @font-face { font-family: "Source Sans 3"; src: url("../../assets/fonts/SourceSans3Variable.woff2") format("woff2"); font-weight: 200 900; font-display: swap; }
+            body { font-family: "Source Sans 3", Arial, sans-serif; margin: 24px; color: #172026; }
             h1, h2 { margin-bottom: 6px; }
             table { width: 100%; border-collapse: collapse; margin: 18px 0; }
             th, td { border: 1px solid #9a8a68; padding: 8px; text-align: left; font-size: 12px; }
@@ -2456,7 +2638,6 @@
                 .join("")}
             </tbody>
           </table>
-          <script>window.print();</script>
         </body>
       </html>
     `;
@@ -2466,8 +2647,19 @@
       render();
       return;
     }
+    let printRequested = false;
+    const requestPrint = () => {
+      if (printRequested || win.closed) {
+        return;
+      }
+      printRequested = true;
+      win.focus();
+      win.print();
+    };
+    win.addEventListener("load", requestPrint, { once: true });
     win.document.write(html);
     win.document.close();
+    window.setTimeout(requestPrint, 250);
   }
 
   function missingEvidence(player) {
@@ -2489,50 +2681,59 @@
   function syncDocumentTheme() {
     const theme = effectiveCompanionMode() !== "table" && model.ui.theme === "classroom" ? "classroom" : "table";
     document.documentElement.dataset.pageTheme = theme;
+    document.documentElement.classList.toggle("theme-classroom", theme === "classroom");
+    document.documentElement.classList.toggle("reduced-motion", model.ui.reducedMotion);
     document.body.dataset.pageTheme = theme;
+    document.body.classList.toggle("theme-classroom", theme === "classroom");
     const themeMeta = document.querySelector('meta[name="theme-color"]');
-    themeMeta?.setAttribute("content", theme === "classroom" ? "#f3ead7" : "#081412");
+    const tableThemeColor = model.ui.theme === "contrast" ? "#050807" : "#0b1110";
+    themeMeta?.setAttribute("content", theme === "classroom" ? "#e8e1d2" : tableThemeColor);
   }
 
-  function render() {
+  function render(options = {}) {
+    const focusState = options.preserveFocus === false ? null : captureFocusState();
     syncDocumentTheme();
     if (model.configError) {
       renderFatal(model.configError);
+      focusAfterRender("#main-content");
       return;
     }
     if (!model.game) {
       appRoot.innerHTML = `
-        <section class="boot-card">
+        <main id="main-content" class="boot-card" tabindex="-1">
           <p class="kicker">Give And Take</p>
           <h1>Loading game rules...</h1>
           <p>Reading ${CONFIG_URL}.</p>
-        </section>
+        </main>
       `;
+      restoreFocusState(focusState);
       return;
     }
     if (!model.auth) {
       renderAuth();
       afterRender();
+      restoreFocusState(focusState);
       return;
     }
     renderApp();
     afterRender();
+    restoreFocusState(focusState);
   }
 
   function renderFatal(error) {
     appRoot.className = "boot-shell";
     appRoot.innerHTML = `
-        <section class="boot-card">
+        <main id="main-content" class="boot-card" tabindex="-1" role="alert" aria-live="assertive">
           <p class="kicker">Give And Take</p>
           <h1>Game config is not available.</h1>
           <p>${escapeHtml(error.message ?? error)}</p>
           <p>Open the hosted app at <strong>${PRODUCTION_APP_URL}</strong>, or run <strong>npm run start:qr</strong> from the repository root for local testing.</p>
-        </section>
+        </main>
       `;
   }
 
   function renderAuth() {
-    appRoot.className = `auth-page theme-${model.ui.theme}`;
+    appRoot.className = `auth-page theme-${model.ui.theme} ${model.ui.reducedMotion ? "reduced-motion" : ""}`;
     appRoot.innerHTML = `
       <section class="auth-visual" aria-labelledby="entry-title">
         <div class="table-map">
@@ -2549,19 +2750,19 @@
           <div class="map-badge">S00-S43</div>
         </div>
         <p class="kicker">Give And Take</p>
-        <h1 id="entry-title">Open the QR table for the physical board game.</h1>
-        <p>Host the table, join with a GT code, track fictional cash and prices, then export the session evidence.</p>
+        <h1 id="entry-title">Keep the board physical. Run the table here.</h1>
+        <p>Create or join a GT session. The app handles turn checks, shared prices, and evidence while players stay on the printed board.</p>
         <div class="auth-proof" aria-label="Game flow">
-          <div class="proof-tile"><strong>D6</strong><span>Roll and move on the printed board.</span></div>
-          <div class="proof-tile"><strong>GT</strong><span>Share one table code with players.</span></div>
-          <div class="proof-tile"><strong>100</strong><span>Score value, diversification, risk, ethics, and reflection.</span></div>
+          <div class="proof-tile"><strong>01</strong><span>Set the table and share one GT code.</span></div>
+          <div class="proof-tile"><strong>02</strong><span>Move pawns and draw cards physically.</span></div>
+          <div class="proof-tile"><strong>03</strong><span>Track decisions, prices, and final evidence.</span></div>
         </div>
         <p class="privacy-line">Uses fictional cash and gameplay notes only. No real investment data.</p>
       </section>
       <main id="main-content" class="auth-card" tabindex="-1">
         <div class="auth-card-head">
           <div>
-            <p class="eyeline">Table entry</p>
+            <p class="eyeline">Give And Take · Table entry</p>
             <h2>${model.authTab === "join" ? "Join a table" : model.authTab === "signup" ? "Create account" : model.authTab === "login" ? "Login" : "Host a table"}</h2>
           </div>
           ${renderSettingsControl({ includeMode: false, label: "Display" })}
@@ -2571,7 +2772,7 @@
             .map(
               (tab) => `
                 <button
-                  class="auth-tab"
+                  class="auth-tab ${tab === "guest" || tab === "join" ? "auth-tab-table" : "auth-tab-account"}"
                   id="auth-tab-${tab}"
                   type="button"
                   role="tab"
@@ -2581,13 +2782,13 @@
                   tabindex="${model.authTab === tab ? "0" : "-1"}"
                   ${model.ui.authPending || model.ui.backendRetryPending ? "disabled" : ""}
                 >
-                  ${tab === "signup" ? "Sign up" : tab === "login" ? "Login" : tab === "guest" ? "Host" : "Join"}
+                  ${tab === "signup" ? "Create account" : tab === "login" ? "Log in" : tab === "guest" ? "Host table" : "Join table"}
                 </button>
               `
             )
             .join("")}
         </div>
-        <div id="auth-panel" role="tabpanel" aria-labelledby="auth-tab-${model.authTab}" tabindex="0">
+        <div id="auth-panel" role="tabpanel" aria-labelledby="auth-tab-${model.authTab}">
           ${renderAuthPanel()}
         </div>
       </main>
@@ -2700,12 +2901,16 @@
     const includeMode = options.includeMode ?? true;
     const label = options.label ?? "Settings";
     return `
-      <details class="settings-popover" ${model.ui.settingsOpen ? "open" : ""}>
-        <summary class="settings-trigger" aria-label="Open display and mode settings">
+      <div class="settings-popover">
+        <button class="settings-trigger" type="button" popovertarget="display-settings-popover" aria-label="Open display and mode settings">
           <span aria-hidden="true">${heroIcon("cog")}</span>
           <strong>${escapeHtml(label)}</strong>
-        </summary>
-        <div class="settings-panel">
+        </button>
+        <div class="settings-panel theme-${escapeHtml(model.ui.theme)}" id="display-settings-popover" popover="auto">
+          <div class="settings-panel-head">
+            <strong>Game room controls</strong>
+            <button class="settings-close" type="button" data-action="close-settings">Close</button>
+          </div>
           <section class="settings-group">
             <div>
               <p class="eyeline">Display theme</p>
@@ -2727,7 +2932,7 @@
               : ""
           }
         </div>
-      </details>
+      </div>
     `;
   }
 
@@ -2738,12 +2943,25 @@
     return `<svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="${paths[name] ?? paths.cog}"/></svg>`;
   }
 
+  function navigationIcon(name) {
+    const icons = {
+      sliders: '<path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="10" cy="18" r="2"/>',
+      dice: '<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 8h.01M16 8h.01M12 12h.01M8 16h.01M16 16h.01"/>',
+      trend: '<path d="m3 17 6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
+      book: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V4H6.5A2.5 2.5 0 0 0 4 6.5v13Z"/><path d="M8 8h8M8 12h6"/>',
+      trophy: '<path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0V4Z"/><path d="M7 6H4v2a4 4 0 0 0 4 4M17 6h3v2a4 4 0 0 1-4 4"/>',
+      download: '<path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 21h14"/>',
+      help: '<circle cx="12" cy="12" r="9"/><path d="M9.8 9a2.4 2.4 0 1 1 3.6 2.1c-.9.5-1.4 1.1-1.4 2.1M12 17h.01"/>'
+    };
+    return `<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name] ?? icons.help}</svg>`;
+  }
+
   function renderThemeToggle() {
     const labels = { table: "Table", classroom: "Classroom", contrast: "Contrast" };
     const descriptions = {
-      table: "Beige board-game table theme.",
+      table: "Deep tabletop theme with restrained brass signals.",
       classroom: "Light theme optimized for projection.",
-      contrast: "Dark high-contrast theme with reduced pattern intensity."
+      contrast: "Dark high-contrast theme with stronger borders."
     };
     return `
       <div class="theme-toggle segmented-control" role="group" aria-label="Visual theme">
@@ -2762,9 +2980,9 @@
     `;
   }
 
-  function renderSessionStatus(status = sessionStatus()) {
+  function renderSessionStatus(status = sessionStatus(), label = "Session save status") {
     return `
-      <section class="session-status status-${status.state}" aria-label="Session save status">
+      <section class="session-status status-${status.state}" aria-label="${escapeHtml(label)}">
         <div>
           <span class="label">${escapeHtml(saveModeLabel())}</span>
           <strong>${escapeHtml(status.label)}</strong>
@@ -2860,10 +3078,10 @@
     if (!dialog) {
       return "";
     }
+    const topLayerTheme = `theme-${escapeHtml(model.ui.theme)}`;
     if (dialog.type === "choice") {
       return `
-        <div class="dialog-backdrop" data-action="close-dialog">
-          <section class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="choiceDialogTitle" data-dialog-card>
+        <dialog class="dialog-card ${topLayerTheme}" aria-labelledby="choiceDialogTitle" data-dialog-card data-close-on-backdrop="true">
             <button class="dialog-close" type="button" data-action="close-dialog" aria-label="Close dialog">x</button>
             <p class="eyeline">Confirm choice</p>
             <h2 id="choiceDialogTitle">${escapeHtml(dialog.title)}</h2>
@@ -2874,18 +3092,17 @@
               <span><strong>Movement</strong>${escapeHtml(dialog.movement)}</span>
             </div>
             <div class="btn-row">
-              <button class="button-secondary" type="button" data-action="close-dialog">Review options</button>
+              <button class="button-secondary" type="button" data-action="close-dialog" autofocus>Review options</button>
               <button class="button" type="button" data-action="confirm-choice" data-choice-index="${dialog.choiceIndex}">Confirm choice</button>
             </div>
-          </section>
-        </div>
+        </dialog>
       `;
     }
     if (dialog.type === "adjust") {
       const player = model.session.players.find((item) => item.id === dialog.playerId);
       return `
-        <div class="dialog-backdrop" data-action="close-dialog">
-          <form class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="adjustDialogTitle" data-modal-form="adjust" data-dialog-card>
+        <dialog class="dialog-card ${topLayerTheme}" aria-labelledby="adjustDialogTitle" data-dialog-card data-close-on-backdrop="true">
+          <form class="dialog-form" data-modal-form="adjust">
             <button class="dialog-close" type="button" data-action="close-dialog" aria-label="Close dialog">x</button>
             <p class="eyeline">Ledger correction</p>
             <h2 id="adjustDialogTitle">${escapeHtml(player?.name ?? "Player")} - ${escapeHtml(dialog.label)}</h2>
@@ -2894,7 +3111,7 @@
             <input type="hidden" name="field" value="${escapeHtml(dialog.field)}" />
             <div class="field">
               <label for="adjustAmount">Amount</label>
-              <input class="input" id="adjustAmount" name="amount" type="number" step="${dialog.field === "cash" ? "1000" : "1"}" value="${dialog.field === "cash" ? "1000" : "1"}" required />
+              <input class="input" id="adjustAmount" name="amount" type="number" step="${dialog.field === "cash" ? "1000" : "1"}" value="${dialog.field === "cash" ? "1000" : "1"}" required autofocus />
             </div>
             <div class="field">
               <label for="adjustDirection">Direction</label>
@@ -2912,38 +3129,34 @@
               <button class="button" type="submit">Apply and log</button>
             </div>
           </form>
-        </div>
+        </dialog>
       `;
     }
     if (dialog.type === "confirm-action") {
       return `
-        <div class="dialog-backdrop" data-action="close-dialog">
-          <section class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="confirmDialogTitle" data-dialog-card>
+        <dialog class="dialog-card ${topLayerTheme}" aria-labelledby="confirmDialogTitle" data-dialog-card data-close-on-backdrop="true">
             <button class="dialog-close" type="button" data-action="close-dialog" aria-label="Close dialog">x</button>
             <p class="eyeline">${escapeHtml(dialog.eyeline ?? "Confirm")}</p>
             <h2 id="confirmDialogTitle">${escapeHtml(dialog.title)}</h2>
             <p>${escapeHtml(dialog.body)}</p>
             <div class="btn-row">
-              <button class="button-secondary" type="button" data-action="close-dialog">Cancel</button>
+              <button class="button-secondary" type="button" data-action="close-dialog" autofocus>Cancel</button>
               <button class="button" type="button" data-action="${escapeHtml(dialog.confirmAction)}">${escapeHtml(dialog.confirmLabel ?? "Confirm")}</button>
             </div>
-          </section>
-        </div>
+        </dialog>
       `;
     }
     if (dialog.type === "card-lookup") {
       const card = getCard(dialog.deckKey, dialog.cardId);
       return `
-        <div class="dialog-backdrop">
-          <section class="dialog-card lookup-dialog" role="dialog" aria-modal="true" aria-labelledby="cardLookupDialogTitle" data-dialog-card>
+        <dialog class="dialog-card lookup-dialog ${topLayerTheme}" aria-labelledby="cardLookupDialogTitle" data-dialog-card>
             <button class="dialog-close" type="button" data-action="close-dialog" aria-label="Close dialog">x</button>
-            <h2 id="cardLookupDialogTitle">Printed card lookup</h2>
+            <h2 id="cardLookupDialogTitle" tabindex="-1" autofocus>Printed card lookup</h2>
             ${renderLargeCard(dialog.deckKey, card, dialog.warnings ?? [])}
             <div class="btn-row">
               <button class="button" type="button" data-action="close-dialog">Close</button>
             </div>
-          </section>
-        </div>
+        </dialog>
       `;
     }
     if (dialog.type === "profile-picker") {
@@ -2952,8 +3165,7 @@
       const draft = model.session.draft.players[index] ?? {};
       const selectedId = draft.profileId ?? starterProfiles[index]?.id;
       return `
-        <div class="dialog-backdrop">
-          <section class="dialog-card profile-dialog" role="dialog" aria-modal="true" aria-labelledby="profileDialogTitle" data-dialog-card>
+        <dialog class="dialog-card profile-dialog ${topLayerTheme}" aria-labelledby="profileDialogTitle" data-dialog-card>
             <button class="dialog-close" type="button" data-action="close-dialog" aria-label="Close dialog">x</button>
             <p class="eyeline">Starter Profile</p>
             <h2 id="profileDialogTitle">Choose Player ${index + 1} profile</h2>
@@ -2963,7 +3175,7 @@
                 .map((item) => {
                   const optionMeta = profileUi(item.id);
                   return `
-                    <button class="profile-option ${item.id === selectedId ? "selected" : ""}" type="button" data-action="select-profile" data-index="${index}" data-profile-id="${item.id}" ${hostDisabledAttr(model.session.started)}>
+                    <button class="profile-option ${item.id === selectedId ? "selected" : ""}" type="button" data-action="select-profile" data-index="${index}" data-profile-id="${item.id}" ${item.id === selectedId ? "autofocus" : ""} ${hostDisabledAttr(model.session.started)}>
                       <strong>${escapeHtml(optionMeta.icon)} ${escapeHtml(item.id)} ${escapeHtml(item.title)}</strong>
                       <span>${money(item.cash)} - ${escapeHtml(item.trait)}</span>
                       <small>${escapeHtml(item.bonus)}</small>
@@ -2975,8 +3187,7 @@
             <div class="btn-row">
               <button class="button-secondary" type="button" data-action="close-dialog">Cancel</button>
             </div>
-          </section>
-        </div>
+        </dialog>
       `;
     }
     if (dialog.type === "board") {
@@ -2988,11 +3199,10 @@
       });
       const selectedSpaceId = dialog.selectedSpaceId ?? model.ui.selectedBoardSpaceId ?? `S${String(currentPlayer()?.position ?? 0).padStart(2, "0")}`;
       return `
-        <div class="dialog-backdrop">
-          <section class="dialog-card board-dialog" role="dialog" aria-modal="true" aria-labelledby="boardDialogTitle" data-dialog-card>
+        <dialog class="dialog-card board-dialog ${topLayerTheme}" aria-labelledby="boardDialogTitle" data-dialog-card>
             <button class="dialog-close" type="button" data-action="close-dialog" aria-label="Close dialog">x</button>
             <p class="eyeline">${escapeHtml(dialog.eyeline)}</p>
-            <h2 id="boardDialogTitle">${escapeHtml(dialog.title)}</h2>
+            <h2 id="boardDialogTitle" tabindex="-1" ${dialog.initialFocusComplete ? "" : "autofocus"}>${escapeHtml(dialog.title)}</h2>
             <p>${escapeHtml(dialog.body)}</p>
             <div class="board-dialog-grid">
               ${renderInteractiveBoard(occupied, "modal")}
@@ -3006,13 +3216,11 @@
             <div class="btn-row">
               <button class="button" type="button" data-action="close-dialog">Close</button>
             </div>
-          </section>
-        </div>
+        </dialog>
       `;
     }
     return `
-      <div class="dialog-backdrop" data-action="close-dialog">
-        <section class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="infoDialogTitle" data-dialog-card>
+      <dialog class="dialog-card ${topLayerTheme}" aria-labelledby="infoDialogTitle" data-dialog-card data-close-on-backdrop="true">
           <button class="dialog-close" type="button" data-action="close-dialog" aria-label="Close dialog">x</button>
           <p class="eyeline">${escapeHtml(dialog.eyeline ?? "Notice")}</p>
           <h2 id="infoDialogTitle">${escapeHtml(dialog.title ?? "Give And Take")}</h2>
@@ -3021,8 +3229,7 @@
             ${dialog.helpTopic ? `<button class="button-secondary" type="button" data-action="dialog-help-topic" data-topic="${escapeHtml(dialog.helpTopic)}">Open help</button>` : ""}
             <button class="button" type="button" data-action="close-dialog">Close</button>
           </div>
-        </section>
-      </div>
+      </dialog>
     `;
   }
 
@@ -3032,7 +3239,7 @@
     const secondaryActive = secondaryItems.some(([view]) => view === model.session.view);
     const renderButton = ([view, label, icon], extraClass = "") => `
       <button class="mobile-nav-button ${extraClass}" type="button" data-view="${view}" aria-current="${model.session.view === view ? "page" : "false"}" aria-label="Open ${escapeHtml(label)} section">
-        <span>${icon}</span>
+        <span>${navigationIcon(icon)}</span>
         <strong>${label}</strong>
       </button>
     `;
@@ -3041,7 +3248,7 @@
         ${primaryItems.map((item) => renderButton(item)).join("")}
         <details class="mobile-more">
           <summary class="mobile-nav-button" aria-current="${secondaryActive ? "page" : "false"}" aria-label="Open more game sections">
-            <span aria-hidden="true">++</span>
+            <span aria-hidden="true">•••</span>
             <strong>More</strong>
           </summary>
           <section class="mobile-more-sheet" aria-label="More game sections">
@@ -3079,7 +3286,7 @@
           <div class="brand-token">GT</div>
           <div>
             <p class="brand-title">Give And Take</p>
-            <p class="brand-subtitle">QR table companion</p>
+            <p class="brand-subtitle">Physical table control</p>
           </div>
         </div>
         <div class="rail-status">
@@ -3092,7 +3299,7 @@
             .map(
               ([view, label, icon]) => `
                 <button class="nav-button" type="button" data-view="${view}" aria-current="${model.session.view === view ? "page" : "false"}" aria-label="Open ${escapeHtml(label)} section">
-                  <span class="nav-icon" aria-hidden="true">${icon}</span>
+                  <span class="nav-icon" aria-hidden="true">${navigationIcon(icon)}</span>
                   <span>${label}</span>
                   <span>${view === "play" && model.session.pendingResolution ? "Live" : ""}</span>
                 </button>
@@ -3101,10 +3308,10 @@
             .join("")}
         </nav>
         <div class="rail-footer">
-          ${renderSessionStatus(status)}
+          ${renderSessionStatus(status, "Table rail save status")}
           <button class="mini-button" type="button" data-action="copy-session-code">Copy code</button>
           ${renderSettingsControl()}
-          <button class="button-ghost" type="button" data-action="logout">Logout</button>
+          <button class="button-ghost" type="button" data-action="logout">Leave table</button>
         </div>
       </aside>
       <main id="main-content" class="main-shell" tabindex="-1">
@@ -3113,7 +3320,7 @@
             <div class="brand-token">D6</div>
             <div>
               <h1>${escapeHtml(sectionTitle(model.session.view))}</h1>
-              <p>${escapeHtml(`${tableRoleLabel()}: ${model.auth.name}`)}</p>
+              <p>${escapeHtml(`${tableRoleLabel()} · ${model.auth.name}`)}</p>
             </div>
           </div>
           <div class="status-strip">
@@ -3130,7 +3337,6 @@
       ${renderMobileNavigation()}
       ${renderToast()}
       ${renderDialog()}
-      <span class="sr-only" aria-live="polite">${escapeHtml(model.ui.announcement)}</span>
     `;
   }
 
@@ -3142,7 +3348,7 @@
     const status = sessionStatus();
     appRoot.className = `table-display-shell theme-contrast ${model.ui.reducedMotion ? "reduced-motion" : ""}`;
     appRoot.innerHTML = `
-      <main id="main-content" class="table-display" tabindex="-1" aria-live="polite">
+      <main id="main-content" class="table-display" tabindex="-1">
         <header class="display-header">
           <div>
             <p class="eyeline">Give And Take Table Display</p>
@@ -3324,8 +3530,8 @@
           <div class="panel-header">
             <div>
               <p class="eyeline">Table setup</p>
-              <h2>Prepare the host table</h2>
-              <p>Choose 2-5 players, assign unique Starter Profiles, then start the one-D6 route.</p>
+              <h2>Set the table</h2>
+              <p>Choose players, assign Starter Profiles, then start. The board and D6 stay physical.</p>
             </div>
             <button class="button-ghost" type="button" data-action="new-session">New session</button>
           </div>
@@ -3341,7 +3547,7 @@
             </div>
             <button class="button-secondary" type="button" data-action="copy-session-code">Copy code</button>
           </div>
-          ${renderSessionStatus()}
+          ${renderSessionStatus(sessionStatus(), "Setup save status")}
           <div class="setup-actions">
             <div class="field">
               <label for="playerCount">Number of players</label>
@@ -3372,8 +3578,8 @@
           <div class="panel-header">
             <div>
               <p class="eyeline">Physical board reference</p>
-              <h2>Board and QR check</h2>
-              <p>The web app tracks the session; the physical board remains playable.</p>
+              <h2>Board check</h2>
+              <p>Use the printed board for movement. This view tracks the shared session state.</p>
             </div>
             <button class="mini-button" type="button" data-action="expand-board">Expand</button>
           </div>
@@ -3417,7 +3623,8 @@
             <div
               class="setup-checklist-meter"
               role="progressbar"
-              aria-label="${complete} of ${items.length} setup items complete"
+              aria-label="Physical table setup"
+              aria-valuetext="${complete} of ${items.length} checks complete"
               aria-valuemin="0"
               aria-valuemax="${items.length}"
               aria-valuenow="${complete}"
@@ -3488,6 +3695,7 @@
         </section>
       `;
     }
+    const referenceOpen = !window.matchMedia("(max-width: 760px)").matches || model.ui.mobileReferenceOpen;
     return `
       <section class="physical-play-board">
         ${hostOnlyNotice()}
@@ -3506,12 +3714,18 @@
             ${renderPhysicalResolutionPanel()}
             ${renderPhysicalEvidencePanel()}
           </div>
-          <aside class="physical-side">
-            ${renderCardLookupPanel()}
-            ${renderSpaceLookupPanel()}
-            ${renderDecks()}
-            ${renderPriceTracker()}
-          </aside>
+          <details class="physical-reference-shelf" data-mobile-reference-shelf ${referenceOpen ? "open" : ""}>
+            <summary>
+              <span><strong>Reference shelf</strong><small>Cards, board, decks, and prices</small></span>
+              <span aria-hidden="true">+</span>
+            </summary>
+            <div class="physical-side">
+              ${renderCardLookupPanel()}
+              ${renderSpaceLookupPanel()}
+              ${renderDecks()}
+              ${renderPriceTracker()}
+            </div>
+          </details>
         </div>
       </section>
     `;
@@ -3527,7 +3741,7 @@
     const selectedDie = physicalDieDraft();
     const canSubmitRoll = Boolean(canRoll && selectedDie);
     return `
-      <article class="physical-turn-card" data-phase-section="Roll">
+      <article class="physical-turn-card ${model.session.phase === "Roll" ? "phase-active" : ""}" data-phase-section="Roll">
         <div class="panel-header">
           <div>
             <p class="eyeline">Step 1 - physical die and pawn</p>
@@ -3557,7 +3771,7 @@
           <div class="quick-rolls" aria-label="Quick physical die entries">
             ${[1, 2, 3, 4, 5, 6].map((roll) => `<button class="mini-button tap-target ${Number(selectedDie) === roll && !pending ? "selected" : ""}" type="button" data-action="manual-roll" data-roll="${roll}" aria-pressed="${Number(selectedDie) === roll && !pending}" aria-label="Select physical die result ${roll}" ${hostDisabledAttr(!canRoll)}>${roll}</button>`).join("")}
           </div>
-          <div class="selected-die-readout" aria-live="polite">
+          <div class="selected-die-readout">
             <span>Selected D6</span>
             <strong>${selectedDie || "-"}</strong>
           </div>
@@ -3576,7 +3790,6 @@
             `
             : `<p class="notice">Roll the real die first, move the physical pawn, then enter the result here.</p>`
         }
-        <span class="sr-only" aria-live="polite">${escapeHtml(model.ui.announcement || (pending ? `Expected landing space ${expectedSpaceId}.` : selectedDie ? `Physical die ${selectedDie} selected.` : "Waiting for physical die result."))}</span>
       </article>
     `;
   }
@@ -3595,7 +3808,7 @@
     }
     if (!pending) {
       return `
-        <article class="physical-resolution-card" data-phase-section="Resolve">
+        <article class="physical-resolution-card ${model.session.phase === "Resolve" ? "phase-active" : ""}" data-phase-section="Resolve">
           <p class="eyeline">Step 2 - landed space</p>
           <h2>Waiting for the physical roll.</h2>
           <p>After the host enters the die result, this panel will show the expected landing space and the printed-board action.</p>
@@ -3605,7 +3818,7 @@
     const space = getSpace(pending.spaceId);
     const card = pending.cardDeck && pending.cardId ? getCard(pending.cardDeck, pending.cardId) : null;
     return `
-      <article class="physical-resolution-card ${pending.completed ? "completed" : ""}" data-phase-section="Resolve">
+      <article class="physical-resolution-card ${pending.completed ? "completed" : ""} ${model.session.phase === "Resolve" ? "phase-active" : ""}" data-phase-section="Resolve">
         ${renderSpaceDetailPanel(space.id, true)}
         ${pending.cardDeck ? renderPendingPhysicalCardPrompt(pending, card) : ""}
         ${card ? renderLargeCard(pending.cardDeck, card, pending.deckConflict ? [pending.deckConflict] : []) : ""}
@@ -3664,7 +3877,7 @@
     const noteReady = Boolean(pending?.completed && model.ui.turnNoteDraft.trim());
     const missingChecks = missingPhysicalChecks();
     return `
-      <section class="turn-log-card physical-evidence-card" data-phase-section="Log">
+      <section class="turn-log-card physical-evidence-card ${model.session.phase === "Log" ? "phase-active" : ""}" data-phase-section="Log">
         <div class="field">
           <label for="turnNote">Step 4 - evidence note</label>
           <p class="notice">Select a chip for routine turns. Type only when the decision needs more context.</p>
@@ -3761,93 +3974,21 @@
   function renderPhaseStepper() {
     const current = phaseIndex();
     return `
-      <nav class="phase-stepper" aria-label="Turn phase tracker">
+      <ol class="phase-stepper" aria-label="Turn phase tracker">
         ${phaseSteps
           .map((step, index) => {
             const done = index < current || model.session.gameOver;
             const active = index === current && !model.session.gameOver;
+            const stateLabel = done ? `Completed: ${step}` : active ? `Current: ${step}` : `Upcoming: ${step}`;
             return `
-              <span class="phase-step ${done ? "done" : ""} ${active ? "active" : ""}">
-                <span>${done ? "OK" : index + 1}</span>
+              <li class="phase-step ${done ? "done" : ""} ${active ? "active" : ""}" aria-label="${escapeHtml(stateLabel)}" ${active ? 'aria-current="step"' : ""}>
+                <span aria-hidden="true">${done ? "OK" : index + 1}</span>
                 <strong>${step}</strong>
-              </span>
+              </li>
             `;
           })
           .join("")}
-      </nav>
-    `;
-  }
-
-  function renderCurrentPlayerCard() {
-    const player = currentPlayer();
-    const canRoll = Boolean(player && !model.session.pendingResolution && !model.session.gameOver && !player.finished && player.turnsTaken < model.game.turnLimit);
-    const canUndoRoll = Boolean(model.ui.undoRollSession && model.session.pendingResolution && !model.session.pendingResolution.completed && canEditSession());
-    const space = getSpace(`S${String(player?.position ?? 0).padStart(2, "0")}`);
-    const selectedDie = physicalDieDraft();
-    const canSubmitRoll = Boolean(canRoll && selectedDie);
-    return `
-      <article class="current-player-card" data-phase-section="Roll">
-        <div class="panel-header">
-          <div>
-            <p class="eyeline">Current player</p>
-            <h2>${escapeHtml(player?.name ?? "No player")}</h2>
-            <p>${escapeHtml(player?.profileTitle ?? "Start setup first")} - ${escapeHtml(space?.id ?? "S00")} ${escapeHtml(space?.label ?? "Student Start")}</p>
-          </div>
-          <span class="player-token large" style="--token:${cssVar(player?.tokenColor ?? playerTokens[0])}">${escapeHtml(player?.id ?? "P")}</span>
-        </div>
-        <div class="metric-grid player-metrics">
-          <div class="metric-tile"><span>Position</span><strong>S${String(player?.position ?? 0).padStart(2, "0")}</strong></div>
-          <div class="metric-tile"><span>Cash</span><strong>${renderNumberTicker(player?.cash ?? 0, `player:${player?.id ?? "none"}:cash`, "money")}</strong></div>
-          <div class="metric-tile"><span>Value</span><strong>${renderNumberTicker(player ? portfolioValue(player) : 0, `player:${player?.id ?? "none"}:value`, "money")}</strong></div>
-          <div class="metric-tile"><span>Evidence</span><strong>R${player?.riskEvidence ?? 0} E${player?.ethicsPosition ?? 0} F${player?.reflectionEvidence ?? 0}</strong></div>
-        </div>
-        <div class="dice-console">
-          <div class="dice-mode" role="group" aria-label="Dice mode">
-            <button class="mini-button" type="button" data-action="set-dice-mode" data-mode="digital" aria-pressed="${model.ui.diceMode === "digital"}">Digital dice</button>
-            <button class="mini-button" type="button" data-action="set-dice-mode" data-mode="physical" aria-pressed="${model.ui.diceMode === "physical"}">Physical dice</button>
-          </div>
-          ${
-            model.ui.diceMode === "physical"
-              ? `
-                <div class="physical-roll">
-                  <label for="physicalDie">Enter D6 result</label>
-                  <input class="input die-input" id="physicalDie" type="number" min="1" max="6" value="${escapeHtml(selectedDie)}" aria-label="Enter physical six-sided die result" ${hostDisabledAttr(!canRoll)} />
-                  <button class="button" type="button" data-action="submit-physical-roll" ${hostDisabledAttr(!canSubmitRoll)}>Confirm move</button>
-                  <button class="button-secondary" type="button" data-action="clear-physical-roll" ${hostDisabledAttr(!canRoll || !model.ui.pendingPhysicalDie)}>Clear</button>
-                </div>
-                <div class="quick-rolls" aria-label="Quick physical die entries">
-                  ${[1, 2, 3, 4, 5, 6].map((roll) => `<button class="mini-button ${Number(selectedDie) === roll && !model.session.pendingResolution ? "selected" : ""}" type="button" data-action="manual-roll" data-roll="${roll}" aria-pressed="${Number(selectedDie) === roll && !model.session.pendingResolution}" aria-label="Select physical die result ${roll}" ${hostDisabledAttr(!canRoll)}>${roll}</button>`).join("")}
-                </div>
-              `
-              : `<button class="die-button" type="button" data-action="roll-die" aria-label="Roll digital six-sided die. Current result ${model.session.die ?? "none"}" ${hostDisabledAttr(!canRoll)}>${model.session.die ?? "D6"}</button>`
-          }
-          <div class="btn-row">
-            <button class="button-secondary" type="button" data-action="cancel-roll" ${canUndoRoll ? "" : "disabled"}>Undo roll</button>
-            <span class="sr-only" aria-live="polite">${escapeHtml(model.ui.announcement || (selectedDie ? `Physical die ${selectedDie} selected.` : model.session.die ? `Die result ${model.session.die}.` : "No die result yet."))}</span>
-          </div>
-        </div>
-      </article>
-    `;
-  }
-
-  function renderPathTracker() {
-    const occupied = new Map();
-    model.session.players.forEach((player) => {
-      const list = occupied.get(player.position) ?? [];
-      list.push(player.id);
-      occupied.set(player.position, list);
-    });
-    return `
-      <article>
-        <div class="section-head">
-          <div>
-            <p class="eyeline">Board path</p>
-            <h2>Interactive S00-S43 board</h2>
-          </div>
-          <button class="mini-button" type="button" data-action="expand-board">Board image</button>
-        </div>
-        ${renderInteractiveBoard(occupied, "compact")}
-      </article>
+      </ol>
     `;
   }
 
@@ -3917,7 +4058,7 @@
 
   function renderReadableMiniMap(occupied = new Map()) {
     return `
-      <div class="readable-mini-map" role="list" aria-label="Readable board mini-map S00 to S43">
+      <div class="readable-mini-map" role="group" aria-label="Readable board mini-map S00 to S43">
         ${model.game.boardSpaces
           .map((space) => {
             const index = Number(space.id.slice(1));
@@ -3930,7 +4071,6 @@
                 type="button"
                 data-action="space-info"
                 data-space-id="${space.id}"
-                role="listitem"
                 title="${escapeHtml(boardSpaceDescription(space))}"
                 aria-label="${escapeHtml(boardSpaceDescription(space))}">
                 <strong>${escapeHtml(space.id)}</strong>
@@ -3942,111 +4082,6 @@
           })
           .join("")}
       </div>
-    `;
-  }
-
-  function renderResolutionPanel() {
-    const pending = model.session.pendingResolution;
-    if (model.session.gameOver) {
-      return `
-        <article class="resolution-card completed" data-phase-section="Resolve">
-          <p class="eyeline">Scoring</p>
-          <h2>Game is ready for final scoring.</h2>
-          <p>All active players reached S43 or hit the 12-turn limit.</p>
-          <button class="button" type="button" data-view="scoring">Open scoring</button>
-        </article>
-      `;
-    }
-    if (!pending) {
-      return `
-        <article class="resolution-card" data-phase-section="Resolve">
-          <p class="eyeline">Resolve space</p>
-          <h2>Ready to roll.</h2>
-          <p>Roll one D6 or enter the physical die result. Movement is capped at S43.</p>
-        </article>
-      `;
-    }
-    const space = getSpace(pending.spaceId);
-    const meta = spaceMeta(space.type);
-    return `
-      <article class="resolution-card ${pending.completed ? "completed" : ""} tone-${meta.tone}" data-phase-section="Resolve">
-        <div class="resolver-head">
-          <span class="space-badge tone-${meta.tone}">${escapeHtml(meta.icon)}</span>
-          <div>
-            <p class="eyeline">${escapeHtml(space.type)}</p>
-            <h2>${escapeHtml(space.id)} ${escapeHtml(space.label)}</h2>
-            <p>${escapeHtml(space.effect ?? meta.help)}</p>
-          </div>
-        </div>
-        ${renderPendingCard(pending)}
-        ${renderResolutionControls(pending, space)}
-        ${pending.result.length ? `<ul class="effect-list">${pending.result.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : ""}
-      </article>
-    `;
-  }
-
-  function renderPendingCard(pending) {
-    if (!pending.cardDeck || !pending.cardId) {
-      return "";
-    }
-    const card = getCard(pending.cardDeck, pending.cardId);
-    if (!card) {
-      return "";
-    }
-    if (pending.cardDeck === "events") {
-      return renderEventCard(card);
-    }
-    if (pending.cardDeck === "investments") {
-      const asset = getAsset(card.asset);
-      return `
-        <article class="card-face" style="border-left-color:${cssVar(asset.color)}">
-          <strong>${card.id} ${escapeHtml(card.title)}</strong>
-          <p>${escapeHtml(card.text)} Asset: ${escapeHtml(asset.name)}. Units: ${card.units}. Cost: ${money(investmentCost(currentPlayer(), card))}.</p>
-        </article>
-      `;
-    }
-    if (pending.cardDeck === "ethics") {
-      return `
-        <article class="card-face" style="border-left-color:var(--purple)">
-          <strong>${card.id} ${escapeHtml(card.title)}</strong>
-          <p>${escapeHtml(card.prompt)}</p>
-          <p>Profit: ${money(card.profit.cash)} / ethics ${signed(card.profit.ethics)}. Responsible: ${money(card.responsible.cash)} / ethics ${signed(card.responsible.ethics)}.</p>
-        </article>
-      `;
-    }
-    if (pending.cardDeck === "actions") {
-      return `
-        <article class="card-face" style="border-left-color:var(--teal)">
-          <strong>${card.id} ${escapeHtml(card.title)}</strong>
-          <p>${escapeHtml(card.text)}</p>
-        </article>
-      `;
-    }
-    if (pending.cardDeck === "reflection") {
-      return `
-        <article class="card-face" style="border-left-color:var(--gold)">
-          <strong>${card.id} ${escapeHtml(card.title)}</strong>
-          <p>${escapeHtml(card.prompt)}</p>
-        </article>
-      `;
-    }
-    return "";
-  }
-
-  function renderEventCard(event) {
-    return `
-      <article class="card-face" style="border-left-color:${event.sentiment === "Bear" ? "var(--red)" : event.sentiment === "Bull" ? "var(--green)" : "var(--gold)"}">
-        <strong>${event.id} ${escapeHtml(event.title)}</strong>
-        <p>Sentiment: ${escapeHtml(event.sentiment)}. Bias watch: ${escapeHtml(event.bias)}.</p>
-        <div class="btn-row">
-          ${Object.entries(event.priceEffects)
-            .map(([assetId, delta]) => {
-              const asset = assetMeta(assetId);
-              return `<span class="asset-chip pattern-${asset.pattern}" style="--asset:${cssVar(asset.color)}" aria-label="${escapeHtml(asset.name)} changed ${signed(delta)}">${escapeHtml(asset.icon)} ${escapeHtml(asset.name)} ${signed(delta)}</span>`;
-            })
-            .join("")}
-        </div>
-      </article>
     `;
   }
 
@@ -4135,30 +4170,6 @@
     return `<button class="button" type="button" data-action="complete-generic" ${hostDisabledAttr()}>Complete</button>`;
   }
 
-  function renderTurnLogPanel() {
-    const pending = model.session.pendingResolution;
-    const suggested = pending ? evidenceNotes[pending.type] ?? "Recorded the turn result and reasoning." : "";
-    const noteReady = Boolean(pending?.completed && model.ui.turnNoteDraft.trim());
-    return `
-      <section class="turn-log-card" data-phase-section="Log">
-        <div class="field">
-          <label for="turnNote">Required decision, finance term, or evidence note</label>
-          <p class="notice">Use a suggested note or write your own. The note is saved in the evidence export.</p>
-          ${
-            suggested
-              ? `<div class="note-chip-row"><button class="note-chip" type="button" data-action="use-evidence-note" data-note="${escapeHtml(suggested)}" ${pending?.completed && canEditSession() ? "" : "disabled"}>${escapeHtml(suggested)}</button></div>`
-              : ""
-          }
-          <textarea class="textarea" id="turnNote" data-turn-note="true" ${pending?.completed && canEditSession() ? "" : "disabled"}>${escapeHtml(model.ui.turnNoteDraft)}</textarea>
-        </div>
-        <div class="sticky-turn-actions">
-          <span>${pending?.completed ? noteReady ? "Ready to end turn." : "Add or select one note to end the turn." : "Resolve the space before ending the turn."}</span>
-          <button class="button" type="button" data-action="end-turn" ${hostDisabledAttr(!noteReady)}>End turn</button>
-        </div>
-      </section>
-    `;
-  }
-
   function renderDecks() {
     return `
       <article>
@@ -4204,19 +4215,17 @@
               const start = Number(asset.startIndex ?? 1);
               const delta = index - start;
               const lastDelta = Number(last?.appliedEffects?.[asset.id] ?? 0);
-              const width = clamp((index / Math.max(1, start + 12)) * 100, 7, 100);
+              const rangeMax = Math.max(1, index, start + 12);
+              const width = clamp((index / rangeMax) * 100, 7, 100);
               return `
                 <div class="asset-row pattern-${meta.pattern}" role="listitem" style="--asset:${cssVar(asset.color)}">
-                  <div class="asset-name"><span>${escapeHtml(meta.icon)}</span><strong>${escapeHtml(asset.name)}</strong><small>Risk ${asset.risk} - ${escapeHtml(meta.label)} - ${escapeHtml(meta.pattern)} pattern</small></div>
-                  <div class="bar asset-bar" role="progressbar" aria-label="${escapeHtml(asset.name)} current index ${index}, start ${start}, total change ${signed(delta)}, last event ${signed(lastDelta)}" aria-valuenow="${index}" aria-valuemin="1" aria-valuemax="${Math.max(1, start + 12)}">
+                  <div class="asset-name"><span>${escapeHtml(meta.icon)}</span><strong>${escapeHtml(asset.name)}</strong><small>Risk ${asset.risk} · ${escapeHtml(meta.label)}</small></div>
+                  <div class="bar asset-bar" role="progressbar" aria-label="${escapeHtml(asset.name)} current index ${index}, start ${start}, total change ${signed(delta)}, last event ${signed(lastDelta)}" aria-valuenow="${index}" aria-valuemin="1" aria-valuemax="${rangeMax}">
                     <span style="width:${width}%"></span>
-                    <strong class="asset-bar-number">${index}</strong>
                   </div>
                   <div class="index">
                     <strong>${index}</strong>
-                    <span>start ${start}</span>
-                    <span>${signed(delta)} total</span>
-                    <span>${signed(lastDelta)} last</span>
+                    <span>${signed(lastDelta)} last · ${signed(delta)} total</span>
                   </div>
                 </div>
               `;
@@ -4224,56 +4233,6 @@
             .join("")}
         </div>
       </article>
-    `;
-  }
-
-  function renderLedger() {
-    if (!model.session.players.length) {
-      return "";
-    }
-    return `
-      <section class="panel">
-        <div class="panel-header">
-          <div>
-            <p class="eyeline">Players</p>
-            <h2>Ledger</h2>
-          </div>
-        </div>
-        <div class="ledger">
-          <table>
-            <thead>
-              <tr>
-                <th>Player</th>
-                <th>Space</th>
-                <th>Cash</th>
-                <th>Portfolio value</th>
-                <th>Holdings</th>
-                <th>Risk</th>
-                <th>Ethics</th>
-                <th>Reflection</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${model.session.players.map(renderLedgerRow).join("")}
-            </tbody>
-          </table>
-        </div>
-      </section>
-    `;
-  }
-
-  function renderLedgerRow(player) {
-    return `
-      <tr>
-        <td><strong>${escapeHtml(player.name)}</strong><br><span>${escapeHtml(player.profileTitle)}</span></td>
-        <td class="num">S${String(player.position).padStart(2, "0")}</td>
-        <td class="num">${money(player.cash)}</td>
-        <td class="num">${money(portfolioValue(player))}</td>
-        <td>${renderHoldings(player)}</td>
-        <td class="num">${player.riskEvidence}</td>
-        <td class="num">${player.ethicsPosition}</td>
-        <td class="num">${player.reflectionEvidence}</td>
-      </tr>
     `;
   }
 
@@ -4446,7 +4405,16 @@
 
   function renderPlayers() {
     if (!model.session.players.length) {
-      return `<section class="panel"><div class="empty-state">Start setup before editing player ledgers.</div></section>`;
+      return `
+        <section class="panel empty-workspace">
+          <div class="empty-state">
+            <p class="eyeline">Player ledger</p>
+            <h2>Start the table first</h2>
+            <p>Player cash, holdings, and evidence appear after setup is complete.</p>
+            <button class="button-secondary" type="button" data-view="setup">Go to setup</button>
+          </div>
+        </section>
+      `;
     }
     const latestAdjustment = model.session.manualAdjustments[0];
     const undoTitle = latestAdjustment
@@ -4699,6 +4667,7 @@
     const query = model.ui.rulesQuery.trim().toLowerCase();
     const rules = helpSections().filter((section) => !query || `${section.title} ${section.body}`.toLowerCase().includes(query));
     const glossary = glossaryTerms().filter((term) => !query || `${term.term} ${term.body} ${term.section}`.toLowerCase().includes(query));
+    const glossaryLetters = [...new Set(glossary.map((term) => term.term[0].toUpperCase()))];
     const hasResults = rules.length || glossary.length;
     return `
       <div class="grid two">
@@ -4730,7 +4699,7 @@
                 <h2>A-Z finance terms</h2>
               </div>
             </div>
-            <div class="az-index">${"ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").map((letter) => `<a href="#glossary-${letter}">${letter}</a>`).join("")}</div>
+            <nav class="az-index" aria-label="Available glossary letters">${glossaryLetters.map((letter) => `<a href="#glossary-${letter}" aria-label="Glossary terms beginning with ${letter}">${letter}</a>`).join("")}</nav>
             ${renderGlossary(glossary, query)}
           </section>
         </section>
@@ -4769,12 +4738,12 @@
   function renderFlowDiagram(title, steps) {
     const label = `${title}: ${steps.join(" to ")}`;
     return `
-      <article class="flow-diagram" role="img" tabindex="0" aria-label="${escapeHtml(label)}">
+      <div class="flow-diagram" role="img" tabindex="0" aria-label="${escapeHtml(label)}">
         <strong>${escapeHtml(title)}</strong>
         <div>
           ${steps.map((step, index) => `<span>${escapeHtml(step)}</span>${index < steps.length - 1 ? "<b>-></b>" : ""}`).join("")}
         </div>
-      </article>
+      </div>
     `;
   }
 
@@ -4838,6 +4807,27 @@
     ].map((section) => ({ ...section, slug: section.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") }));
   }
 
+  function helpTopicTarget(topic) {
+    const key = String(topic ?? "").trim().toLowerCase();
+    const aliases = {
+      "scoring formula": "scoring",
+      "risk management": "scoring",
+      start: "quick start",
+      income: "turn flow",
+      invest: "deck lifecycle",
+      "life expense": "turn flow",
+      "market pulse": "market",
+      "ethics crossroad": "esg",
+      ethics: "esg",
+      "research/action": "deck lifecycle",
+      reflection: "evidence",
+      choice: "movement",
+      rebalance: "diversification",
+      finish: "scoring"
+    };
+    return aliases[key] ?? key;
+  }
+
   function renderToast() {
     if (!model.message) {
       return "";
@@ -4845,11 +4835,11 @@
     const tone = messageTone(model.message);
     const icon = tone === "success" ? "OK" : tone === "error" ? "!" : tone === "warning" ? "?" : "GT";
     return `
-      <div class="toast toast-${tone}" role="${tone === "error" ? "alert" : "status"}">
+      <aside class="toast toast-${tone}" aria-label="Notification">
         <span class="toast-symbol" aria-hidden="true">${icon}</span>
         <span class="toast-copy">${escapeHtml(model.message)}</span>
         <button class="toast-dismiss" type="button" data-action="dismiss-toast" aria-label="Dismiss notification">x</button>
-      </div>
+      </aside>
     `;
   }
 
@@ -4944,6 +4934,12 @@
     }
     const formData = new FormData(form);
     const mode = form.dataset.authForm;
+    const failureFocusSelector = {
+      guest: "#guestName",
+      join: "#joinName",
+      login: "#loginEmail",
+      signup: "#signupName"
+    }[mode] ?? "#main-content";
     const name = String(formData.get("name") ?? "").trim();
     const email = String(formData.get("email") ?? "").trim().toLowerCase();
     const password = String(formData.get("password") ?? "");
@@ -4954,7 +4950,8 @@
     };
     model.ui.authPending = true;
     model.ui.authError = "";
-    render();
+    render({ preserveFocus: false });
+    focusAfterRender("#main-content");
     try {
       if (mode === "join") {
         const joined = await joinSessionFromAuth(formData);
@@ -4966,7 +4963,9 @@
         startBackendPoller();
         model.ui.authPending = false;
         setMessage(`Joined ${joined.code}.`);
-        render();
+        render({ preserveFocus: false });
+        focusAfterRender("#main-content");
+        window.requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: "auto" }));
         return;
       }
 
@@ -5010,7 +5009,8 @@
     } finally {
       model.ui.authPending = false;
       if (!model.auth) {
-        render();
+        render({ preserveFocus: false });
+        focusAfterRender(failureFocusSelector, { caretToEnd: true });
       }
     }
   }
@@ -5019,11 +5019,12 @@
     if (model.ui.backendRetryPending || model.ui.authPending) {
       return;
     }
+    const retryFocusState = captureFocusState();
     model.ui.backendRetryPending = true;
     model.ui.authError = "";
     model.backend.unavailableReason = "";
     setSaveState("connecting");
-    render();
+    render({ preserveFocus: false });
     await probeBackend();
     model.ui.backendRetryPending = false;
     if (model.backend.online) {
@@ -5031,7 +5032,18 @@
     } else {
       model.ui.authError = model.backend.unavailableReason || "Supabase is still unavailable. Check the connection and try again.";
     }
-    render();
+    render({ preserveFocus: false });
+    if (!model.backend.online) {
+      restoreFocusState(retryFocusState);
+    } else {
+      const authField = {
+        signup: "#signupName",
+        login: "#loginEmail",
+        guest: "#guestName",
+        join: "#joinName"
+      }[model.authTab];
+      focusFirstAvailable([authField, "#main-content"].filter(Boolean));
+    }
   }
 
   function adjustPlayer(playerId, field, delta, reason = "Manual correction.") {
@@ -5095,18 +5107,17 @@
   }
 
   function handleClick(event) {
-    const settingsSummary = event.target.closest("summary.settings-trigger");
-    if (settingsSummary) {
-      const settings = settingsSummary.closest("details.settings-popover");
-      if (settings instanceof HTMLDetailsElement) {
-        model.ui.settingsOpen = !settings.open;
+    if (event.target instanceof HTMLDialogElement && event.target.dataset.closeOnBackdrop === "true") {
+      const bounds = event.target.getBoundingClientRect();
+      const outsideDialog =
+        event.clientX < bounds.left ||
+        event.clientX > bounds.right ||
+        event.clientY < bounds.top ||
+        event.clientY > bounds.bottom;
+      if (outsideDialog) {
+        closeDialog();
+        return;
       }
-      return;
-    }
-    const openSettings = appRoot.querySelector(".settings-popover[open]");
-    if (openSettings instanceof HTMLDetailsElement && !event.target.closest(".settings-popover")) {
-      openSettings.open = false;
-      model.ui.settingsOpen = false;
     }
     const button = event.target.closest("button");
     if (!button) {
@@ -5142,6 +5153,15 @@
         model.message = "";
         render();
         break;
+      case "close-settings": {
+        const settings = appRoot.querySelector(".settings-panel[popover]");
+        if (settings instanceof HTMLElement && typeof settings.hidePopover === "function") {
+          settings.hidePopover();
+        }
+        model.ui.settingsOpen = false;
+        focusFirstAvailable([".settings-trigger", "#main-content"]);
+        break;
+      }
       case "retry-backend":
         void retryBackendConnection();
         break;
@@ -5172,18 +5192,14 @@
       case "speak":
         speak(button.dataset.speak);
         break;
-      case "set-dice-mode":
-        model.ui.diceMode = button.dataset.mode || "digital";
-        persistUi();
-        render();
-        if (model.ui.diceMode === "physical") {
-          window.setTimeout(() => document.getElementById("physicalDie")?.focus(), 0);
-        }
-        break;
       case "board-zoom":
         model.ui.boardZoom = clamp(model.ui.boardZoom + Number(button.dataset.zoom ?? 0), 0.75, 2.2);
+        if (model.ui.dialog?.type === "board") {
+          model.ui.dialog.initialFocusComplete = true;
+        }
         persistUi();
         render();
+        window.setTimeout(() => appRoot.querySelector(`[data-action="board-zoom"][data-zoom="${CSS.escape(button.dataset.zoom ?? "")}"]`)?.focus(), 0);
         break;
       case "retry-sync":
         if (!requireHostAction()) break;
@@ -5207,6 +5223,7 @@
         // fall through
       case "confirm-logout":
         model.ui.dialog = null;
+        model.ui.dialogReturnFocusSelector = "";
         if (model.backend.provider === "supabase") {
           model.backend.client.auth.signOut();
         }
@@ -5217,7 +5234,9 @@
         model.backend.lastSyncedJson = "";
         writeStore(STORAGE.auth, null);
         writeStore(STORAGE.backend, null);
-        render();
+        render({ preserveFocus: false });
+        focusAfterRender("#main-content");
+        window.requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: "auto" }));
         break;
       case "new-session":
         if (!window.confirm("Create a new Supabase table? Current table state will be replaced on this device.")) {
@@ -5245,16 +5264,11 @@
         const profileId = button.dataset.profileId;
         if (model.session.draft.players[index] && profileId) {
           model.session.draft.players[index].profileId = profileId;
-          model.ui.dialog = null;
           saveSession();
-          render();
+          closeDialog();
         }
         break;
       }
-      case "roll-die":
-        if (!requireHostAction()) break;
-        rollDie();
-        break;
       case "cancel-roll":
         if (!requireHostAction()) break;
         cancelRoll();
@@ -5273,13 +5287,12 @@
       case "manual-roll":
         if (!requireHostAction()) break;
         setPhysicalDieDraft(button.dataset.roll);
-        render();
-        window.setTimeout(() => document.getElementById("physicalDie")?.focus(), 0);
+        renderAndRestoreFocus("#physicalDie");
         break;
       case "clear-physical-roll":
         if (!requireHostAction()) break;
         clearPhysicalDieDraft();
-        render();
+        renderAndRestoreFocus("#physicalDie");
         break;
       case "confirm-pawn-space":
         if (!requireHostAction()) break;
@@ -5289,8 +5302,10 @@
           if (model.session.lastPhysicalMove) {
             model.session.lastPhysicalMove.confirmed = true;
           }
+          announce(`Pawn confirmed on ${model.session.pendingResolution.spaceId}. Continue with the printed space instruction.`);
           saveSession();
           render();
+          focusNextPhysicalAction();
         }
         break;
       case "use-card-for-turn": {
@@ -5310,7 +5325,7 @@
         model.ui.cardLookupId = normaliseCardId(value);
         if (!lookup) {
           setMessage(`No printed card found for ${normaliseCardId(value)}.`);
-          render();
+          renderAndRestoreFocus("#cardLookupId", { caretToEnd: true });
           break;
         }
         openCardLookupDialog(lookup.deckKey, lookup.card, []);
@@ -5320,12 +5335,12 @@
         const value = normaliseSpaceId(document.getElementById("boardLookupId")?.value || model.ui.boardLookupId);
         if (!getSpace(value)) {
           setMessage(`No board space found for ${value}. Use S00-S43.`);
-          render();
+          renderAndRestoreFocus("#boardLookupId", { caretToEnd: true });
           break;
         }
         model.ui.boardLookupId = value;
         model.ui.selectedBoardSpaceId = value;
-        render();
+        renderAndRestoreFocus("#boardLookupId", { caretToEnd: true });
         break;
       }
       case "buy-investment":
@@ -5347,10 +5362,6 @@
       case "score-reflection":
         if (!requireHostAction()) break;
         scoreReflection(Number(button.dataset.score));
-        break;
-      case "apply-choice":
-        if (!requireHostAction()) break;
-        applyChoice(Number(button.dataset.choiceIndex));
         break;
       case "request-choice": {
         if (!requireHostAction()) break;
@@ -5374,6 +5385,7 @@
         if (!requireHostAction()) break;
         applyChoice(Number(button.dataset.choiceIndex));
         closeDialog();
+        focusNextPhysicalAction();
         break;
       case "sell-current-holding":
         if (!requireHostAction()) break;
@@ -5390,6 +5402,7 @@
         completeResolution("Host marked the space resolved.");
         saveSession();
         render();
+        focusNextPhysicalAction();
         break;
       case "end-turn":
         if (!requireHostAction()) break;
@@ -5397,22 +5410,22 @@
         break;
       case "use-evidence-note": {
         const note = button.dataset.note ?? "";
-        const input = document.getElementById("turnNote");
         model.ui.turnNoteDraft = note;
         model.session.physicalChecks.evidenceNote = true;
-        if (input) {
-          input.value = note;
-          input.focus();
-        }
-        render();
+        renderAndRestoreFocus("#turnNote", { caretToEnd: true });
         break;
       }
       case "host-reveal-event":
         if (!requireHostAction()) break;
-        model.ui.dialog = null;
-        resolveMarketPulse("host");
-        saveSession();
-        render();
+        {
+          const returnFocusSelector = model.ui.dialogReturnFocusSelector || '[data-action="confirm-host-reveal"]';
+          model.ui.dialog = null;
+          model.ui.dialogReturnFocusSelector = "";
+          resolveMarketPulse("host");
+          saveSession();
+          render({ preserveFocus: false });
+          focusAfterRender(returnFocusSelector);
+        }
         break;
       case "confirm-host-reveal":
         if (!requireHostAction()) break;
@@ -5424,14 +5437,10 @@
           confirmLabel: "Reveal card"
         });
         break;
-      case "adjust-player":
-        if (!requireHostAction()) break;
-        adjustPlayer(button.dataset.playerId, button.dataset.field, button.dataset.delta);
-        break;
       case "toggle-ledger-edit":
         if (!requireHostAction()) break;
         model.ui.ledgerEditMode = !model.ui.ledgerEditMode;
-        render();
+        renderAndRestoreFocus('[data-action="toggle-ledger-edit"]');
         break;
       case "request-adjustment":
         if (!requireHostAction()) break;
@@ -5483,32 +5492,39 @@
         const spaceId = button.dataset.spaceId ?? "S00";
         model.ui.selectedBoardSpaceId = spaceId;
         if (model.ui.dialog?.type === "board") {
-          model.ui.dialog = { ...model.ui.dialog, selectedSpaceId: spaceId };
+          model.ui.dialog = { ...model.ui.dialog, selectedSpaceId: spaceId, initialFocusComplete: true };
         }
         render();
+        window.setTimeout(() => appRoot.querySelector(`[data-action="select-board-space"][data-space-id="${CSS.escape(spaceId)}"]`)?.focus(), 0);
         break;
       }
       case "dialog-help-topic": {
-        const topic = button.dataset.topic ?? "";
-        closeDialog();
+        const targetTopic = helpTopicTarget(button.dataset.topic);
+        const section = helpSections().find((item) => item.title.toLowerCase().includes(targetTopic));
+        model.ui.dialog = null;
+        model.ui.dialogReturnFocusSelector = "";
         model.session.view = "rules";
-        model.ui.rulesQuery = topic;
+        model.ui.rulesQuery = section?.title ?? targetTopic;
         saveSession();
-        render();
+        render({ preserveFocus: false });
+        window.setTimeout(() => {
+          const target = section ? document.getElementById(`help-${section.slug}`) : null;
+          target?.scrollIntoView({ behavior: motionIsReduced() ? "auto" : "smooth", block: "start" });
+          (target?.querySelector("summary") ?? document.getElementById("main-content"))?.focus({ preventScroll: true });
+        }, 0);
         break;
       }
       case "open-help-topic": {
-        const topic = String(button.dataset.topic ?? "").toLowerCase();
-        const aliases = {
-          "risk management": "scoring",
-          "scoring formula": "scoring"
-        };
-        const target = aliases[topic] ?? topic;
+        const target = helpTopicTarget(button.dataset.topic);
         const section = helpSections().find((item) => item.title.toLowerCase().includes(target));
         if (section) {
           model.ui.rulesQuery = "";
           render();
-          window.setTimeout(() => document.getElementById(`help-${section.slug}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+          window.setTimeout(() => {
+            const target = document.getElementById(`help-${section.slug}`);
+            target?.scrollIntoView({ behavior: motionIsReduced() ? "auto" : "smooth", block: "start" });
+            target?.querySelector("summary")?.focus({ preventScroll: true });
+          }, 0);
         }
         break;
       }
@@ -5517,11 +5533,24 @@
         render();
         break;
       case "copy-export":
-        navigator.clipboard?.writeText(exportEvidence()).then(
-          () => setMessage("Export JSON copied."),
-          () => setMessage("Copy failed. Use Download JSON instead.")
-        );
-        render();
+        {
+          const copyFocusState = captureFocusState();
+          const copyPromise = navigator.clipboard?.writeText
+            ? navigator.clipboard.writeText(exportEvidence())
+            : Promise.reject(new Error("Clipboard API unavailable."));
+          void copyPromise.then(
+            () => {
+              setMessage("Export JSON copied.");
+              render({ preserveFocus: false });
+              restoreFocusState(copyFocusState);
+            },
+            () => {
+              setMessage("Copy failed. Use Download JSON instead.");
+              render({ preserveFocus: false });
+              restoreFocusState(copyFocusState);
+            }
+          );
+        }
         break;
       case "download-evidence":
         downloadEvidence();
@@ -5541,28 +5570,29 @@
     if (event.target.matches("[data-draft]")) {
       updateDraftFromInputs();
       if (event.target.dataset.draft === "count") {
-        render();
+        renderAndRestoreFocus("#playerCount");
       }
     }
     if (event.target.matches("[data-market-filter]")) {
-      model.ui.marketFilters[event.target.dataset.marketFilter] = event.target.value;
-      render();
+      const filter = event.target.dataset.marketFilter;
+      model.ui.marketFilters[filter] = event.target.value;
+      renderAndRestoreFocus(`[data-market-filter="${CSS.escape(filter)}"]`);
     }
     if (event.target.matches("[data-physical-check]")) {
       const key = event.target.dataset.physicalCheck;
       model.session.physicalChecks[key] = Boolean(event.target.checked);
       saveSession();
-      render();
+      renderAndRestoreFocus(`[data-physical-check="${CSS.escape(key)}"]`);
     }
     if (event.target.matches("[data-setup-check]")) {
       const key = event.target.dataset.setupCheck;
       setSetupChecklistItem(key, event.target.checked);
-      render();
+      renderAndRestoreFocus(`[data-setup-check="${CSS.escape(key)}"]`);
     }
     if (event.target.matches("[data-assist-player]")) {
       model.ui.selectedAssistPlayerId = event.target.value;
       persistUi();
-      render();
+      renderAndRestoreFocus("[data-assist-player]");
     }
   }
 
@@ -5599,6 +5629,7 @@
         model.ui.pendingPhysicalDie = null;
         announce("Physical die entry cleared.");
       }
+      renderAndRestoreFocus("#physicalDie", { caretToEnd: true });
     }
     if (event.target.id === "boardLookupId") {
       model.ui.boardLookupId = normaliseSpaceId(event.target.value);
@@ -5641,14 +5672,6 @@
       return;
     }
     if (event.key === "Escape") {
-      const settings = appRoot.querySelector(".settings-popover[open]");
-      if (settings instanceof HTMLDetailsElement) {
-        event.preventDefault();
-        settings.open = false;
-        model.ui.settingsOpen = false;
-        settings.querySelector("summary")?.focus();
-        return;
-      }
       const mobileMore = appRoot.querySelector(".mobile-more[open]");
       if (mobileMore instanceof HTMLDetailsElement) {
         event.preventDefault();
@@ -5668,7 +5691,7 @@
       const value = Number(model.ui.pendingPhysicalDie ?? event.target.value);
       if (!Number.isInteger(value) || value < 1 || value > 6) {
         setMessage("Enter a physical D6 result from 1 to 6.");
-        render();
+        renderAndRestoreFocus("#physicalDie", { caretToEnd: true });
         return;
       }
       rollDie(value);
@@ -5685,7 +5708,7 @@
           openCardLookupDialog(lookup.deckKey, lookup.card, []);
         } else {
           setMessage(`No printed card found for ${normaliseCardId(event.target.value)}.`);
-          render();
+          renderAndRestoreFocus(`#${CSS.escape(event.target.id)}`, { caretToEnd: true });
         }
       }
       return;
@@ -5696,40 +5719,50 @@
       if (getSpace(value)) {
         model.ui.boardLookupId = value;
         model.ui.selectedBoardSpaceId = value;
-        render();
+        renderAndRestoreFocus("#boardLookupId", { caretToEnd: true });
       } else {
         setMessage(`No board space found for ${value}. Use S00-S43.`);
-        render();
+        renderAndRestoreFocus("#boardLookupId", { caretToEnd: true });
       }
       return;
-    }
-    if (event.key !== "Tab" || !model.ui.dialog) {
-      return;
-    }
-    const focusable = Array.from(appRoot.querySelectorAll("[data-dialog-card] button, [data-dialog-card] input, [data-dialog-card] textarea, [data-dialog-card] select, [data-dialog-card] summary, [data-dialog-card] [tabindex]:not([tabindex='-1'])"))
-      .filter((item) => !item.disabled && item.offsetParent !== null);
-    if (!focusable.length) {
-      return;
-    }
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
     }
   }
 
   function handleToggle(event) {
-    if (event.target instanceof HTMLDetailsElement && event.target.isConnected && event.target.matches(".settings-popover")) {
-      model.ui.settingsOpen = event.target.open;
+    if (event.target instanceof HTMLElement && event.target.matches(".settings-panel[popover]")) {
+      model.ui.settingsOpen = event.newState === "open";
+    }
+    if (
+      event.target instanceof HTMLDetailsElement &&
+      event.target.matches("[data-mobile-reference-shelf]") &&
+      window.matchMedia("(max-width: 760px)").matches
+    ) {
+      model.ui.mobileReferenceOpen = event.target.open;
     }
   }
 
+  function handleDialogCancel(event) {
+    if (!(event.target instanceof HTMLDialogElement) || !event.target.matches("dialog[data-dialog-card]")) {
+      return;
+    }
+    event.preventDefault();
+    closeDialog();
+  }
+
   function afterRender() {
-    enhanceRenderedMotion();
+    const settings = appRoot.querySelector(".settings-panel[popover]");
+    if (model.ui.settingsOpen && settings instanceof HTMLElement && typeof settings.showPopover === "function" && !settings.matches(":popover-open")) {
+      settings.showPopover();
+    }
+    const dialog = appRoot.querySelector("dialog[data-dialog-card]");
+    if (dialog instanceof HTMLDialogElement && !dialog.open) {
+      dialog.showModal();
+      if (model.ui.dialog?.type === "board") {
+        model.ui.dialog.initialFocusComplete = true;
+      }
+    }
+    syncLiveRegions();
+    observeNumberTickers();
     if (!model.session) {
       return;
     }
@@ -5738,13 +5771,38 @@
       model.ui.lastPhase = phase;
       window.setTimeout(() => {
         const target = appRoot.querySelector(`[data-phase-section="${phase}"]`);
-        target?.scrollIntoView({ behavior: model.ui.reducedMotion ? "auto" : "smooth", block: "start" });
+        target?.scrollIntoView({ behavior: motionIsReduced() ? "auto" : "smooth", block: "start" });
       }, 0);
     }
   }
 
   function motionIsReduced() {
     return model.ui.reducedMotion || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  }
+
+  function syncLiveRegions() {
+    const statusRegion = document.getElementById("live-status");
+    const alertRegion = document.getElementById("live-alert");
+    if (!statusRegion || !alertRegion) {
+      return;
+    }
+    const messageChanged = model.message !== lastAnnouncedMessage;
+    const gameplayChanged = model.ui.announcement !== lastAnnouncedGameplay;
+    if (!messageChanged && !gameplayChanged) {
+      return;
+    }
+    statusRegion.textContent = "";
+    alertRegion.textContent = "";
+    lastAnnouncedMessage = model.message;
+    lastAnnouncedGameplay = model.ui.announcement;
+    const content = messageChanged && model.message ? model.message : gameplayChanged ? model.ui.announcement : "";
+    if (!content) {
+      return;
+    }
+    const target = messageChanged && messageTone(model.message) === "error" ? alertRegion : statusRegion;
+    window.setTimeout(() => {
+      target.textContent = content;
+    }, 0);
   }
 
   function formatTickerValue(value, format) {
@@ -5762,11 +5820,20 @@
     tickerValueHistory.set(key, target);
     const finalText = formatTickerValue(target, format);
     element.textContent = finalText;
-    if (previous === undefined || previous === target || motionIsReduced()) {
+    if (previous === undefined || previous === target) {
+      return;
+    }
+    element.dataset.tickerDirection = target > previous ? "up" : "down";
+    window.setTimeout(() => {
+      if (element.isConnected) {
+        delete element.dataset.tickerDirection;
+      }
+    }, 460);
+    if (motionIsReduced()) {
       return;
     }
     const startedAt = performance.now();
-    const duration = 360;
+    const duration = 220;
     const frame = (now) => {
       if (!element.isConnected) {
         return;
@@ -5801,92 +5868,6 @@
     tickers.forEach((ticker) => tickerObserver.observe(ticker));
   }
 
-  function revealSignature() {
-    if (!model.auth) {
-      return `auth:${model.authTab}`;
-    }
-    return `${effectiveCompanionMode()}:${model.session?.view ?? "setup"}`;
-  }
-
-  function observeSectionReveals() {
-    const signature = revealSignature();
-    revealObserver?.disconnect();
-    revealObserver = null;
-    if (signature === lastRevealSignature) {
-      return;
-    }
-    lastRevealSignature = signature;
-    const selector = [
-      ".auth-visual > .table-map",
-      ".auth-visual > .kicker",
-      ".auth-visual > h1",
-      ".auth-visual > .auth-proof",
-      ".auth-card",
-      ".content > *",
-      ".display-header",
-      ".display-grid > *",
-      ".display-card",
-      ".display-price-strip",
-      ".assist-header",
-      ".assist-grid > *"
-    ].join(",");
-    const sections = Array.from(appRoot.querySelectorAll(selector));
-    if (motionIsReduced() || !("IntersectionObserver" in window)) {
-      sections.forEach((section) => section.classList.add("ui-reveal", "is-revealed"));
-      return;
-    }
-    revealObserver = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        if (!entry.isIntersecting) return;
-        entry.target.classList.add("is-revealed");
-        revealObserver.unobserve(entry.target);
-      });
-    }, { threshold: 0.08, rootMargin: "0px 0px -24px" });
-    sections.forEach((section, index) => {
-      section.classList.add("ui-reveal");
-      section.style.setProperty("--reveal-delay", `${Math.min(index, 5) * 45}ms`);
-      revealObserver.observe(section);
-    });
-  }
-
-  function enhanceRenderedMotion() {
-    observeNumberTickers();
-    observeSectionReveals();
-  }
-
-  const spotlightSurfaceSelector = [
-    ".auth-card",
-    ".setup-session-panel",
-    ".physical-turn-card",
-    ".physical-resolution-card",
-    ".current-player-card",
-    ".assist-card.primary",
-    ".display-main",
-    ".score-row.winner"
-  ].join(",");
-
-  function handleSurfacePointerMove(event) {
-    if (model.ui.reducedMotion || !window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
-      return;
-    }
-    const surface = event.target instanceof Element ? event.target.closest(spotlightSurfaceSelector) : null;
-    if (!surface || !appRoot.contains(surface)) {
-      return;
-    }
-    const rect = surface.getBoundingClientRect();
-    surface.style.setProperty("--spot-x", `${event.clientX - rect.left}px`);
-    surface.style.setProperty("--spot-y", `${event.clientY - rect.top}px`);
-  }
-
-  function handleSurfacePointerOut(event) {
-    const surface = event.target instanceof Element ? event.target.closest(spotlightSurfaceSelector) : null;
-    if (!surface || (event.relatedTarget instanceof Node && surface.contains(event.relatedTarget))) {
-      return;
-    }
-    surface.style.removeProperty("--spot-x");
-    surface.style.removeProperty("--spot-y");
-  }
-
   function handleSubmit(event) {
     const modalForm = event.target.closest("form[data-modal-form]");
     if (modalForm) {
@@ -5901,8 +5882,11 @@
           render();
           return;
         }
+        const returnFocusSelector = model.ui.dialogReturnFocusSelector;
         model.ui.dialog = null;
+        model.ui.dialogReturnFocusSelector = "";
         adjustPlayer(data.get("playerId"), data.get("field"), amount * direction, reason);
+        focusAfterRender(returnFocusSelector);
       }
       return;
     }
@@ -5921,8 +5905,7 @@
     appRoot.addEventListener("submit", handleSubmit);
     appRoot.addEventListener("keydown", handleKeydown);
     appRoot.addEventListener("toggle", handleToggle, true);
-    appRoot.addEventListener("pointermove", handleSurfacePointerMove, { passive: true });
-    appRoot.addEventListener("pointerout", handleSurfacePointerOut, { passive: true });
+    appRoot.addEventListener("cancel", handleDialogCancel, true);
 
     try {
       model.game = await loadGame();
@@ -5939,11 +5922,11 @@
           model.backend.clientRole = "host";
         }
         appRoot.innerHTML = `
-          <section class="boot-card" aria-live="polite">
+          <main id="main-content" class="boot-card" tabindex="-1" aria-live="polite">
             <p class="kicker">Give And Take</p>
             <h1>Connecting to your saved table...</h1>
             <p>Restoring the Supabase session before table controls open.</p>
-          </section>
+          </main>
         `;
       }
       await probeBackend();
