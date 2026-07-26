@@ -45,9 +45,16 @@
     <link rel="preconnect" href="https://esm.sh" crossorigin />
     <link rel="dns-prefetch" href="https://esm.sh" />
     <link rel="preload" href="game-data.js" as="script" />
+    <link rel="preload" href="supabase-config.js" as="script" />
     <link rel="preload" href="app.js?v=20260717-17" as="script" />
     <link rel="preload" href="../../game_data/game_config.json?v=20260717-17" as="fetch" crossorigin />
-    <link rel="stylesheet" href="styles.css?v=20260717-17" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css?v=20260723-ui2" />
     <noscript>
       <style>
         #app,
@@ -66,6 +73,17 @@
       </main>
     </noscript>
 
+    <canvas id="gt-webgl" aria-hidden="true"></canvas>
+    <div id="gt-grain" aria-hidden="true"></div>
+    <div id="gt-frame" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+
+    <div id="gt-loader" aria-hidden="true">
+      <div class="gt-mark">Give <em>and</em> Take</div>
+      <div class="gt-sub">Table companion</div>
+      <div class="gt-pct">0</div>
+      <div class="gt-bar"><i></i></div>
+    </div>
+
     <div id="app" class="boot-shell">
       <main id="main-content" class="boot-card" tabindex="-1">
         <p class="kicker">Give And Take</p>
@@ -80,5 +98,7 @@
     <script src="game-data.js"></script>
     <script src="supabase-config.js"></script>
     <script src="app.js?v=20260717-17"></script>
+    <script src="ui-refresh.js?v=20260723-ui2"></script>
+    <script type="module" src="webgl-hero.js?v=20260723-ui2"></script>
   </body>
 </html>

@@ -3940,3 +3940,156 @@ a:focus-visible,
     box-shadow: none;
   }
 }
+
+/* ==========================================================================
+   UI REFRESH 2026 — cinematic editorial layer
+   References: Ricardo Chance (Instrument Serif), Izanami / 3dyco (warm near-
+   black + numeric preloader), agencidev / visualidentity (refractive glass 3D).
+   Additive override block — remove from here down to revert.
+   ========================================================================== */
+
+/* Instrument Serif for display; Inter for micro-labels. Loaded in index.html. */
+:root{
+  /* warm cinematic near-black + bone; gold kept thin */
+  --bg:#0b0a08;
+  --bg-deep:#070605;
+  --surface-table:#0f0e0b;
+  --surface-card:#141210;
+  --surface-raised:#1c1913;
+  --surface-inset:#0a0908;
+  --paper:#efe9dc;
+  --paper-soft:#f6f0e4;
+  --ink-primary:#ece7dd;
+  --ink-secondary:#b7b0a2;
+  --ink-muted:#847d6e;
+  --ink-inverse:#141210;
+  --border-subtle:#26231d;
+  --border-strong:#4c4535;
+  --accent-primary:#c9a25a;
+  --accent-danger:#c67d6f;
+  --accent-warning:#d1a55a;
+  --accent-success:#7fae82;
+  --gold:#c9a25a;
+  --gold-2:#dcc189;
+  --gold-soft:rgba(201,162,90,.14);
+  --radius:3px;
+  --radius-panel:5px;
+  --radius-shell:7px;
+  --shadow-high:0 40px 120px rgba(0,0,0,.55);
+  --focus:0 0 0 3px rgba(201,162,90,.30), 0 0 0 1px #c9a25a;
+  --font-display:"Instrument Serif", Newsreader, Georgia, serif;
+  --ease-out:cubic-bezier(.16,1,.3,1);
+}
+
+/* Display headings: editorial serif, tighter leading, mixed case */
+h1,h2,h3,.brand-title,.large-readable{
+  font-family:var(--font-display);
+  font-weight:400;
+  letter-spacing:.004em;
+  line-height:1.02;
+}
+.kicker,.eyeline{
+  font-family:"Inter", var(--font), sans-serif;
+  font-weight:500;letter-spacing:.26em;text-transform:uppercase;font-size:.66rem;color:var(--ink-muted);
+}
+
+/* --- persistent WebGL canvas + film grain + corner frame --------------- */
+#gt-webgl{
+  position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none;
+  opacity:0;transition:opacity 1.2s var(--ease-out);
+}
+html[data-page-theme="table"] #gt-webgl{opacity:1}
+html[data-page-theme="classroom"] #gt-webgl{opacity:0}
+html.reduced-motion #gt-webgl{opacity:.5}
+
+#gt-grain{
+  position:fixed;inset:0;z-index:2;pointer-events:none;opacity:.045;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+html[data-page-theme="classroom"] #gt-grain{display:none}
+
+#gt-frame{position:fixed;inset:14px;z-index:3;pointer-events:none}
+#gt-frame span{position:absolute;width:20px;height:20px;border:1px solid var(--border-strong);opacity:.5}
+#gt-frame span:nth-child(1){top:0;left:0;border-right:0;border-bottom:0}
+#gt-frame span:nth-child(2){top:0;right:0;border-left:0;border-bottom:0}
+#gt-frame span:nth-child(3){bottom:0;left:0;border-right:0;border-top:0}
+#gt-frame span:nth-child(4){bottom:0;right:0;border-left:0;border-top:0}
+html[data-page-theme="classroom"] #gt-frame{display:none}
+
+/* app content sits above the canvas */
+#app{position:relative;z-index:1}
+.app-shell,.player-assist-shell,.table-display-shell{background:var(--bg)}
+
+/* --- numeric preloader (3dyco/Izanami) -------------------------------- */
+#gt-loader{
+  position:fixed;inset:0;z-index:1000;background:var(--bg-deep);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  transition:opacity .8s var(--ease-out), visibility .8s;
+}
+#gt-loader.gt-done{opacity:0;visibility:hidden;pointer-events:none}
+#gt-loader .gt-mark{
+  font-family:var(--font-display);font-size:clamp(28px,4.4vw,46px);
+  letter-spacing:.02em;color:var(--ink-primary);transform:scaleY(1.28);opacity:.94;
+}
+#gt-loader .gt-mark em{font-style:italic;color:var(--gold)}
+#gt-loader .gt-sub{margin-top:18px;font-family:"Inter",sans-serif;font-size:.62rem;
+  letter-spacing:.3em;text-transform:uppercase;color:var(--ink-muted)}
+#gt-loader .gt-pct{position:absolute;bottom:13%;font-family:var(--font-display);font-size:22px;color:var(--ink-secondary)}
+#gt-loader .gt-bar{position:absolute;bottom:calc(13% - 16px);width:min(260px,42vw);height:1px;background:var(--border-subtle)}
+#gt-loader .gt-bar i{display:block;height:100%;width:0;background:var(--ink-primary);transition:width .3s linear}
+
+/* --- entry / auth screen: editorial hero ------------------------------ */
+.auth-page{background:transparent}
+.auth-visual .kicker{margin-bottom:18px}
+.auth-visual h1{
+  font-family:var(--font-display);font-weight:400;
+  font-size:clamp(40px,6vw,86px);line-height:.94;letter-spacing:-.01em;max-width:15ch;
+}
+.auth-visual h1 em,.auth-visual h1 .gt-em{font-style:italic;color:var(--gold)}
+.auth-visual .table-map{
+  border:1px solid var(--border-subtle);border-radius:var(--radius-panel);
+  background:var(--surface-inset);box-shadow:var(--shadow-high);
+}
+.map-badge{font-family:var(--font-display);letter-spacing:.14em}
+.auth-proof .proof-tile{
+  border:1px solid var(--border-subtle);background:rgba(20,18,16,.4);backdrop-filter:blur(4px);
+  transition:border-color .4s var(--ease-out), transform .5s var(--ease-out), background .4s;
+}
+.auth-proof .proof-tile:hover{border-color:var(--border-strong);transform:translateY(-3px);background:rgba(28,25,19,.6)}
+.auth-proof .proof-tile strong{font-family:var(--font-display);color:var(--gold)}
+.auth-card{
+  border:1px solid var(--border-subtle);background:rgba(15,14,11,.72);
+  backdrop-filter:blur(14px) saturate(1.1);box-shadow:var(--shadow-high);
+}
+.auth-card h2{font-size:clamp(26px,3.4vw,40px)}
+
+/* --- buttons: fill-up hover + tracking -------------------------------- */
+.button,.button-secondary,.button-ghost,.auth-tab{
+  border-radius:var(--radius);letter-spacing:.02em;transition:color .4s var(--ease-out),
+  border-color .4s var(--ease-out), background .4s var(--ease-out), transform .3s var(--ease-out);
+}
+.button{position:relative;overflow:hidden;isolation:isolate}
+.button::after{content:"";position:absolute;inset:0;z-index:-1;background:var(--gold);
+  transform:translateY(101%);transition:transform .5s var(--ease-out)}
+.button:hover:not(:disabled){color:#141210;border-color:var(--gold)}
+.button:hover:not(:disabled)::after{transform:translateY(0)}
+.auth-tab[aria-selected="true"]{border-color:var(--border-strong);color:var(--ink-primary)}
+
+/* --- panels / cards: hairline editorial ------------------------------- */
+.physical-turn-card,.physical-resolution-card,.lookup-card,.space-detail-panel,
+.large-card-view,.physical-evidence-card,.assist-card,.card,.panel,.surface{
+  border-radius:var(--radius-panel);
+}
+.number-ticker{font-family:var(--font-display)}
+
+/* --- reveal-on-enter (entry only; app re-renders keep instant) -------- */
+.gt-reveal{opacity:0;transform:translateY(24px);transition:opacity .9s var(--ease-out), transform .9s var(--ease-out)}
+.gt-reveal.gt-in{opacity:1;transform:none}
+html.reduced-motion .gt-reveal{opacity:1;transform:none;transition:none}
+
+@media (prefers-reduced-motion: reduce){
+  #gt-loader .gt-bar i{transition:none}
+  .gt-reveal{opacity:1;transform:none;transition:none}
+  .button::after{transition:none}
+}
+/* ===================== END UI REFRESH 2026 ============================= */

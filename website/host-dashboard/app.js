@@ -2750,7 +2750,7 @@
           <div class="map-badge">S00-S43</div>
         </div>
         <p class="kicker">Give And Take</p>
-        <h1 id="entry-title">Keep the board physical. Run the table here.</h1>
+        <h1 id="entry-title">Keep the board <em>physical.</em> Run the table here.</h1>
         <p>Create or join a GT session. The app handles turn checks, shared prices, and evidence while players stay on the printed board.</p>
         <div class="auth-proof" aria-label="Game flow">
           <div class="proof-tile"><strong>01</strong><span>Set the table and share one GT code.</span></div>
