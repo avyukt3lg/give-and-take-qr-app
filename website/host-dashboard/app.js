@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const CONFIG_VERSION = "20260727-v4a";
+  const CONFIG_VERSION = "20260727-v4b";
   const CONFIG_URL = `../../game_data/game_config.json?v=${CONFIG_VERSION}`;
   const BOARD_IMAGE_URL = "../../outputs/final_assets/board/give_and_take_board_web_1280.webp";
   const BOARD_IMAGE_SRCSET = [
@@ -3374,6 +3374,288 @@
     `;
   }
 
+  /* ======================================================================
+     COMMAND DECK
+     Three pieces of the operational console: the persistent table-status
+     rail, the "Now" zone, and the board route rail. Everything here is
+     derived from state that already exists on the session and game model --
+     no new fields, no invented positions, no synthetic history.
+     ====================================================================== */
+
+  /* Pawn positions at the previous render. The route rail marks only the
+     pawns that actually moved, so movement reads as movement instead of the
+     whole rail re-animating on every render. Comparing model state here --
+     rather than observing the DOM -- keeps the #app MutationObserver out of
+     a feedback loop. */
+  let lastRenderedPositions = new Map();
+
+  function spaceIdForIndex(index) {
+    const bounded = Math.max(0, Math.min(43, Number(index) || 0));
+    return `S${String(bounded).padStart(2, "0")}`;
+  }
+
+  /* The single question the Now zone answers: what must happen next, and who
+     is it waiting on. Pure function of existing session state. */
+  function nowDirective() {
+    const player = currentPlayer();
+    const pending = model.session.pendingResolution;
+    const status = sessionStatus();
+    const readOnly = !canEditSession();
+    const onPlay = model.session.view === "play";
+
+    let warning = "";
+    if (status.state === "failed") {
+      warning = status.detail;
+    } else if (readOnly) {
+      warning = "Player view. Turn actions are host-only on this table.";
+    }
+
+    /* Off the play view the action is a jump; on it, the action moves focus to
+       the control the phase is waiting on. Either way the zone always ends in
+       something the host can press. */
+    const openPlay = onPlay
+      ? { label: "Go to turn controls", attrs: 'data-action="focus-turn"' }
+      : { label: "Open play", attrs: 'data-view="play"' };
+
+    if (!model.session.started) {
+      return {
+        state: "setup",
+        phase: "Setup",
+        actor: null,
+        instruction: "Create 2-5 players, assign Starter Profiles, then start the table.",
+        action: model.session.view === "setup" ? null : { label: "Open setup", attrs: 'data-view="setup"' },
+        warning
+      };
+    }
+
+    if (model.session.gameOver) {
+      return {
+        state: "over",
+        phase: "Scoring",
+        actor: null,
+        instruction: "Every player has finished. Read the final scores, then export the table record.",
+        action: model.session.view === "scoring" ? null : { label: "Open scores", attrs: 'data-view="scoring"' },
+        warning
+      };
+    }
+
+    if (!pending) {
+      return {
+        state: "roll",
+        phase: "Roll",
+        actor: player,
+        instruction: `Roll the real D6 for ${player?.name ?? "the next player"}, then enter the result.`,
+        action: openPlay,
+        warning
+      };
+    }
+
+    if (!pending.physicalPawnConfirmed) {
+      const target = pending.spaceId ?? spaceIdForIndex(player?.position);
+      const space = getSpace(target);
+      return {
+        state: "move",
+        phase: "Roll",
+        actor: player,
+        instruction: `Move the pawn to ${target}${space?.label ? ` - ${space.label}` : ""}, then confirm it on the board.`,
+        action: onPlay
+          ? { label: `Confirm pawn on ${target}`, attrs: `data-action="confirm-pawn-space" ${hostDisabledAttr()}` }
+          : openPlay,
+        warning
+      };
+    }
+
+    if (pending.cardDeck && !pending.cardId) {
+      return {
+        state: "draw",
+        phase: "Resolve",
+        actor: player,
+        instruction: `Draw the printed ${deckLabel(pending.cardDeck)} card, then enter its ID.`,
+        action: openPlay,
+        warning
+      };
+    }
+
+    if (!pending.completed) {
+      const target = pending.spaceId ?? spaceIdForIndex(player?.position);
+      return {
+        state: "resolve",
+        phase: "Resolve",
+        actor: player,
+        instruction: `Resolve ${target} with the printed card, then record the outcome.`,
+        action: openPlay,
+        warning
+      };
+    }
+
+    return {
+      state: "log",
+      phase: "Log",
+      actor: player,
+      instruction: "Record evidence and finish the checklist to close this turn.",
+      action: openPlay,
+      warning
+    };
+  }
+
+  /* Persistent table-status rail. Compact, always present, and ordered the
+     way the edge of the printed board is: identity first, then link, then
+     the live turn state, then the controls. */
+  function renderTableStatusRail() {
+    const status = sessionStatus();
+    const player = currentPlayer();
+    const directive = nowDirective();
+    return `
+      <div class="deck-rail" role="group" aria-label="Table status">
+        <div class="deck-rail-seg deck-rail-code">
+          <span class="deck-rail-label" id="deck-rail-code-label">Table</span>
+          <strong class="deck-rail-code-value" aria-labelledby="deck-rail-code-label">${escapeHtml(model.session.code)}</strong>
+          <button class="deck-rail-copy" type="button" data-action="copy-session-code" aria-label="Copy table code ${escapeHtml(model.session.code)}">Copy</button>
+        </div>
+        <div class="deck-rail-seg deck-rail-link" data-link-state="${escapeHtml(status.state)}">
+          <span class="deck-rail-label">Link</span>
+          <strong><span class="deck-rail-dot" aria-hidden="true"></span>${escapeHtml(status.label)}</strong>
+        </div>
+        <div class="deck-rail-seg">
+          <span class="deck-rail-label">Turn</span>
+          <strong>${escapeHtml(currentTurnLabel())}</strong>
+        </div>
+        <div class="deck-rail-seg">
+          <span class="deck-rail-label">Phase</span>
+          <strong>${escapeHtml(model.session.phase)}</strong>
+        </div>
+        <div class="deck-rail-seg deck-rail-actor" data-now-state="${escapeHtml(directive.state)}">
+          <span class="deck-rail-label">Now</span>
+          <strong>
+            ${player ? `<span class="deck-rail-token" style="--token:${cssVar(player.tokenColor)}" aria-hidden="true"></span>` : ""}
+            <span class="deck-rail-actor-name">${escapeHtml(player?.name ?? "Setup")}</span>
+          </strong>
+        </div>
+        <div class="deck-rail-seg deck-rail-you">
+          <span class="deck-rail-label">${escapeHtml(tableRoleLabel())}</span>
+          <strong>${escapeHtml(model.auth.name)}</strong>
+        </div>
+        <div class="deck-rail-seg deck-rail-tools">
+          ${renderSettingsControl()}
+        </div>
+      </div>
+    `;
+  }
+
+  /* The Now zone: the strongest area on every operational screen. One pool of
+     light, one dominant instruction, one primary action. */
+  function renderNowZone() {
+    const directive = nowDirective();
+    const player = directive.actor;
+    const spaceId = player ? spaceIdForIndex(player.position) : null;
+    const space = spaceId ? getSpace(spaceId) : null;
+    return `
+      <section class="now-zone" data-now-state="${escapeHtml(directive.state)}" aria-labelledby="now-zone-heading">
+        <span class="now-zone-light" aria-hidden="true"></span>
+        <div class="now-zone-body">
+          <p class="now-zone-eyeline">Now &middot; ${escapeHtml(directive.phase)}</p>
+          <h2 class="now-zone-heading" id="now-zone-heading">
+            ${player ? `<span class="now-zone-token" style="--token:${cssVar(player.tokenColor)}" aria-hidden="true"></span>` : ""}
+            <span class="now-zone-name">${escapeHtml(player?.name ?? "Table setup")}</span>
+          </h2>
+          <p class="now-zone-instruction">${escapeHtml(directive.instruction)}</p>
+          ${
+            directive.action
+              ? `<div class="now-zone-actions"><button class="button now-zone-primary" type="button" ${directive.action.attrs}>${escapeHtml(directive.action.label)}</button></div>`
+              : ""
+          }
+        </div>
+        <dl class="now-zone-meta">
+          <div><dt>Turn</dt><dd>${escapeHtml(currentTurnLabel())}</dd></div>
+          ${
+            player && space
+              ? `<div><dt>Space</dt><dd>${escapeHtml(spaceId)} <span>${escapeHtml(space.type)}</span></dd></div>`
+              : ""
+          }
+          ${player ? `<div><dt>Profile</dt><dd>${escapeHtml(player.profileTitle ?? "-")}</dd></div>` : ""}
+        </dl>
+        ${directive.warning ? `<p class="now-zone-warning">${escapeHtml(directive.warning)}</p>` : ""}
+      </section>
+    `;
+  }
+
+  /* Board route rail: the real S00-S43 path, with real pawn positions.
+     Position is carried by the cell index, the printed space id, and a text
+     token inside each pawn -- never by colour alone. Long names never enter
+     the rail; they live in the screen-reader summary underneath. */
+  function renderBoardProgressRail() {
+    if (!model.session.started || !model.session.players.length) {
+      return "";
+    }
+    const occupied = new Map();
+    model.session.players.forEach((player) => {
+      const list = occupied.get(player.position) ?? [];
+      list.push(player);
+      occupied.set(player.position, list);
+    });
+    const active = currentPlayer();
+    const moved = new Map();
+    model.session.players.forEach((player) => {
+      const previous = lastRenderedPositions.get(player.id);
+      moved.set(player.id, previous !== undefined && previous !== player.position);
+    });
+    lastRenderedPositions = new Map(model.session.players.map((player) => [player.id, player.position]));
+
+    const cells = model.game.boardSpaces
+      .map((space) => {
+        const index = Number(space.id.slice(1));
+        const here = occupied.get(index) ?? [];
+        const meta = spaceMeta(space.type);
+        const isActive = Boolean(active && active.position === index);
+        return `
+          <li class="route-cell tone-${meta.tone}${isActive ? " is-active" : ""}${here.length ? " is-occupied" : ""}" data-space-id="${space.id}">
+            <button
+              class="route-cell-hit"
+              type="button"
+              data-action="space-info"
+              data-space-id="${space.id}"
+              aria-label="${escapeHtml(boardSpaceDescription(space))}${here.length ? `. Occupied by ${escapeHtml(here.map((p) => p.name).join(", "))}` : ""}">
+              <span class="route-cell-id">${escapeHtml(space.id.slice(1))}</span>
+            </button>
+            ${
+              here.length
+                ? `<span class="route-cell-pawns" aria-hidden="true">${here
+                    .map(
+                      (player) => `
+                        <span
+                          class="route-pawn${active && player.id === active.id ? " is-active" : ""}"
+                          style="--token:${cssVar(player.tokenColor)}"
+                          data-moved="${moved.get(player.id) ? "1" : "0"}">${escapeHtml(player.id)}</span>
+                      `
+                    )
+                    .join("")}</span>`
+                : ""
+            }
+          </li>
+        `;
+      })
+      .join("");
+
+    const summary = model.session.players
+      .map((player) => {
+        const spaceId = spaceIdForIndex(player.position);
+        const space = getSpace(spaceId);
+        return `${player.name} is on ${spaceId}${space?.type ? `, ${space.type}` : ""}${player.finished ? ", finished" : ""}.`;
+      })
+      .join(" ");
+
+    return `
+      <section class="route-rail" aria-label="Board route S00 to S43">
+        <header class="route-rail-head">
+          <span class="table-label">Route</span>
+          <span class="route-rail-range" aria-hidden="true">S00 &ndash; S43</span>
+        </header>
+        <ol class="route-rail-track">${cells}</ol>
+        <p class="sr-only">${escapeHtml(summary)}</p>
+      </section>
+    `;
+  }
+
   function renderApp() {
     if (effectiveCompanionMode() === "table") {
       renderTableDisplayApp();
@@ -3429,14 +3711,11 @@
               <p>${escapeHtml(`${tableRoleLabel()} · ${model.auth.name}`)}</p>
             </div>
           </div>
-          <div class="status-strip">
-            <span class="status-pill">Turn <strong>${escapeHtml(currentTurnLabel())}</strong></span>
-            <span class="status-pill">Player <strong>${escapeHtml(player?.name ?? "None")}</strong></span>
-            <span class="status-pill">Phase <strong>${escapeHtml(model.session.phase)}</strong></span>
-            <span class="status-pill status-${status.state}">${escapeHtml(status.label)} <strong>${escapeHtml(status.state === "saving" ? "now" : status.state === "synced" ? relativeTime(model.backend.lastSavedAt) : "Supabase")}</strong></span>
-          </div>
+          ${renderTableStatusRail()}
         </header>
         <section class="content">
+          ${model.session.view === "rules" ? "" : renderNowZone()}
+          ${["play", "players", "scoring"].includes(model.session.view) ? renderBoardProgressRail() : ""}
           ${renderCurrentView()}
         </section>
       </main>
@@ -5254,6 +5533,23 @@
     }
 
     switch (action) {
+      /* Command Deck: the Now zone's primary action when the next step is an
+         entry rather than a commit. Moves focus to the control the current
+         phase is actually waiting on, so the zone always resolves to
+         something the host can do. */
+      case "focus-turn": {
+        const target =
+          appRoot.querySelector("#physicalDie:not([disabled])") ??
+          appRoot.querySelector("#physicalCardId:not([disabled])") ??
+          appRoot.querySelector(".physical-turn-card");
+        if (target instanceof HTMLElement) {
+          target.scrollIntoView({ block: "center", behavior: model.ui.reducedMotion ? "auto" : "smooth" });
+          if (typeof target.focus === "function") {
+            target.focus({ preventScroll: true });
+          }
+        }
+        break;
+      }
       case "dismiss-toast":
         window.clearTimeout(setMessage.timer);
         model.message = "";

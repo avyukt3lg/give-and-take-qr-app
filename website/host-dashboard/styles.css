@@ -5402,11 +5402,14 @@ textarea {
   padding: 14px 0;
   border-bottom: 1px solid var(--line);
 }
+/* Demoted: the deck rail now carries the table code at reading-across-a-room
+   scale, so the nav copy is a quiet secondary reference rather than a second
+   competing display of the same value. */
 .rail-status strong {
   font-family: var(--font-mono);
-  font-size: 1.28rem;
-  letter-spacing: 0.14em;
-  color: var(--parchment);
+  font-size: 0.95rem;
+  letter-spacing: 0.12em;
+  color: var(--parchment-dim);
 }
 .rail-status span:last-child {
   font-size: 0.74rem;
@@ -5496,6 +5499,541 @@ textarea {
 }
 .content {
   padding: clamp(20px, 2.6vw, 34px);
+  display: grid;
+  gap: var(--space-5);
+  align-content: start;
+}
+
+/* --- Command Deck: persistent table-status rail ------------------------- */
+/* Read as the edge of the printed board: a ledger band of thin-ruled
+   segments, identity first, then link, then live turn state, then controls.
+   The GT code is the loudest thing in the band by design -- it is the one
+   value read out across a room. */
+.deck-rail {
+  display: flex;
+  align-items: stretch;
+  flex-wrap: wrap;
+  gap: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-control);
+  background: color-mix(in srgb, var(--surface-1) 88%, transparent);
+}
+.deck-rail-seg {
+  display: grid;
+  gap: 2px;
+  align-content: center;
+  padding: 8px var(--space-4);
+  border-left: 1px solid var(--line);
+  min-width: 0;
+}
+.deck-rail-seg:first-child {
+  border-left: 0;
+}
+.deck-rail-label {
+  font-family: var(--font-ui);
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--parchment-mute);
+  white-space: nowrap;
+}
+.deck-rail-seg > strong {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--parchment);
+  min-width: 0;
+}
+/* The table code. Mono, wide-tracked, selectable as one unit so a host can
+   grab it in a single gesture while reading it out. */
+.deck-rail-code {
+  display: grid;
+  grid-template-columns: auto auto;
+  grid-template-areas: "label label" "value copy";
+  align-items: center;
+  gap: 2px var(--space-3);
+  padding-left: var(--space-5);
+  background:
+    linear-gradient(to right, var(--brass-soft), transparent 78%);
+}
+.deck-rail-code .deck-rail-label {
+  grid-area: label;
+}
+.deck-rail-code-value {
+  grid-area: value;
+  font-family: var(--font-mono);
+  font-size: clamp(1.1rem, 1.5vw, 1.45rem);
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  line-height: 1.1;
+  color: var(--parchment);
+  -webkit-user-select: all;
+  user-select: all;
+}
+.deck-rail-copy {
+  grid-area: copy;
+  padding: 3px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-control);
+  background: transparent;
+  color: var(--parchment-dim);
+  font-family: var(--font-ui);
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease),
+    background-color var(--dur-1) var(--ease);
+}
+.deck-rail-copy:hover {
+  border-color: var(--brass);
+  background: var(--brass-soft);
+  color: var(--parchment);
+}
+/* Connection state carries a dot AND a word -- never colour alone. */
+.deck-rail-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--parchment-mute);
+}
+.deck-rail-link[data-link-state="synced"] .deck-rail-dot,
+.deck-rail-link[data-link-state="connected"] .deck-rail-dot {
+  background: var(--signal);
+}
+.deck-rail-link[data-link-state="saving"] .deck-rail-dot {
+  background: var(--brass);
+}
+.deck-rail-link[data-link-state="failed"] .deck-rail-dot {
+  background: var(--danger);
+}
+.deck-rail-token {
+  width: 10px;
+  height: 10px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--token, var(--brass));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--token, var(--brass)) 55%, transparent);
+}
+.deck-rail-actor {
+  flex: 1 1 auto;
+}
+.deck-rail-actor-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.deck-rail-you strong {
+  font-weight: 500;
+  color: var(--parchment-dim);
+}
+.deck-rail-tools {
+  margin-left: auto;
+  align-content: center;
+}
+
+/* --- Command Deck: the "Now" zone --------------------------------------- */
+/* One area of the table under a pool of light. Dominant instruction, one
+   primary action, supporting values recede into a ledger column. */
+.now-zone {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-5) var(--space-6);
+  align-items: start;
+  padding: clamp(18px, 2.2vw, 28px) clamp(20px, 2.6vw, 34px);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-panel);
+  background: var(--surface-1);
+  overflow: hidden;
+}
+/* The pool of light. Painted at z-index 0 inside an isolated stacking
+   context -- never -1, which would escape and paint behind the panel. */
+.now-zone-light {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(72% 130% at 14% 0%, var(--brass-soft), transparent 70%);
+}
+.now-zone > *:not(.now-zone-light) {
+  position: relative;
+  z-index: 1;
+}
+/* Registration mark: the corner tick that ties the console to the board. */
+.now-zone::after {
+  content: "";
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 1;
+  width: 12px;
+  height: 12px;
+  border-top: 1px solid var(--brass);
+  border-left: 1px solid var(--brass);
+  opacity: 0.5;
+  pointer-events: none;
+}
+.now-zone-body {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.now-zone-eyeline {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--brass);
+}
+.now-zone-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(26px, 3vw, 40px);
+  line-height: 1.05;
+  color: var(--parchment);
+  min-width: 0;
+}
+.now-zone-token {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--token, var(--brass));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--token, var(--brass)) 22%, transparent);
+}
+.now-zone-name {
+  overflow-wrap: anywhere;
+}
+.now-zone-instruction {
+  margin: 0;
+  max-width: 54ch;
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--parchment-dim);
+}
+.now-zone-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-1);
+}
+.now-zone-primary {
+  min-height: 44px;
+}
+/* Supporting values: a set ledger column, not a row of cards. */
+.now-zone-meta {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  min-width: 170px;
+  border-top: 1px solid var(--line);
+}
+.now-zone-meta > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line);
+}
+.now-zone-meta dt {
+  font-size: 0.64rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--parchment-mute);
+}
+.now-zone-meta dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.86rem;
+  color: var(--parchment);
+  text-align: right;
+}
+.now-zone-meta dd span {
+  color: var(--parchment-mute);
+}
+.now-zone-warning {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 10px var(--space-4);
+  border-left: 2px solid var(--warning);
+  background: color-mix(in srgb, var(--warning) 10%, transparent);
+  font-size: 0.86rem;
+  color: var(--parchment);
+}
+/* Waiting on the host to act reads warmer; blocked states read cooler. */
+.now-zone[data-now-state="setup"] .now-zone-eyeline,
+.now-zone[data-now-state="over"] .now-zone-eyeline {
+  color: var(--parchment-mute);
+}
+
+/* --- Command Deck: board route rail (S00-S43) --------------------------- */
+/* The real printed path. Position is carried by cell order, the printed
+   space id, and a text token inside each pawn -- never by colour alone. */
+.route-rail {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4) 0 0;
+  border-top: 1px solid var(--line);
+}
+.route-rail-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+.route-rail-range {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  color: var(--parchment-mute);
+}
+.route-rail-track {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.route-cell {
+  position: relative;
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.route-cell-hit {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 1px;
+  border-bottom-width: 2px;
+  border-bottom-color: color-mix(in srgb, var(--brass) 34%, transparent);
+  background: var(--surface-2);
+  color: var(--parchment-mute);
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease);
+}
+.route-cell-hit:hover {
+  background: var(--surface-3);
+  color: var(--parchment);
+}
+.route-cell.is-occupied .route-cell-hit {
+  color: var(--parchment-dim);
+  border-color: var(--line-strong);
+}
+/* The current position is unmistakable: filled, tall, signal-bordered, and
+   carrying the only chartreuse in the rail. */
+.route-cell.is-active .route-cell-hit {
+  border-color: var(--signal);
+  border-bottom-color: var(--signal);
+  background: var(--signal-soft);
+  color: var(--parchment);
+  font-weight: 700;
+}
+.route-cell-pawns {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2px;
+  min-height: 14px;
+}
+.route-pawn {
+  display: grid;
+  place-items: center;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 2px;
+  border: 1px solid var(--token, var(--brass));
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--token, var(--brass)) 26%, var(--bg-void));
+  color: var(--parchment);
+  font-family: var(--font-mono);
+  font-size: 0.54rem;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+/* The player whose turn it is gets a ring, so the active pawn is legible
+   without relying on its token colour. */
+.route-pawn.is-active {
+  box-shadow: 0 0 0 1px var(--signal);
+}
+/* Movement reads as movement: only pawns whose position actually changed
+   since the previous render settle into place. Nothing else moves. */
+.route-pawn[data-moved="1"] {
+  animation: route-pawn-settle 420ms var(--ease) both;
+}
+@keyframes route-pawn-settle {
+  from {
+    opacity: 0;
+    transform: translateY(-7px) scale(0.86);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* --- Command Deck: theme adjustments ------------------------------------ */
+/* The three themes are token remaps, so the Command Deck inherits them
+   whole. Only two things need saying explicitly. */
+
+/* Classroom is projector-light: the pool of light would read as a smudge on
+   a bright ground, and the code band needs a real edge instead of a wash. */
+.theme-classroom .now-zone-light {
+  display: none;
+}
+.theme-classroom .now-zone,
+.theme-classroom .deck-rail {
+  background: var(--surface-2);
+}
+.theme-classroom .deck-rail-code {
+  background: var(--surface-3);
+  border-right: 1px solid var(--line);
+}
+.theme-classroom .route-cell-hit {
+  background: var(--surface-3);
+}
+
+/* Contrast must not lean on tint or shadow: state is carried by border
+   weight and fill, and the route cells grow so their labels clear AA. */
+.theme-contrast .now-zone-light {
+  display: none;
+}
+.theme-contrast .now-zone {
+  border-width: 2px;
+}
+.theme-contrast .deck-rail-seg {
+  border-left-color: var(--line-strong);
+}
+.theme-contrast .route-cell-hit {
+  height: 34px;
+  font-size: 0.66rem;
+  border-color: var(--line-strong);
+}
+.theme-contrast .route-cell.is-active .route-cell-hit {
+  border-width: 2px;
+  background: var(--signal);
+  color: var(--signal-ink);
+}
+.theme-contrast .route-pawn {
+  border-width: 2px;
+  font-size: 0.58rem;
+}
+.theme-contrast .now-zone-warning {
+  border-left-width: 4px;
+}
+
+/* --- Command Deck: responsive ------------------------------------------- */
+/* The rail and the Now zone reflow before the route rail does, because the
+   route rail is the one element that genuinely needs its own axis. */
+@media (max-width: 1180px) {
+  .now-zone {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .now-zone-meta {
+    min-width: 0;
+  }
+  .now-zone-meta > div {
+    justify-content: flex-start;
+    gap: var(--space-5);
+  }
+  .now-zone-meta dd {
+    text-align: left;
+  }
+}
+
+/* Short laptop viewports (1280x640): the Now zone and its primary action
+   must stay in the first fold, so the heading gives up scale before the
+   instruction gives up lines. */
+@media (max-height: 760px) and (min-width: 901px) {
+  .now-zone {
+    padding: 16px clamp(18px, 2.4vw, 28px);
+    gap: var(--space-4) var(--space-5);
+  }
+  .now-zone-heading {
+    font-size: clamp(22px, 2.2vw, 30px);
+  }
+  .route-cell-hit {
+    height: 26px;
+  }
+}
+
+@media (max-width: 900px) {
+  /* Current player and primary action first; table identity and connection
+     stay visible above them. */
+  .deck-rail {
+    width: 100%;
+  }
+  .deck-rail-seg {
+    flex: 1 1 auto;
+  }
+  .deck-rail-tools {
+    margin-left: 0;
+  }
+  .now-zone {
+    padding: 18px 20px;
+  }
+  /* 44 cells cannot share one axis at this width. The rail keeps its real
+     order and becomes a scrollable horizontal instrument; every cell is a
+     button, so keyboard focus scrolls it into view without extra wiring. */
+  .route-rail-track {
+    grid-auto-columns: 26px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    padding-bottom: var(--space-2);
+    -webkit-overflow-scrolling: touch;
+  }
+  .route-cell-hit {
+    height: 34px;
+  }
+  .route-cell-pawns {
+    flex-wrap: nowrap;
+  }
+}
+
+@media (max-width: 430px) {
+  /* Identity band wraps to two rows rather than shrinking the code. */
+  .deck-rail-seg {
+    padding: 7px var(--space-3);
+  }
+  .deck-rail-code {
+    flex: 1 0 100%;
+    padding-left: var(--space-3);
+    border-bottom: 1px solid var(--line);
+  }
+  .deck-rail-you {
+    display: none;
+  }
+  .now-zone-heading {
+    font-size: clamp(22px, 7vw, 30px);
+  }
+  .now-zone-primary {
+    width: 100%;
+  }
 }
 
 /* metrics + data */
