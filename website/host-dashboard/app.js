@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const CONFIG_VERSION = "20260727-v4c";
+  const CONFIG_VERSION = "20260727-v4d";
   const CONFIG_URL = `../../game_data/game_config.json?v=${CONFIG_VERSION}`;
   const BOARD_IMAGE_URL = "../../outputs/final_assets/board/give_and_take_board_web_1280.webp";
   const BOARD_IMAGE_SRCSET = [
@@ -3452,7 +3452,10 @@
         phase: "Setup",
         actor: null,
         instruction: "Create 2-5 players, assign Starter Profiles, then start the table.",
-        action: model.session.view === "setup" ? null : { label: "Open setup", attrs: 'data-view="setup"' },
+        action:
+          model.session.view === "setup"
+            ? { label: "Go to setup steps", attrs: 'data-action="focus-turn"' }
+            : { label: "Open setup", attrs: 'data-view="setup"' },
         warning
       };
     }
@@ -5567,10 +5570,15 @@
          phase is actually waiting on, so the zone always resolves to
          something the host can do. */
       case "focus-turn": {
+        /* Ordered by how likely the phase is to be waiting on it. The setup
+           fallbacks matter: on the Setup view none of the play controls exist,
+           and without them the Now zone's action would be inert. */
         const target =
           appRoot.querySelector("#physicalDie:not([disabled])") ??
           appRoot.querySelector("#physicalCardId:not([disabled])") ??
-          appRoot.querySelector(".physical-turn-card");
+          appRoot.querySelector("#playerCount:not([disabled])") ??
+          appRoot.querySelector(".physical-turn-card") ??
+          appRoot.querySelector(".content .panel");
         if (target instanceof HTMLElement) {
           target.scrollIntoView({ block: "center", behavior: model.ui.reducedMotion ? "auto" : "smooth" });
           if (typeof target.focus === "function") {

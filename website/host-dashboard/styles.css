@@ -5563,7 +5563,11 @@ textarea {
 .deck-rail-code .deck-rail-label {
   grid-area: label;
 }
-.deck-rail-code-value {
+/* Specificity matters here: `.deck-rail-seg > strong` is (0,1,1) and would
+   otherwise outrank a lone `.deck-rail-code-value` (0,1,0), pinning the code
+   to 0.9rem. The compound selector takes it back so the code actually reads
+   at across-the-room scale. */
+.deck-rail-code > .deck-rail-code-value {
   grid-area: value;
   font-family: var(--font-mono);
   font-size: clamp(1.1rem, 1.5vw, 1.45rem);
