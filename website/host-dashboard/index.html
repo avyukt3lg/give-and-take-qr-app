@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#0b1110" />
+    <meta name="theme-color" content="#0b0c0a" />
     <meta name="color-scheme" content="dark light" />
     <meta name="application-name" content="Give And Take" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -46,15 +46,19 @@
     <link rel="dns-prefetch" href="https://esm.sh" />
     <link rel="preload" href="game-data.js" as="script" />
     <link rel="preload" href="supabase-config.js" as="script" />
-    <link rel="preload" href="app.js?v=20260717-17" as="script" />
-    <link rel="preload" href="../../game_data/game_config.json?v=20260717-17" as="fetch" crossorigin />
+    <link rel="preload" href="app.js?v=20260726-dt12" as="script" />
+    <link rel="preload" href="../../game_data/game_config.json?v=20260726-dt12" as="fetch" crossorigin />
+    <link rel="preload" href="../../assets/fonts/InterVariable.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="../../assets/fonts/NewsreaderVariable.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Display face. Self-hosted Newsreader is the fallback when this is
+         unavailable (offline, or a strict font-src policy). -->
     <link
-      href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="styles.css?v=20260723-ui2" />
+    <link rel="stylesheet" href="styles.css?v=20260726-dt12" />
     <noscript>
       <style>
         #app,
@@ -97,8 +101,8 @@
 
     <script src="game-data.js"></script>
     <script src="supabase-config.js"></script>
-    <script src="app.js?v=20260717-17"></script>
-    <script src="ui-refresh.js?v=20260723-ui2"></script>
-    <script type="module" src="webgl-hero.js?v=20260723-ui2"></script>
+    <script src="app.js?v=20260726-dt12"></script>
+    <script src="ui-refresh.js?v=20260726-dt12"></script>
+    <script type="module" src="webgl-hero.js?v=20260726-dt12"></script>
   </body>
 </html>

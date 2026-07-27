@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const CONFIG_VERSION = "20260717-17";
+  const CONFIG_VERSION = "20260726-dt12";
   const CONFIG_URL = `../../game_data/game_config.json?v=${CONFIG_VERSION}`;
   const BOARD_IMAGE_URL = "../../outputs/final_assets/board/give_and_take_board_web_1280.webp";
   const BOARD_IMAGE_SRCSET = [
@@ -2685,8 +2685,11 @@
     document.documentElement.classList.toggle("reduced-motion", model.ui.reducedMotion);
     document.body.dataset.pageTheme = theme;
     document.body.classList.toggle("theme-classroom", theme === "classroom");
+    // Once a table exists the decorative layer steps back and the console leads.
+    document.documentElement.dataset.appStage = model.auth ? "console" : "entry";
+    document.documentElement.dataset.uiTheme = model.ui.theme;
     const themeMeta = document.querySelector('meta[name="theme-color"]');
-    const tableThemeColor = model.ui.theme === "contrast" ? "#050807" : "#0b1110";
+    const tableThemeColor = model.ui.theme === "contrast" ? "#000000" : "#0b0c0a";
     themeMeta?.setAttribute("content", theme === "classroom" ? "#e8e1d2" : tableThemeColor);
   }
 
@@ -2735,65 +2738,131 @@
   function renderAuth() {
     appRoot.className = `auth-page theme-${model.ui.theme} ${model.ui.reducedMotion ? "reduced-motion" : ""}`;
     appRoot.innerHTML = `
-      <section class="auth-visual" aria-labelledby="entry-title">
-        <div class="table-map">
-          <img
-            src="${BOARD_IMAGE_URL}"
-            srcset="${BOARD_IMAGE_SRCSET}"
-            sizes="(max-width: 760px) 70vw, 440px"
-            width="1280"
-            height="1280"
-            fetchpriority="high"
-            decoding="async"
-            alt="Give And Take board with QR code"
-          />
-          <div class="map-badge">S00-S43</div>
-        </div>
-        <p class="kicker">Give And Take</p>
-        <h1 id="entry-title">Keep the board <em>physical.</em> Run the table here.</h1>
-        <p>Create or join a GT session. The app handles turn checks, shared prices, and evidence while players stay on the printed board.</p>
-        <div class="auth-proof" aria-label="Game flow">
-          <div class="proof-tile"><strong>01</strong><span>Set the table and share one GT code.</span></div>
-          <div class="proof-tile"><strong>02</strong><span>Move pawns and draw cards physically.</span></div>
-          <div class="proof-tile"><strong>03</strong><span>Track decisions, prices, and final evidence.</span></div>
-        </div>
-        <p class="privacy-line">Uses fictional cash and gameplay notes only. No real investment data.</p>
-      </section>
-      <main id="main-content" class="auth-card" tabindex="-1">
-        <div class="auth-card-head">
-          <div>
-            <p class="eyeline">Give And Take · Table entry</p>
-            <h2>${model.authTab === "join" ? "Join a table" : model.authTab === "signup" ? "Create account" : model.authTab === "login" ? "Login" : "Host a table"}</h2>
+      <div class="entry-stage">
+        <section class="auth-visual" aria-labelledby="entry-title">
+          <p class="kicker">Give And Take · Table companion</p>
+          <h1 id="entry-title">Keep the board <em>physical.</em> Run the table here.</h1>
+          <p>Create or join a GT session. The app handles turn checks, shared prices, and evidence while players stay on the printed board.</p>
+          <div class="table-map" data-parallax="board">
+            <img
+              src="${BOARD_IMAGE_URL}"
+              srcset="${BOARD_IMAGE_SRCSET}"
+              sizes="(max-width: 900px) 70vw, 400px"
+              width="1280"
+              height="1280"
+              fetchpriority="high"
+              decoding="async"
+              alt="The printed Give And Take board, showing spaces S00 to S43, the market score hub, and the scan-to-play QR code"
+            />
+            <div class="map-badge">S00–S43</div>
           </div>
-          ${renderSettingsControl({ includeMode: false, label: "Display" })}
-        </div>
-        <div class="auth-tabs" role="tablist" aria-label="Access mode">
-          ${["guest", "join", "login", "signup"]
-            .map(
-              (tab) => `
-                <button
-                  class="auth-tab ${tab === "guest" || tab === "join" ? "auth-tab-table" : "auth-tab-account"}"
-                  id="auth-tab-${tab}"
-                  type="button"
-                  role="tab"
-                  data-auth-tab="${tab}"
-                  aria-controls="auth-panel"
-                  aria-selected="${model.authTab === tab}"
-                  tabindex="${model.authTab === tab ? "0" : "-1"}"
-                  ${model.ui.authPending || model.ui.backendRetryPending ? "disabled" : ""}
-                >
-                  ${tab === "signup" ? "Create account" : tab === "login" ? "Log in" : tab === "guest" ? "Host table" : "Join table"}
-                </button>
-              `
-            )
-            .join("")}
-        </div>
-        <div id="auth-panel" role="tabpanel" aria-labelledby="auth-tab-${model.authTab}">
-          ${renderAuthPanel()}
-        </div>
-      </main>
+          <div class="auth-proof" aria-label="How a session runs">
+            <div class="proof-tile"><strong>01</strong><span>Set the table and share one GT code.</span></div>
+            <div class="proof-tile"><strong>02</strong><span>Move pawns and draw cards physically.</span></div>
+            <div class="proof-tile"><strong>03</strong><span>Track decisions, prices, and final evidence.</span></div>
+          </div>
+          <p class="privacy-line">All cash, prices, and investment information in this game are fictional. Nothing here is real financial data or advice.</p>
+        </section>
+        <main id="main-content" class="auth-card" tabindex="-1">
+          <div class="auth-card-head">
+            <div>
+              <p class="eyeline">Table entry</p>
+              <h2>${model.authTab === "join" ? "Join a table" : model.authTab === "signup" ? "Create account" : model.authTab === "login" ? "Log in" : "Host a table"}</h2>
+            </div>
+            ${renderSettingsControl({ includeMode: false, label: "Display" })}
+          </div>
+          <div class="auth-tabs" role="tablist" aria-label="Access mode">
+            ${["guest", "join", "login", "signup"]
+              .map(
+                (tab) => `
+                  <button
+                    class="auth-tab ${tab === "guest" || tab === "join" ? "auth-tab-table" : "auth-tab-account"}"
+                    id="auth-tab-${tab}"
+                    type="button"
+                    role="tab"
+                    data-auth-tab="${tab}"
+                    aria-controls="auth-panel"
+                    aria-selected="${model.authTab === tab}"
+                    tabindex="${model.authTab === tab ? "0" : "-1"}"
+                    ${model.ui.authPending || model.ui.backendRetryPending ? "disabled" : ""}
+                  >
+                    ${tab === "signup" ? "Create account" : tab === "login" ? "Log in" : tab === "guest" ? "Host table" : "Join table"}
+                  </button>
+                `
+              )
+              .join("")}
+          </div>
+          <div id="auth-panel" role="tabpanel" aria-labelledby="auth-tab-${model.authTab}">
+            ${renderAuthPanel()}
+          </div>
+        </main>
+      </div>
+      ${renderEntryChapters()}
       ${renderToast()}
       ${renderDialog()}
+    `;
+  }
+
+  function renderEntryChapters() {
+    const chapters = [
+      {
+        index: "01",
+        title: "Set the table, share one <em>code.</em>",
+        body: "Host a table, seat the players, and read out a single GT code. Everyone else joins from the QR code printed on the board — no accounts required to play.",
+        caption: "Board · Start corner",
+        focus: "8% 4%",
+        zoom: "2.1"
+      },
+      {
+        index: "02",
+        title: "Move pawns and draw cards <em>by hand.</em>",
+        body: "The D6, the pawns, the decks and the player boards stay on the table. The app only checks that the physical move matches the space you landed on.",
+        caption: "Board · Draw decks and discard",
+        focus: "48% 85%",
+        zoom: "2.0"
+      },
+      {
+        index: "03",
+        title: "Track decisions, prices, <em>evidence.</em>",
+        body: "Shared prices update for every screen at the table. Choices, notes and final scores are recorded as you play, then exported as evidence at the end.",
+        caption: "Board · Price tracker and market hub",
+        focus: "40% 53%",
+        zoom: "1.9"
+      }
+    ];
+    return `
+      <section class="entry-chapters" aria-label="How the game and the app work together">
+        ${chapters
+          .map(
+            (chapter) => `
+              <article class="entry-chapter" data-chapter>
+                <div class="entry-chapter-copy">
+                  <p class="entry-chapter-index" aria-hidden="true">${chapter.index}</p>
+                  <h2>${chapter.title}</h2>
+                  <p>${chapter.body}</p>
+                </div>
+                <figure class="entry-chapter-figure" data-parallax="chapter" style="--focus:${chapter.focus};--zoom:${chapter.zoom}">
+                  <img
+                    src="${BOARD_IMAGE_URL}"
+                    srcset="${BOARD_IMAGE_SRCSET}"
+                    sizes="(max-width: 900px) 100vw, 640px"
+                    width="1280"
+                    height="1280"
+                    loading="lazy"
+                    decoding="async"
+                    alt=""
+                  />
+                  <figcaption>${escapeHtml(chapter.caption)}</figcaption>
+                </figure>
+              </article>
+            `
+          )
+          .join("")}
+      </section>
+      <footer class="entry-foot">
+        <span><strong>Give And Take</strong> · QR table companion for the printed board game.</span>
+        <span>Fictional cash and investment data only. Not financial advice.</span>
+      </footer>
     `;
   }
 
