@@ -174,6 +174,18 @@
       lastProgress = p;
       window.GTScene.progress = p;
       root.style.setProperty("--chapter-progress", p.toFixed(4));
+      // Chapters 01 and 03 hold the left copy column, 02 crosses to the right.
+      // The fallback slab moves the opposite way so type never sits on artwork.
+      var lane = [26, -30, 22];
+      var x = lane.length - 1;
+      var f = p * x;
+      var i0 = Math.min(x - 1, Math.floor(f));
+      var t = f - i0;
+      t = t * t * (3 - 2 * t);
+      var slabX = lane[i0] + (lane[i0 + 1] - lane[i0]) * t;
+      root.style.setProperty("--slab-x", slabX.toFixed(2) + "vw");
+      // Mask the slab away from whichever side the active copy holds.
+      root.style.setProperty("--slab-mask-angle", slabX >= 0 ? "90deg" : "270deg");
     }
 
     var active = Math.min(chapterEls.length - 1, Math.round(p * (chapterEls.length - 1)));

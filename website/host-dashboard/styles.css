@@ -4249,11 +4249,12 @@ html[data-app-stage="console"] .entry-fallback {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: min(1100px, 116vw);
+  width: min(760px, 62vw);
   aspect-ratio: 1;
   transform-style: preserve-3d;
   /* chapter 0 -> 1 -> 2: the plane rakes flatter, rises and squares up */
   transform: translate(-50%, -50%)
+    translateX(var(--slab-x, 14vw))
     translateY(calc(6vh - var(--chapter-progress, 0) * 16vh))
     rotateX(calc(62deg - var(--chapter-progress, 0) * 30deg))
     rotateZ(calc(-4deg + var(--chapter-progress, 0) * 4deg))
@@ -4265,9 +4266,24 @@ html[data-app-stage="console"] .entry-fallback {
   width: 100%;
   height: 100%;
   object-fit: contain;
-  opacity: calc(0.6 + var(--chapter-progress, 0) * 0.28);
-  filter: saturate(calc(0.82 + var(--chapter-progress, 0) * 0.4))
-    brightness(calc(0.9 + var(--chapter-progress, 0) * 0.2));
+  opacity: calc(0.5 + var(--chapter-progress, 0) * 0.2);
+  filter: saturate(calc(0.72 + var(--chapter-progress, 0) * 0.3))
+    brightness(calc(0.62 + var(--chapter-progress, 0) * 0.12));
+  /* hard directional falloff on the side the chapter copy occupies */
+  -webkit-mask-image: linear-gradient(
+    var(--slab-mask-angle, 90deg),
+    transparent 0%,
+    rgba(0, 0, 0, 0.35) 16%,
+    #000 42%,
+    #000 100%
+  );
+  mask-image: linear-gradient(
+    var(--slab-mask-angle, 90deg),
+    transparent 0%,
+    rgba(0, 0, 0, 0.35) 16%,
+    #000 42%,
+    #000 100%
+  );
   transition: opacity 420ms var(--ease), filter 420ms var(--ease);
 }
 .entry-fallback-mist {
@@ -4625,27 +4641,69 @@ html[data-app-stage="entry"] .entry-index {
 .entry-chapter {
   display: grid;
   align-content: center;
-  min-height: 92vh;
+  min-height: 96vh;
   padding: 8vh 0;
 }
+/* Every chapter reserves a protected ink zone for its copy. The scrim is a
+   soft directional gradient, not a card: the board is also reframed away from
+   this side by the scene itself, so the type never sits on artwork. */
 .entry-chapter-copy {
+  position: relative;
   display: grid;
   gap: 16px;
-  max-width: 40ch;
-  margin-left: clamp(0px, 6vw, 120px);
-  opacity: 0.34;
-  transform: translateY(14px);
+  max-width: 38ch;
+  isolation: isolate;
+  opacity: 0.28;
+  transform: translateY(16px);
   transition: opacity var(--dur-3) var(--ease), transform var(--dur-3) var(--ease);
+}
+.entry-chapter-copy::before {
+  content: "";
+  position: absolute;
+  inset: -16vh -4vw -16vh -18vw;
+  z-index: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    to right,
+    var(--bg-void) 0%,
+    var(--bg-void) 52%,
+    color-mix(in srgb, var(--bg-void) 78%, transparent) 74%,
+    transparent 100%
+  );
+  opacity: 0;
+  transition: opacity var(--dur-3) var(--ease);
 }
 .entry-chapter.is-active .entry-chapter-copy {
   opacity: 1;
   transform: none;
 }
-/* alternate the sides so the scene stays readable behind the copy.
-   Keyed off data-chapter, not :nth-child — the index <ol> is the first child. */
+.entry-chapter.is-active .entry-chapter-copy::before {
+  opacity: 1;
+}
+.entry-chapter-copy > * {
+  position: relative;
+  z-index: 1;
+}
+/* Chapter 01 and 03 hold the left column; 02 crosses to the right, and the
+   scene shifts the opposite way. Keyed off data-chapter, never nth-child. */
+.entry-chapter[data-chapter="0"] .entry-chapter-copy,
+.entry-chapter[data-chapter="2"] .entry-chapter-copy {
+  margin-left: clamp(0px, 4vw, 96px);
+  margin-right: auto;
+}
 .entry-chapter[data-chapter="1"] .entry-chapter-copy {
   margin-left: auto;
-  margin-right: clamp(0px, 6vw, 120px);
+  margin-right: clamp(0px, 4vw, 96px);
+}
+.entry-chapter[data-chapter="1"] .entry-chapter-copy::before {
+  inset: -14vh -14vw -14vh -6vw;
+  background: linear-gradient(
+    to left,
+    var(--bg-void) 0%,
+    var(--bg-void) 52%,
+    color-mix(in srgb, var(--bg-void) 78%, transparent) 74%,
+    transparent 100%
+  );
 }
 .entry-chapter-index {
   font-family: var(--font-display);

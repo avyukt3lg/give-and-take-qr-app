@@ -301,10 +301,12 @@ try {
   placePawns(0, 0);
 
   /* ---- chapter keyframes ----------------------------------------------- */
+  /* `shift` slides the whole board laterally so it vacates the side the
+     chapter copy occupies: 01 and 03 keep type on the left, 02 on the right. */
   const CHAPTERS = [
-    { cam: [0.0, 5.6, 13.4], tgt: [0, 0.1, 0], rot: -0.55, lift: 0, pool: [-2.2, -2.0, 0.95], poolScale: 0.7 },
-    { cam: [1.3, 2.9, 10.2], tgt: [0.5, -0.5, 0], rot: -0.74, lift: 0, pool: [0.6, -1.4, 1.0], poolScale: 1.0 },
-    { cam: [0.0, 8.2, 11.6], tgt: [0, 0.6, 0], rot: -0.30, lift: 1, pool: [0, 0.4, 0.7], poolScale: 1.5 }
+    { cam: [0.0, 5.6, 13.4], tgt: [0, 0.1, 0], rot: -0.55, lift: 0, shift: 2.6, pool: [-2.2, -2.0, 0.95], poolScale: 0.7 },
+    { cam: [1.3, 2.9, 10.2], tgt: [0.5, -0.5, 0], rot: -0.74, lift: 0, shift: -3.0, pool: [0.6, -1.4, 1.0], poolScale: 1.0 },
+    { cam: [0.0, 8.2, 11.6], tgt: [0, 0.6, 0], rot: -0.30, lift: 1, shift: 2.2, pool: [0, 0.4, 0.7], poolScale: 1.5 }
   ];
 
   function sampleChapters(p) {
@@ -320,6 +322,7 @@ try {
       tgt: [mix(a.tgt[0], b.tgt[0]), mix(a.tgt[1], b.tgt[1]), mix(a.tgt[2], b.tgt[2])],
       rot: mix(a.rot, b.rot),
       lift: mix(a.lift, b.lift),
+      shift: mix(a.shift, b.shift),
       pool: [mix(a.pool[0], b.pool[0]), mix(a.pool[1], b.pool[1]), mix(a.pool[2], b.pool[2])],
       poolScale: mix(a.poolScale, b.poolScale)
     };
@@ -366,7 +369,7 @@ try {
 
   /* ---- loop -------------------------------------------------------------- */
   const clock = new THREE.Clock();
-  const cur = { camX: 0, camY: 5.6, camZ: 13.4, tx: 0, ty: 0.1, rot: -0.55, lift: 0 };
+  const cur = { camX: 0, camY: 5.6, camZ: 13.4, tx: 0, ty: 0.1, rot: -0.55, lift: 0, shift: 2.6 };
   let firstDrawn = false;
   let raf = null;
   let lastConsoleDraw = 0;
@@ -391,6 +394,8 @@ try {
     cur.ty += (target.tgt[1] - cur.ty) * k;
     cur.rot += (target.rot - cur.rot) * k;
     cur.lift += (target.lift - cur.lift) * k;
+    cur.shift += (target.shift - cur.shift) * k;
+    world.position.x = cur.shift;
 
     camera.position.set(cur.camX, cur.camY, cur.camZ);
     camera.lookAt(cur.tx, cur.ty, 0);
