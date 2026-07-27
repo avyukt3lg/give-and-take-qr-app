@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const CONFIG_VERSION = "20260727-v4b";
+  const CONFIG_VERSION = "20260727-v4c";
   const CONFIG_URL = `../../game_data/game_config.json?v=${CONFIG_VERSION}`;
   const BOARD_IMAGE_URL = "../../outputs/final_assets/board/give_and_take_board_web_1280.webp";
   const BOARD_IMAGE_SRCSET = [
@@ -971,13 +971,21 @@
     model.backend.clientRole = stored.clientRole ?? null;
   }
 
+  /* Same reasoning as importWithTimeout: this runs during init, so an
+     unbounded fetch strands the boot card. AbortSignal.timeout is guarded
+     because it is not present on older Safari. */
+  const API_REQUEST_TIMEOUT_MS = 8000;
+
   async function apiRequest(path, options = {}) {
     const response = await fetch(`${API_BASE}${path}`, {
       method: options.method ?? "GET",
       headers: {
         "Content-Type": "application/json"
       },
-      body: options.body ? JSON.stringify(options.body) : undefined
+      body: options.body ? JSON.stringify(options.body) : undefined,
+      signal: typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
+        ? AbortSignal.timeout(API_REQUEST_TIMEOUT_MS)
+        : undefined
     });
     const text = await response.text();
     const data = text ? JSON.parse(text) : {};
@@ -1014,9 +1022,30 @@
     setSaveState("failed", model.backend.unavailableReason || "Supabase configuration is missing.");
   }
 
+  /* The Supabase client is an ES module fetched from esm.sh at runtime. A bare
+     await on that import has no timeout, so on any network where esm.sh is
+     slow, throttled or blocked -- which is the same condition that makes the
+     WebGL hero fall back to CSS -- a returning host waits on the boot card
+     forever with no escape and no retry. Racing the import against a deadline
+     turns that dead end into the offline state the app already knows how to
+     render, retry affordance included. */
+  const SUPABASE_MODULE_TIMEOUT_MS = 8000;
+
+  function importWithTimeout(specifier, timeoutMs = SUPABASE_MODULE_TIMEOUT_MS) {
+    let timer = null;
+    const deadline = new Promise((_resolve, reject) => {
+      timer = window.setTimeout(() => {
+        reject(new Error(`Supabase client did not load within ${Math.round(timeoutMs / 1000)}s. The table is running offline on this device.`));
+      }, timeoutMs);
+    });
+    return Promise.race([import(specifier), deadline]).finally(() => {
+      window.clearTimeout(timer);
+    });
+  }
+
   async function initSupabaseClient(config) {
     try {
-      const module = await import("https://esm.sh/@supabase/supabase-js@2.110.0");
+      const module = await importWithTimeout("https://esm.sh/@supabase/supabase-js@2.110.0");
       const client = module.createClient(config.supabaseUrl, config.supabasePublishableKey || config.supabaseAnonKey, {
         auth: {
           persistSession: true,
