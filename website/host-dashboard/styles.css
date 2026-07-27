@@ -364,6 +364,7 @@ body[data-page-theme="classroom"] {
 }
 .theme-classroom .toast {
   background: var(--surface-card);
+  -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }
 html {
@@ -1195,6 +1196,7 @@ form[aria-busy="true"] .button {
   letter-spacing: 0.05em;
   border-radius: var(--radius);
   background: rgba(7, 11, 10, 0.9);
+  -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }
 .auth-proof {
@@ -3050,6 +3052,7 @@ form[aria-busy="true"] {
 }
 .dialog-card::backdrop {
   background: rgba(4, 7, 6, 0.82);
+  -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
 }
 .dialog-form {
@@ -3102,6 +3105,7 @@ form[aria-busy="true"] {
   min-width: min(360px, calc(100vw - 36px));
   background: rgba(14, 29, 25, 0.96);
   box-shadow: 0 24px 64px rgba(1, 8, 6, 0.45);
+  -webkit-backdrop-filter: blur(14px);
   backdrop-filter: blur(14px);
   animation: toast-in 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -3402,6 +3406,7 @@ form[aria-busy="true"] {
     border-radius: 0;
     background: transparent;
     box-shadow: none;
+    -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }
   .theme-classroom .mobile-nav {
@@ -3536,6 +3541,7 @@ form[aria-busy="true"] {
     border-radius: 15px;
     background: rgba(8, 21, 17, 0.9);
     box-shadow: 0 14px 36px rgba(1, 8, 6, 0.3);
+    -webkit-backdrop-filter: blur(16px);
     backdrop-filter: blur(16px);
   }
   .status-strip::-webkit-scrollbar {
@@ -3569,6 +3575,7 @@ form[aria-busy="true"] {
     box-shadow:
       0 26px 72px rgba(1, 8, 6, 0.55),
       inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    -webkit-backdrop-filter: blur(20px);
     backdrop-filter: blur(20px);
   }
   .mobile-more[open] .mobile-more-sheet {
@@ -3697,6 +3704,7 @@ form[aria-busy="true"] {
     border-radius: 0;
     background: rgba(11, 17, 16, 0.98);
     box-shadow: 0 -12px 30px rgba(0, 0, 0, 0.22);
+    -webkit-backdrop-filter: none;
     backdrop-filter: none;
     width: 100%;
     max-width: none;
@@ -4371,6 +4379,7 @@ html.reduced-motion .entry-fallback-slab img {
   border-bottom: 1px solid var(--line);
   border-radius: 0;
   background: transparent;
+  -webkit-backdrop-filter: none;
   backdrop-filter: none;
   transition: background var(--dur-1) var(--ease);
 }
@@ -4411,6 +4420,7 @@ html.reduced-motion .entry-fallback-slab img {
   border-radius: var(--r-panel);
   background: var(--surface-1);
   background: color-mix(in srgb, var(--surface-1) 96%, transparent);
+  -webkit-backdrop-filter: blur(18px) saturate(1.05);
   backdrop-filter: blur(18px) saturate(1.05);
   box-shadow:
     0 2px 0 -1px var(--brass),
@@ -5241,6 +5251,7 @@ textarea {
 }
 .dialog-card::backdrop {
   background: color-mix(in srgb, #060705 74%, transparent);
+  -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
 }
 .dialog-close {
@@ -5280,6 +5291,7 @@ textarea {
   border-right: 1px solid var(--line);
   background: var(--surface-1);
   background: color-mix(in srgb, var(--surface-1) 92%, transparent);
+  -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
 }
 .brand-mark {
@@ -5375,6 +5387,7 @@ textarea {
   border-bottom: 1px solid var(--line);
   background: var(--bg-void);
   background: color-mix(in srgb, var(--bg-void) 88%, transparent);
+  -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
 }
 .topbar-title {
@@ -5518,6 +5531,7 @@ textarea {
   border-top: 1px solid var(--line);
   background: var(--surface-1);
   background: color-mix(in srgb, var(--surface-1) 96%, transparent);
+  -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
   padding-bottom: env(safe-area-inset-bottom);
 }
@@ -5745,6 +5759,7 @@ textarea {
 .sticky-turn-actions {
   border-top: 1px solid var(--line);
   background: color-mix(in srgb, var(--surface-1) 94%, transparent);
+  -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
 }
 .skip-link {
@@ -5867,6 +5882,7 @@ html.theme-classroom .rail,
     position: static;
     max-width: none;
     padding: 20px;
+    -webkit-backdrop-filter: none;
     backdrop-filter: none;
     background: var(--surface-1);
   }
