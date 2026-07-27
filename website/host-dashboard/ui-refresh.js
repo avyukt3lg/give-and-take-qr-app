@@ -143,64 +143,102 @@
     );
   }
 
-  /* -------------------------------------------- scroll chapters (no hijack) */
-  var chapterObserver = null;
-  var figureObserver = null;
-  var trackedFigures = [];
+  /* ---------------- scroll chapters: one continuous transformation ------- */
+  /* The chapter track does not animate itself. It reports a single 0..1
+     progress value, which drives BOTH the persistent WebGL scene
+     (window.GTScene.progress) and the CSS fallback slab
+     (--chapter-progress). No scroll hijacking: the page scrolls normally and
+     we only read its position. */
+  var trackEl = null;
+  var chapterEls = [];
+  var indexEls = [];
   var scrollRaf = null;
+  var lastProgress = -1;
 
-  function updateFigures() {
+  window.GTScene = window.GTScene || { progress: 0 };
+
+  function updateProgress() {
     scrollRaf = null;
+    if (!trackEl) return;
+    var rect = trackEl.getBoundingClientRect();
     var vh = window.innerHeight || 1;
-    trackedFigures.forEach(function (fig) {
-      var rect = fig.getBoundingClientRect();
-      if (rect.bottom < -200 || rect.top > vh + 200) return;
-      var progress = (rect.top + rect.height / 2 - vh / 2) / vh; // -1 .. 1
-      var img = fig.querySelector("img");
-      if (img) img.style.setProperty("--shift", (progress * -26).toFixed(1) + "px");
-    });
+    // 0 when the track's top reaches the viewport bottom, 1 when its bottom
+    // passes the viewport top.
+    var span = rect.height + vh;
+    var travelled = vh - rect.top;
+    var p = Math.max(0, Math.min(1, travelled / span));
+    // Ease the two ends so the first and last chapters hold briefly.
+    p = Math.max(0, Math.min(1, (p - 0.12) / 0.76));
+
+    if (Math.abs(p - lastProgress) > 0.001) {
+      lastProgress = p;
+      window.GTScene.progress = p;
+      root.style.setProperty("--chapter-progress", p.toFixed(4));
+    }
+
+    var active = Math.min(chapterEls.length - 1, Math.round(p * (chapterEls.length - 1)));
+    for (var i = 0; i < chapterEls.length; i++) {
+      var on = i === active;
+      chapterEls[i].classList.toggle("is-active", on);
+      if (indexEls[i]) indexEls[i].classList.toggle("is-active", on);
+    }
   }
 
   function onScroll() {
-    if (!scrollRaf) scrollRaf = requestAnimationFrame(updateFigures);
+    if (!scrollRaf) scrollRaf = requestAnimationFrame(updateProgress);
   }
 
   function wireChapters(scope) {
-    var chapters = scope.querySelectorAll("[data-chapter]");
-    if (!chapters.length) return;
-    if (reducedMotion() || !("IntersectionObserver" in window)) {
-      chapters.forEach(function (c) {
-        c.classList.add("gt-chapter-in");
-      });
+    var track = scope.querySelector(".entry-track");
+    if (!track || track.dataset.gtTrack) return;
+    track.dataset.gtTrack = "1";
+    trackEl = track;
+    chapterEls = Array.prototype.slice.call(track.querySelectorAll("[data-chapter]"));
+    indexEls = Array.prototype.slice.call(track.querySelectorAll(".entry-index li"));
+
+    if (reducedMotion()) {
+      // Static substitution: show every chapter, hold the scene on chapter one.
+      chapterEls.forEach(function (c) { c.classList.add("is-active"); });
+      window.GTScene.progress = 0;
+      root.style.setProperty("--chapter-progress", "0");
       return;
     }
-    if (!chapterObserver) {
-      chapterObserver = new IntersectionObserver(
-        function (entries) {
-          entries.forEach(function (entry) {
-            if (entry.isIntersecting) {
-              entry.target.classList.add("gt-chapter-in");
-              chapterObserver.unobserve(entry.target);
-            }
-          });
-        },
-        { rootMargin: "0px 0px -18% 0px", threshold: 0.18 }
-      );
-    }
-    chapters.forEach(function (c) {
-      if (!c.dataset.gtChapter) {
-        c.dataset.gtChapter = "1";
-        chapterObserver.observe(c);
-      }
-    });
 
-    trackedFigures = Array.prototype.slice.call(scope.querySelectorAll('[data-parallax="chapter"]'));
-    if (trackedFigures.length && !figureObserver) {
-      window.addEventListener("scroll", onScroll, { passive: true });
-      window.addEventListener("resize", onScroll, { passive: true });
-      figureObserver = true;
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll, { passive: true });
+    updateProgress();
+  }
+
+  /* ------------------------------------------------ utility strip clock */
+  var clockTimer = null;
+
+  function tickClock() {
+    var live = document.querySelector("[data-entry-clock]");
+    if (!live) return;
+    var d = new Date();
+    var next =
+      String(d.getHours()).padStart(2, "0") + ":" +
+      String(d.getMinutes()).padStart(2, "0") + ":" +
+      String(d.getSeconds()).padStart(2, "0");
+    // Only write when the value actually changes. This element lives inside
+    // #app, which is watched by a MutationObserver — writing on every pass
+    // would re-enter enhance() and spin the main thread.
+    if (live.textContent !== next) live.textContent = next;
+  }
+
+  function wireClock(scope) {
+    var el = scope.querySelector("[data-entry-clock]");
+    if (!el) {
+      if (clockTimer) {
+        window.clearInterval(clockTimer);
+        clockTimer = null;
+      }
+      return;
     }
-    updateFigures();
+    if (el.dataset.gtClock) return;
+    el.dataset.gtClock = "1";
+    tickClock();
+    if (!clockTimer) clockTimer = window.setInterval(tickClock, 1000);
   }
 
   /* --------------------------------------------------- copy-code feedback */
@@ -223,15 +261,31 @@
 
   /* ------------------------------------------------------------- bootstrap */
   function enhance(scope) {
+    try {
+      enhanceUnsafe(scope);
+    } catch (err) {
+      console.warn("[gt] entry enhancement skipped:", err && err.message);
+    }
+  }
+
+  function enhanceUnsafe(scope) {
     var auth = scope.querySelector(".auth-page") || (scope.classList && scope.classList.contains("auth-page") ? scope : null);
     if (auth) {
       revealEntry(auth);
       wireParallax(auth);
       wireChapters(auth);
+      wireClock(auth);
     }
   }
 
   function boot() {
+    // Registered before anything else: whatever happens below, the overlay is
+    // guaranteed to release. It is a progress hint, never a gate.
+    window.setTimeout(function () {
+      finished = true;
+    }, LOADER_MAX_MS - 200);
+    window.setTimeout(dismiss, LOADER_MAX_MS);
+
     loaderEl = document.getElementById("gt-loader");
     if (loaderEl) {
       pctEl = loaderEl.querySelector(".gt-pct");
@@ -262,13 +316,6 @@
       signals.load = true;
       maybeFinish();
     });
-
-    // Hard cap: the overlay is never an artificial wait. If the game config is
-    // still loading the app's own boot card takes over — a real loading state.
-    window.setTimeout(function () {
-      finished = true;
-    }, LOADER_MAX_MS - 200);
-    window.setTimeout(dismiss, LOADER_MAX_MS);
 
     // Safety net: if the WebGL module never reports in (blocked CDN, no GPU,
     // module parse error) fall back to the static gradient background.

@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const CONFIG_VERSION = "20260726-dt12";
+  const CONFIG_VERSION = "20260727-v2f";
   const CONFIG_URL = `../../game_data/game_config.json?v=${CONFIG_VERSION}`;
   const BOARD_IMAGE_URL = "../../outputs/final_assets/board/give_and_take_board_web_1280.webp";
   const BOARD_IMAGE_SRCSET = [
@@ -138,7 +138,10 @@
       lastSavedAt: null
     },
     ui: {
-      theme: readStore(STORAGE.ui, {})?.theme ?? (window.matchMedia?.("(prefers-color-scheme: light)")?.matches ? "classroom" : "table"),
+      // First visit always opens on the Table theme so the intended "table
+      // after dark" identity is the first impression. An explicit saved choice
+      // still wins, and Classroom remains one click away in Display settings.
+      theme: readStore(STORAGE.ui, {})?.theme ?? "table",
       companionMode: readStore(STORAGE.ui, {})?.companionMode ?? "host",
       reducedMotion: Boolean(readStore(STORAGE.ui, {})?.reducedMotion ?? false),
       boardExpanded: false,
@@ -2738,21 +2741,21 @@
   function renderAuth() {
     appRoot.className = `auth-page theme-${model.ui.theme} ${model.ui.reducedMotion ? "reduced-motion" : ""}`;
     appRoot.innerHTML = `
+      ${renderEntryFallbackStage()}
       <div class="entry-stage">
         <section class="auth-visual" aria-labelledby="entry-title">
           <p class="kicker">Give And Take · Table companion</p>
-          <h1 id="entry-title">Keep the board <em>physical.</em> Run the table here.</h1>
+          <h1 id="entry-title">Keep the board <em>physical.</em><br />Run the table <em>here.</em></h1>
           <p>Create or join a GT session. The app handles turn checks, shared prices, and evidence while players stay on the printed board.</p>
-          <div class="table-map" data-parallax="board">
+          <div class="table-map" data-parallax="board" aria-hidden="true">
             <img
               src="${BOARD_IMAGE_URL}"
               srcset="${BOARD_IMAGE_SRCSET}"
-              sizes="(max-width: 900px) 70vw, 400px"
+              sizes="(max-width: 900px) 62vw, 320px"
               width="1280"
               height="1280"
-              fetchpriority="high"
               decoding="async"
-              alt="The printed Give And Take board, showing spaces S00 to S43, the market score hub, and the scan-to-play QR code"
+              alt=""
             />
             <div class="map-badge">S00–S43</div>
           </div>
@@ -2761,7 +2764,6 @@
             <div class="proof-tile"><strong>02</strong><span>Move pawns and draw cards physically.</span></div>
             <div class="proof-tile"><strong>03</strong><span>Track decisions, prices, and final evidence.</span></div>
           </div>
-          <p class="privacy-line">All cash, prices, and investment information in this game are fictional. Nothing here is real financial data or advice.</p>
         </section>
         <main id="main-content" class="auth-card" tabindex="-1">
           <div class="auth-card-head">
@@ -2771,35 +2773,85 @@
             </div>
             ${renderSettingsControl({ includeMode: false, label: "Display" })}
           </div>
-          <div class="auth-tabs" role="tablist" aria-label="Access mode">
-            ${["guest", "join", "login", "signup"]
-              .map(
-                (tab) => `
-                  <button
-                    class="auth-tab ${tab === "guest" || tab === "join" ? "auth-tab-table" : "auth-tab-account"}"
-                    id="auth-tab-${tab}"
-                    type="button"
-                    role="tab"
-                    data-auth-tab="${tab}"
-                    aria-controls="auth-panel"
-                    aria-selected="${model.authTab === tab}"
-                    tabindex="${model.authTab === tab ? "0" : "-1"}"
-                    ${model.ui.authPending || model.ui.backendRetryPending ? "disabled" : ""}
-                  >
-                    ${tab === "signup" ? "Create account" : tab === "login" ? "Log in" : tab === "guest" ? "Host table" : "Join table"}
-                  </button>
-                `
-              )
-              .join("")}
-          </div>
+          ${renderAccessGrid()}
           <div id="auth-panel" role="tabpanel" aria-labelledby="auth-tab-${model.authTab}">
             ${renderAuthPanel()}
           </div>
         </main>
       </div>
       ${renderEntryChapters()}
+      ${renderEntryUtility()}
       ${renderToast()}
       ${renderDialog()}
+    `;
+  }
+
+  /* Four equal access modes on a 2x2 indexed grid. Semantics are unchanged
+     from the previous tab strip: tablist / tab / aria-selected / roving
+     tabindex, all driven by the same data-auth-tab handler. */
+  function renderAccessGrid() {
+    const modes = [
+      ["guest", "01", "Host table", "Start a table without an account."],
+      ["join", "02", "Join table", "Enter a GT code from your host."],
+      ["login", "03", "Log in", "Host with a saved identity."],
+      ["signup", "04", "Create account", "Keep the same host identity."]
+    ];
+    const locked = model.ui.authPending || model.ui.backendRetryPending;
+    return `
+      <div class="access-grid" role="tablist" aria-label="Access mode">
+        ${modes
+          .map(
+            ([tab, index, label, hint]) => `
+              <button
+                class="access-cell"
+                id="auth-tab-${tab}"
+                type="button"
+                role="tab"
+                data-auth-tab="${tab}"
+                aria-controls="auth-panel"
+                aria-selected="${model.authTab === tab}"
+                tabindex="${model.authTab === tab ? "0" : "-1"}"
+                ${locked ? "disabled" : ""}
+              >
+                <span class="access-index" aria-hidden="true">${index}</span>
+                <strong>${label}</strong>
+                <span class="access-hint">${hint}</span>
+              </button>
+            `
+          )
+          .join("")}
+      </div>
+    `;
+  }
+
+  /* Composed hero for browsers without WebGL. Real board artwork on a raked
+     plane with layered light; the same scroll progress drives it through the
+     three chapters via CSS custom properties. Never an empty canvas. */
+  function renderEntryFallbackStage() {
+    return `
+      <div class="entry-fallback" aria-hidden="true">
+        <div class="entry-fallback-slab">
+          <img
+            src="${BOARD_IMAGE_URL}"
+            srcset="${BOARD_IMAGE_SRCSET}"
+            sizes="(max-width: 900px) 120vw, 900px"
+            width="1280"
+            height="1280"
+            decoding="async"
+            alt=""
+          />
+        </div>
+        <div class="entry-fallback-mist"></div>
+      </div>
+    `;
+  }
+
+  function renderEntryUtility() {
+    return `
+      <div class="entry-utility" aria-hidden="true">
+        <span>S00–S43 · 12 turns · fictional data only</span>
+        <span class="entry-utility-right"><span data-entry-clock>--:--</span> <span class="entry-scroll-cue">Scroll</span></span>
+      </div>
     `;
   }
 
@@ -2808,60 +2860,45 @@
       {
         index: "01",
         title: "Set the table, share one <em>code.</em>",
-        body: "Host a table, seat the players, and read out a single GT code. Everyone else joins from the QR code printed on the board — no accounts required to play.",
-        caption: "Board · Start corner",
-        focus: "8% 4%",
-        zoom: "2.1"
+        body: "Host a table, seat the players, and read out a single GT code. Everyone else joins from the QR code printed on the board \u2014 no accounts required to play.",
+        cue: "The board wakes. The QR grid aligns and a GT code assembles."
       },
       {
         index: "02",
         title: "Move pawns and draw cards <em>by hand.</em>",
         body: "The D6, the pawns, the decks and the player boards stay on the table. The app only checks that the physical move matches the space you landed on.",
-        caption: "Board · Draw decks and discard",
-        focus: "48% 85%",
-        zoom: "2.0"
+        cue: "The view drops to the deck edge. A pawn advances the S00\u2013S43 route."
       },
       {
         index: "03",
         title: "Track decisions, prices, <em>evidence.</em>",
         body: "Shared prices update for every screen at the table. Choices, notes and final scores are recorded as you play, then exported as evidence at the end.",
-        caption: "Board · Price tracker and market hub",
-        focus: "40% 53%",
-        zoom: "1.9"
+        cue: "The board lifts off its plane and resolves into information layers."
       }
     ];
     return `
-      <section class="entry-chapters" aria-label="How the game and the app work together">
+      <section class="entry-track" aria-label="How the game and the app work together">
+        <ol class="entry-index" aria-hidden="true">
+          ${chapters.map((c, i) => `<li data-chapter-index="${i}">${c.index}</li>`).join("")}
+        </ol>
         ${chapters
           .map(
-            (chapter) => `
-              <article class="entry-chapter" data-chapter>
+            (chapter, i) => `
+              <article class="entry-chapter" data-chapter="${i}">
                 <div class="entry-chapter-copy">
                   <p class="entry-chapter-index" aria-hidden="true">${chapter.index}</p>
                   <h2>${chapter.title}</h2>
                   <p>${chapter.body}</p>
+                  <p class="entry-chapter-cue">${escapeHtml(chapter.cue)}</p>
                 </div>
-                <figure class="entry-chapter-figure" data-parallax="chapter" style="--focus:${chapter.focus};--zoom:${chapter.zoom}">
-                  <img
-                    src="${BOARD_IMAGE_URL}"
-                    srcset="${BOARD_IMAGE_SRCSET}"
-                    sizes="(max-width: 900px) 100vw, 640px"
-                    width="1280"
-                    height="1280"
-                    loading="lazy"
-                    decoding="async"
-                    alt=""
-                  />
-                  <figcaption>${escapeHtml(chapter.caption)}</figcaption>
-                </figure>
               </article>
             `
           )
           .join("")}
       </section>
       <footer class="entry-foot">
-        <span><strong>Give And Take</strong> · QR table companion for the printed board game.</span>
-        <span>Fictional cash and investment data only. Not financial advice.</span>
+        <span><strong>Give And Take</strong> \u00b7 QR table companion for the printed board game.</span>
+        <span>All cash, prices and investment information in this game are fictional. Not financial advice.</span>
       </footer>
     `;
   }
@@ -5725,15 +5762,21 @@
 
   function handleKeydown(event) {
     const authTabButton = event.target instanceof Element ? event.target.closest('[role="tab"][data-auth-tab]') : null;
-    if (authTabButton && ["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+    if (authTabButton && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) {
       event.preventDefault();
       const tabs = ["guest", "join", "login", "signup"];
       const currentIndex = Math.max(0, tabs.indexOf(authTabButton.dataset.authTab));
+      // The access modes render as a 2x2 grid, so vertical arrows step by a row.
+      const step = event.key === "ArrowRight" ? 1
+        : event.key === "ArrowLeft" ? -1
+        : event.key === "ArrowDown" ? 2
+        : event.key === "ArrowUp" ? -2
+        : 0;
       const nextIndex = event.key === "Home"
         ? 0
         : event.key === "End"
           ? tabs.length - 1
-          : (currentIndex + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+          : (currentIndex + step + tabs.length) % tabs.length;
       model.authTab = tabs[nextIndex];
       model.ui.authError = "";
       render();

@@ -13,6 +13,184 @@
   font-weight: 200 800;
   font-display: swap;
 }
+/* ==========================================================================
+   THE DIGITAL TABLE — design tokens (v2 "The Board Awakens")
+   Single source of truth for colour, type, space, depth and motion across
+   the Table / Classroom / Contrast themes. Declared first, on purpose:
+   everything below consumes these variables.
+   ========================================================================== */
+/* Self-hosted UI sans. Newsreader (already declared above) is the offline
+   fallback for the Instrument Serif display face linked in index.html. */
+@font-face {
+  font-family: "Inter";
+  src: url("../../assets/fonts/InterVariable.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("../../assets/fonts/InterVariable-Italic.woff2") format("woff2");
+  font-style: italic;
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Newsreader";
+  src: url("../../assets/fonts/NewsreaderVariable-Italic.woff2") format("woff2");
+  font-style: italic;
+  font-weight: 200 800;
+  font-display: swap;
+}
+
+/* ---------------------------------------------------------------- 1. TOKENS */
+:root {
+  color-scheme: dark;
+
+  --bg-void: #0b0c0a;
+  --bg-deep: #070806;
+  --surface-1: #101310;
+  --surface-2: #161a15;
+  --surface-3: #1d231c;
+  --felt: #1d2a22;
+
+  --parchment: #e8e1d2;
+  --parchment-dim: #b4ae9f;
+  --parchment-mute: #8c8779;
+
+  --brass: #b18a43;
+  --brass-soft: rgba(177, 138, 67, 0.16);
+  --signal: #c8f04a;
+  --signal-ink: #0b0c0a;
+  --signal-soft: rgba(200, 240, 74, 0.14);
+  --danger: #e2705e;
+  --warning: #dfa94f;
+
+  --line: rgba(232, 225, 210, 0.11);
+  --line-strong: rgba(232, 225, 210, 0.22);
+
+  --r-control: 2px;
+  --r-panel: 4px;
+  --r-shell: 6px;
+
+  /* spacing scale — consumed throughout the console layout */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+
+  --dur-1: 160ms;
+  --dur-2: 320ms;
+  --dur-3: 620ms;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --font-display: "Instrument Serif", Newsreader, Georgia, "Times New Roman", serif;
+  --font-ui: Inter, "Source Sans 3", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font: var(--font-ui);
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+  --fs-display: clamp(38px, 5.2vw, 76px);
+  --fs-h1: clamp(28px, 3.2vw, 44px);
+  --fs-h2: clamp(22px, 2.2vw, 30px);
+  --fs-h3: 1.15rem;
+
+  /* legacy aliases so every existing rule inherits the new system */
+  --bg: var(--bg-void);
+  --surface-table: var(--surface-1);
+  --surface-card: var(--surface-2);
+  --surface-raised: var(--surface-3);
+  --surface-inset: var(--bg-deep);
+  --paper: #f2ece0;
+  --paper-soft: #f8f3e9;
+  --ink-primary: var(--parchment);
+  --ink-secondary: var(--parchment-dim);
+  --ink-muted: var(--parchment-mute);
+  --ink-inverse: var(--bg-void);
+  --border-subtle: var(--line);
+  --border-strong: var(--line-strong);
+  --accent-primary: var(--signal);
+  --accent-danger: var(--danger);
+  --accent-warning: var(--warning);
+  --accent-success: var(--signal);
+  --gold: var(--brass);
+  --gold-2: #d3ab63;
+  --gold-soft: var(--brass-soft);
+  --radius: var(--r-control);
+  --radius-panel: var(--r-panel);
+  --radius-shell: var(--r-shell);
+  --shadow-low: 0 1px 0 rgba(232, 225, 210, 0.03);
+  --shadow-high: 0 40px 120px rgba(0, 0, 0, 0.55);
+  --focus: 0 0 0 2px var(--bg-void), 0 0 0 4px var(--signal);
+}
+
+/* Contrast theme — scoped to the shell element that carries the class. */
+.theme-contrast {
+  color-scheme: dark;
+  --bg-void: #000000;
+  --bg-deep: #000000;
+  --surface-1: #060806;
+  --surface-2: #0d100c;
+  --surface-3: #171b16;
+  --felt: #16241b;
+  --parchment: #ffffff;
+  --parchment-dim: #f1f5ee;
+  --parchment-mute: #d2d8cd;
+  --brass: #f0cf7d;
+  --brass-soft: rgba(240, 207, 125, 0.2);
+  --signal: #d9ff6b;
+  --signal-ink: #000000;
+  --signal-soft: rgba(217, 255, 107, 0.2);
+  --danger: #ff9d8c;
+  --warning: #ffc978;
+  --line: rgba(255, 255, 255, 0.4);
+  --line-strong: rgba(255, 255, 255, 0.72);
+  --focus: 0 0 0 2px #000, 0 0 0 5px #d9ff6b;
+}
+
+/* Classroom theme — projector-safe light. html.theme-classroom wins over
+   :root; the bare class re-scopes for body / shell descendants. */
+html.theme-classroom,
+.theme-classroom {
+  color-scheme: light;
+  --bg-void: #e8e1d2;
+  --bg-deep: #d9d0bd;
+  --surface-1: #efe9dc;
+  --surface-2: #f8f4ec;
+  --surface-3: #fffdf7;
+  --felt: #dfe4d5;
+  --parchment: #171a15;
+  --parchment-dim: #3d443a;
+  --parchment-mute: #5a6155;
+  --brass: #6e5417;
+  --brass-soft: rgba(110, 84, 23, 0.12);
+  --signal: #4b6a0f;
+  --signal-ink: #fffdf6;
+  --signal-soft: rgba(75, 106, 15, 0.12);
+  --danger: #a4372a;
+  --warning: #855012;
+  --line: rgba(23, 26, 21, 0.16);
+  --line-strong: rgba(23, 26, 21, 0.34);
+  --paper: #fffdf7;
+  --paper-soft: #fffaf0;
+  --ink-inverse: #fffdf6;
+  --shadow-high: 0 30px 80px rgba(70, 52, 25, 0.18);
+  --focus: 0 0 0 2px #fffdf7, 0 0 0 4px #4b6a0f;
+}
+html[data-page-theme="classroom"] {
+  background: #e8e1d2;
+}
+/* the page ground follows the chosen UI theme even when only the shell
+   element carries the theme class (contrast is scoped that way) */
+html[data-ui-theme="contrast"],
+html[data-ui-theme="contrast"] body {
+  background: #000000;
+}
+
+
 .theme-classroom h1,
 .theme-classroom h2,
 .theme-classroom h3,
@@ -82,7 +260,7 @@ button,
 .mini-button,
 .note-chip,
 .theme-button,
-.auth-tab,
+.access-cell,
 .nav-button,
 .mobile-nav-button,
 .profile-select-button,
@@ -108,71 +286,6 @@ button,
 .theme-classroom .toast {
   box-shadow: 0 24px 64px rgba(69, 50, 18, 0.2);
 }
-:root {
-  color-scheme: dark;
-  --bg: #0b1110;
-  --bg-deep: #070b0a;
-  --surface-table: #0e1614;
-  --surface-card: #121b18;
-  --surface-raised: #18231f;
-  --surface-inset: #0a100e;
-  --paper: #eee7d7;
-  --paper-soft: #f7f1e5;
-  --ink-primary: #f0ece2;
-  --ink-secondary: #c2cbc6;
-  --ink-muted: #91a098;
-  --ink-inverse: #161a18;
-  --border-subtle: #283630;
-  --border-strong: #9d7c3c;
-  --accent-primary: #c9a354;
-  --accent-danger: #d26f60;
-  --accent-warning: #d59a4b;
-  --accent-success: #62a87a;
-  --gold: #c9a354;
-  --gold-2: #dfbf79;
-  --radius: 6px;
-  --shadow-low: 0 1px 0 rgba(255, 255, 255, 0.025);
-  --shadow-high: 0 24px 70px rgba(0, 0, 0, 0.32);
-  --focus: 0 0 0 3px rgba(201, 163, 84, 0.28), 0 0 0 1px #c9a354;
-  --font: "Source Sans 3", sans-serif;
-  --radius-panel: 10px;
-  --radius-shell: 12px;
-  --font-display: "Newsreader", Georgia, serif;
-  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 24px;
-  --space-6: 32px;
-  --space-7: 48px;
-}
-.theme-classroom {
-  color-scheme: light;
-  --bg: #e8e1d2;
-  --bg-deep: #d8ceba;
-  --surface-table: #eee8db;
-  --surface-card: #f7f2e8;
-  --surface-raised: #fffdf8;
-  --surface-inset: #e2dacb;
-  --paper: #fffdf8;
-  --paper-soft: #fffaf0;
-  --ink-primary: #1d2723;
-  --ink-secondary: #41514a;
-  --ink-muted: #506058;
-  --ink-inverse: #1d2723;
-  --border-subtle: #807561;
-  --border-strong: #76581e;
-  --accent-primary: #76581e;
-  --accent-danger: #a53d32;
-  --accent-warning: #8a4f14;
-  --accent-success: #27623f;
-  --gold: #76581e;
-  --gold-2: #76581e;
-  --shadow-low: 0 1px 0 rgba(70, 52, 25, 0.05);
-  --shadow-high: 0 24px 60px rgba(70, 52, 25, 0.15);
-  --focus: 0 0 0 3px rgba(118, 88, 30, 0.22), 0 0 0 1px #76581e;
-}
 .theme-classroom .button {
   border-color: #5d4310;
   color: #fffdf8;
@@ -196,23 +309,6 @@ button,
 .theme-classroom .quick-rolls .mini-button[aria-pressed="true"] {
   background: #76581e;
   color: #fffdf8;
-}
-.theme-contrast {
-  --paper: #ffffff;
-  --paper-soft: #ffffff;
-  --focus: 0 0 0 4px rgba(117, 255, 255, 0.55);
-  --bg: #050807;
-  --bg-deep: #000;
-  --surface-table: #090d0c;
-  --surface-card: #111715;
-  --surface-raised: #1b2521;
-  --surface-inset: #050807;
-  --ink-primary: #fff;
-  --ink-secondary: #edf4f0;
-  --ink-muted: #c4d0ca;
-  --border-subtle: #607069;
-  --border-strong: #ffe071;
-  --accent-primary: #ffe071;
 }
 body[data-page-theme="classroom"] {
   background: var(--bg);
@@ -1009,16 +1105,6 @@ form[aria-busy="true"] .button {
 .auth-card-head h2 {
   font-size: 1.7rem;
 }
-.auth-tab {
-  min-height: 44px;
-  color: var(--ink-muted);
-  font-size: 0.78rem;
-  font-weight: 700;
-  transition:
-    background-color 160ms ease,
-    color 160ms ease,
-    box-shadow 160ms ease;
-}
 .auth-card {
   isolation: isolate;
   overflow: hidden;
@@ -1142,43 +1228,6 @@ form[aria-busy="true"] .button {
 .auth-card-head {
   align-items: center;
   margin-bottom: var(--space-4);
-}
-.auth-tabs {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  margin: 14px 0;
-  gap: 0;
-  padding: 0;
-  border: 0;
-  border-bottom: 1px solid var(--border-subtle);
-  border-radius: 0;
-  background: transparent;
-}
-.auth-tab,
-.auth-tab-account {
-  margin: 0;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-}
-.auth-tab[aria-selected="true"],
-.auth-tab-account[aria-selected="true"] {
-  border-bottom-color: var(--accent-primary);
-  background: transparent;
-  color: var(--ink-primary);
-  box-shadow: none;
-}
-.auth-tab-table {
-  min-height: 44px;
-  font-size: 0.8rem;
-}
-.auth-tab-account {
-  min-height: 44px;
-  color: var(--ink-muted);
-  font-size: 0.74rem;
-  font-weight: 620;
 }
 .settings-popover {
   min-width: 0;
@@ -3449,22 +3498,13 @@ form[aria-busy="true"] {
 .privacy-line {
     display: none;
   }
-  .auth-tabs {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
   .app-shell {
     padding: max(10px, env(safe-area-inset-top)) 10px
       calc(84px + env(safe-area-inset-bottom));
   }
   .auth-page {
-    padding: max(10px, env(safe-area-inset-top)) 10px var(--space-5);
-    grid-template-columns: 1fr;
+    padding: 0;
     min-height: 100dvh;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-5);
-    align-items: stretch;
-    justify-content: flex-start;
   }
   .auth-card {
     order: -1;
@@ -3475,29 +3515,6 @@ form[aria-busy="true"] {
   }
   .auth-card-head h2 {
     font-size: 1.55rem;
-  }
-  .auth-visual {
-    display: grid;
-    gap: var(--space-3);
-    padding: var(--space-2) var(--space-1) var(--space-5);
-  }
-  .auth-visual h1 {
-    margin-bottom: 0;
-    max-width: 13ch;
-    font-size: clamp(2.5rem, 12vw, 3.35rem);
-    line-height: 0.94;
-  }
-  .auth-visual > .table-map {
-    order: 5;
-    width: min(270px, 76vw);
-    margin: var(--space-3) auto;
-    border-radius: var(--radius-panel);
-    box-shadow: none;
-  }
-  .auth-tab {
-    min-width: 0;
-    padding-inline: 4px;
-    font-size: 0.76rem;
   }
   .rail .nav-list {
     display: none;
@@ -3948,168 +3965,6 @@ a:focus-visible,
    for all three themes. Everything above is legacy structure it builds on.
    ========================================================================== */
 
-/* Self-hosted UI sans. Newsreader (already declared above) is the offline
-   fallback for the Instrument Serif display face linked in index.html. */
-@font-face {
-  font-family: "Inter";
-  src: url("../../assets/fonts/InterVariable.woff2") format("woff2");
-  font-style: normal;
-  font-weight: 100 900;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Inter";
-  src: url("../../assets/fonts/InterVariable-Italic.woff2") format("woff2");
-  font-style: italic;
-  font-weight: 100 900;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Newsreader";
-  src: url("../../assets/fonts/NewsreaderVariable-Italic.woff2") format("woff2");
-  font-style: italic;
-  font-weight: 200 800;
-  font-display: swap;
-}
-
-/* ---------------------------------------------------------------- 1. TOKENS */
-:root {
-  color-scheme: dark;
-
-  --bg-void: #0b0c0a;
-  --bg-deep: #070806;
-  --surface-1: #101310;
-  --surface-2: #161a15;
-  --surface-3: #1d231c;
-  --felt: #1d2a22;
-
-  --parchment: #e8e1d2;
-  --parchment-dim: #b4ae9f;
-  --parchment-mute: #8c8779;
-
-  --brass: #b18a43;
-  --brass-soft: rgba(177, 138, 67, 0.16);
-  --signal: #c8f04a;
-  --signal-ink: #0b0c0a;
-  --signal-soft: rgba(200, 240, 74, 0.14);
-  --danger: #e2705e;
-  --warning: #dfa94f;
-
-  --line: rgba(232, 225, 210, 0.11);
-  --line-strong: rgba(232, 225, 210, 0.22);
-
-  --r-control: 2px;
-  --r-panel: 4px;
-  --r-shell: 6px;
-
-  --dur-1: 160ms;
-  --dur-2: 320ms;
-  --dur-3: 620ms;
-  --ease: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-
-  --font-display: "Instrument Serif", Newsreader, Georgia, "Times New Roman", serif;
-  --font-ui: Inter, "Source Sans 3", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font: var(--font-ui);
-  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-
-  --fs-display: clamp(38px, 5.2vw, 76px);
-  --fs-h1: clamp(28px, 3.2vw, 44px);
-  --fs-h2: clamp(22px, 2.2vw, 30px);
-  --fs-h3: 1.15rem;
-
-  /* legacy aliases so every existing rule inherits the new system */
-  --bg: var(--bg-void);
-  --surface-table: var(--surface-1);
-  --surface-card: var(--surface-2);
-  --surface-raised: var(--surface-3);
-  --surface-inset: var(--bg-deep);
-  --paper: #f2ece0;
-  --paper-soft: #f8f3e9;
-  --ink-primary: var(--parchment);
-  --ink-secondary: var(--parchment-dim);
-  --ink-muted: var(--parchment-mute);
-  --ink-inverse: var(--bg-void);
-  --border-subtle: var(--line);
-  --border-strong: var(--line-strong);
-  --accent-primary: var(--signal);
-  --accent-danger: var(--danger);
-  --accent-warning: var(--warning);
-  --accent-success: var(--signal);
-  --gold: var(--brass);
-  --gold-2: #d3ab63;
-  --gold-soft: var(--brass-soft);
-  --radius: var(--r-control);
-  --radius-panel: var(--r-panel);
-  --radius-shell: var(--r-shell);
-  --shadow-low: 0 1px 0 rgba(232, 225, 210, 0.03);
-  --shadow-high: 0 40px 120px rgba(0, 0, 0, 0.55);
-  --focus: 0 0 0 2px var(--bg-void), 0 0 0 4px var(--signal);
-}
-
-/* Contrast theme — scoped to the shell element that carries the class. */
-.theme-contrast {
-  color-scheme: dark;
-  --bg-void: #000000;
-  --bg-deep: #000000;
-  --surface-1: #060806;
-  --surface-2: #0d100c;
-  --surface-3: #171b16;
-  --felt: #16241b;
-  --parchment: #ffffff;
-  --parchment-dim: #f1f5ee;
-  --parchment-mute: #d2d8cd;
-  --brass: #f0cf7d;
-  --brass-soft: rgba(240, 207, 125, 0.2);
-  --signal: #d9ff6b;
-  --signal-ink: #000000;
-  --signal-soft: rgba(217, 255, 107, 0.2);
-  --danger: #ff9d8c;
-  --warning: #ffc978;
-  --line: rgba(255, 255, 255, 0.4);
-  --line-strong: rgba(255, 255, 255, 0.72);
-  --focus: 0 0 0 2px #000, 0 0 0 5px #75ffff;
-}
-
-/* Classroom theme — projector-safe light. html.theme-classroom wins over
-   :root; the bare class re-scopes for body / shell descendants. */
-html.theme-classroom,
-.theme-classroom {
-  color-scheme: light;
-  --bg-void: #e8e1d2;
-  --bg-deep: #d9d0bd;
-  --surface-1: #efe9dc;
-  --surface-2: #f8f4ec;
-  --surface-3: #fffdf7;
-  --felt: #dfe4d5;
-  --parchment: #171a15;
-  --parchment-dim: #3d443a;
-  --parchment-mute: #5a6155;
-  --brass: #6e5417;
-  --brass-soft: rgba(110, 84, 23, 0.12);
-  --signal: #4b6a0f;
-  --signal-ink: #fffdf6;
-  --signal-soft: rgba(75, 106, 15, 0.12);
-  --danger: #a4372a;
-  --warning: #855012;
-  --line: rgba(23, 26, 21, 0.16);
-  --line-strong: rgba(23, 26, 21, 0.34);
-  --paper: #fffdf7;
-  --paper-soft: #fffaf0;
-  --ink-inverse: #fffdf6;
-  --shadow-high: 0 30px 80px rgba(70, 52, 25, 0.18);
-  --focus: 0 0 0 2px #fffdf7, 0 0 0 4px #4b6a0f;
-}
-html[data-page-theme="classroom"] {
-  background: #e8e1d2;
-}
-/* the page ground follows the chosen UI theme even when only the shell
-   element carries the theme class (contrast is scoped that way) */
-html[data-ui-theme="contrast"],
-html[data-ui-theme="contrast"] body {
-  background: #000000;
-}
-
 /* ------------------------------------------------------------- 2. BASE */
 html,
 body {
@@ -4351,6 +4206,8 @@ html[data-app-stage="console"] #gt-frame {
 }
 
 /* ------------------------------------------------------- 5. ENTRY SCREEN */
+/* v2 "The Board Awakens": the scene is full-bleed and persistent; the entry
+   is a set of instruments sitting in it, not a page laid on top of it. */
 .auth-page {
   display: block;
   background: transparent;
@@ -4359,22 +4216,83 @@ html[data-app-stage="console"] #gt-frame {
   overflow-x: hidden;
 }
 
+/* --- composed fallback hero (no WebGL) -------------------------------- */
+/* Shown only when the WebGL scene is unavailable. Real board artwork on a
+   raked plane with layered light, driven through the same three chapters by
+   --chapter-progress. Never an empty canvas, never an error. */
+.entry-fallback {
+  display: none;
+}
+html.no-webgl .entry-fallback {
+  display: block;
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  perspective: 1400px;
+  perspective-origin: 50% 38%;
+}
+html[data-page-theme="classroom"] .entry-fallback,
+html[data-app-stage="console"] .entry-fallback {
+  display: none;
+}
+.entry-fallback-slab {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(1100px, 116vw);
+  aspect-ratio: 1;
+  transform-style: preserve-3d;
+  /* chapter 0 -> 1 -> 2: the plane rakes flatter, rises and squares up */
+  transform: translate(-50%, -50%)
+    translateY(calc(6vh - var(--chapter-progress, 0) * 16vh))
+    rotateX(calc(62deg - var(--chapter-progress, 0) * 30deg))
+    rotateZ(calc(-4deg + var(--chapter-progress, 0) * 4deg))
+    scale(calc(0.92 + var(--chapter-progress, 0) * 0.16));
+  transition: transform 420ms var(--ease);
+}
+.entry-fallback-slab img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  opacity: calc(0.6 + var(--chapter-progress, 0) * 0.28);
+  filter: saturate(calc(0.82 + var(--chapter-progress, 0) * 0.4))
+    brightness(calc(0.9 + var(--chapter-progress, 0) * 0.2));
+  transition: opacity 420ms var(--ease), filter 420ms var(--ease);
+}
+.entry-fallback-mist {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(58% 46% at 34% 62%, rgba(177, 138, 67, 0.24), transparent 68%),
+    radial-gradient(80% 60% at 70% 22%, rgba(29, 42, 34, 0.5), transparent 72%),
+    linear-gradient(to bottom, var(--bg-void) 0%, transparent 22%, transparent 74%, var(--bg-void) 100%);
+}
+html.reduced-motion .entry-fallback-slab,
+html.reduced-motion .entry-fallback-slab img {
+  transition: none;
+}
+
+/* --- the opening stage ------------------------------------------------- */
 .entry-stage {
+  position: relative;
+  z-index: 1;
   display: grid;
-  grid-template-columns: minmax(0, 58fr) minmax(390px, 42fr);
-  gap: clamp(32px, 5vw, 88px);
+  grid-template-columns: minmax(0, 56fr) minmax(400px, 44fr);
+  gap: clamp(32px, 5vw, 96px);
   align-items: center;
   min-height: 100dvh;
-  padding: clamp(48px, 7vh, 96px) clamp(28px, 5vw, 88px);
-  max-width: 1680px;
+  padding: clamp(52px, 8vh, 104px) clamp(28px, 5vw, 88px) clamp(76px, 9vh, 120px);
+  max-width: 1720px;
   margin: 0 auto;
 }
 
-/* --- left column: the story ------------------------------------------- */
 .auth-visual {
   display: flex;
   flex-direction: column;
-  gap: clamp(18px, 2.4vh, 30px);
+  gap: clamp(20px, 2.6vh, 32px);
   min-width: 0;
   background: none;
   border: 0;
@@ -4391,81 +4309,38 @@ html[data-app-stage="console"] #gt-frame {
   flex: 1;
   height: 1px;
   background: var(--line);
-  max-width: 180px;
+  max-width: 200px;
 }
+/* Ricardo Chance scale and rhythm: bigger, tighter, authored line breaks. */
 .auth-visual h1 {
   font-family: var(--font-display);
   font-weight: 400;
-  font-size: var(--fs-display);
-  line-height: 0.96;
-  letter-spacing: -0.018em;
-  max-width: 16ch;
+  font-size: clamp(42px, 6.4vw, 96px);
+  line-height: 0.92;
+  letter-spacing: -0.022em;
+  max-width: 17ch;
   margin: 0;
-  text-wrap: balance;
 }
 .auth-visual h1 em {
   font-style: italic;
   color: var(--brass);
 }
 .auth-visual > p:not(.kicker):not(.privacy-line) {
-  max-width: 46ch;
+  max-width: 44ch;
   font-size: 1rem;
   line-height: 1.55;
   color: var(--parchment-dim);
   margin: 0;
 }
 
-/* board plate — the real artwork, staged */
+/* The desktop board is the WebGL / fallback scene. This plate is the mobile
+   and small-viewport substitute only, where the 3D reads poorly. */
 .table-map {
-  position: relative;
-  align-self: flex-start;
-  width: min(400px, 52%);
-  aspect-ratio: auto;
-  overflow: visible;
-  padding: 10px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-panel);
-  background: var(--surface-1);
-  box-shadow: var(--shadow-high);
-  perspective: 1200px;
-  transform: rotate(-0.6deg);
-  transition: transform var(--dur-3) var(--ease);
-}
-.table-map img {
-  display: block;
-  width: 100%;
-  height: auto;
-  aspect-ratio: 1;
-  object-fit: contain;
-  border-radius: 2px;
-  transform: translate3d(var(--px, 0px), var(--py, 0px), 0) rotateX(var(--ry, 0deg)) rotateY(var(--rx, 0deg));
-  transition: transform var(--dur-2) var(--ease);
-  will-change: transform;
-}
-.table-map::before,
-.table-map::after {
-  content: "";
-  position: absolute;
-  width: 10px;
-  height: 10px;
-  border: 1px solid var(--brass);
-  opacity: 0.6;
-}
-.table-map::before {
-  top: -1px;
-  left: -1px;
-  border-right: 0;
-  border-bottom: 0;
-}
-.table-map::after {
-  bottom: -1px;
-  right: -1px;
-  border-left: 0;
-  border-top: 0;
+  display: none;
 }
 .map-badge {
   position: absolute;
-  inset: auto -10px 18px auto;
+  inset: auto -10px 14px auto;
   width: max-content;
   height: max-content;
   padding: 5px 10px;
@@ -4479,7 +4354,6 @@ html[data-app-stage="console"] #gt-frame {
   color: var(--brass);
 }
 
-/* game-flow tiles under the story */
 .auth-proof {
   display: grid;
   gap: 0;
@@ -4498,7 +4372,7 @@ html[data-app-stage="console"] #gt-frame {
   border-radius: 0;
   background: transparent;
   backdrop-filter: none;
-  transition: color var(--dur-1) var(--ease), background var(--dur-1) var(--ease);
+  transition: background var(--dur-1) var(--ease);
 }
 .auth-proof .proof-tile:hover {
   transform: none;
@@ -4522,45 +4396,54 @@ html[data-app-stage="console"] #gt-frame {
   color: var(--parchment-mute);
 }
 
-/* --- right column: the console ---------------------------------------- */
+/* --- the console: an instrument hovering above the table ---------------- */
+/* Fully opaque and high contrast. Depth comes from the edge light, the cast
+   shadow and the registration tether — never from lowering legibility. */
 .auth-card {
   position: sticky;
   top: clamp(24px, 6vh, 72px);
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  padding: clamp(22px, 2.4vw, 32px);
-  border: 1px solid var(--line-strong);
+  gap: 18px;
+  padding: clamp(22px, 2.4vw, 34px);
+  border: 1px solid var(--line);
+  border-top: 1px solid transparent;
   border-radius: var(--r-panel);
-  background: var(--surface-1); /* fallback for no color-mix */
-  background: color-mix(in srgb, var(--surface-1) 82%, transparent);
-  backdrop-filter: blur(16px) saturate(1.08);
-  box-shadow: var(--shadow-high);
-  max-width: 520px;
+  background: var(--surface-1);
+  background: color-mix(in srgb, var(--surface-1) 96%, transparent);
+  backdrop-filter: blur(18px) saturate(1.05);
+  box-shadow:
+    0 2px 0 -1px var(--brass),
+    0 40px 90px -30px rgba(0, 0, 0, 0.9),
+    0 90px 140px -60px rgba(177, 138, 67, 0.22);
+  max-width: 540px;
   width: 100%;
   justify-self: end;
 }
+/* brass edge light along the top rule */
 .auth-card::before,
 .auth-card::after {
   content: "";
   position: absolute;
-  width: 10px;
-  height: 10px;
-  border: 1px solid var(--brass);
-  opacity: 0.7;
   pointer-events: none;
 }
 .auth-card::before {
-  top: -1px;
-  left: -1px;
-  border-right: 0;
-  border-bottom: 0;
+  inset: -1px -1px auto -1px;
+  height: 1px;
+  border: 0;
+  background: linear-gradient(to right, transparent, var(--brass) 22%, var(--brass) 78%, transparent);
+  opacity: 0.85;
 }
+/* registration tether: ties the console's lower-left corner to the board */
 .auth-card::after {
+  left: -1px;
   bottom: -1px;
-  right: -1px;
-  border-left: 0;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--brass);
+  border-right: 0;
   border-top: 0;
+  opacity: 0.75;
 }
 .auth-card-head {
   display: flex;
@@ -4573,71 +4456,82 @@ html[data-app-stage="console"] #gt-frame {
 }
 .auth-card-head h2 {
   margin: 6px 0 0;
-  font-size: clamp(26px, 2.6vw, 36px);
+  font-size: clamp(28px, 2.8vw, 38px);
   line-height: 1;
 }
 .auth-card .eyeline {
   margin: 0;
 }
 
-/* mode tabs */
-.auth-tabs {
-  position: relative;
-  display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
-  margin: 0;
-  padding: 0 0 1px;
-  border: 0;
-  border-bottom: 1px solid var(--line);
-  background: transparent;
+/* --- access modes: a 2x2 indexed grid, four equal cells ---------------- */
+.access-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  padding: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: var(--r-panel);
+  overflow: hidden;
 }
-.auth-tab,
-.auth-tab-table,
-.auth-tab-account {
-  position: relative;
-  flex: 1 1 auto;
-  min-width: 92px;
-  min-height: 44px;
-  padding: 10px 8px;
+.access-cell {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas: "index label" "index hint";
+  align-content: start;
+  gap: 2px 10px;
+  min-height: 68px;
+  padding: 12px 13px;
   border: 0;
+  border-left: 2px solid transparent;
   border-radius: 0;
-  background: transparent;
-  color: var(--parchment-mute);
-  font-family: var(--font-ui);
-  font-size: 0.7rem;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  background: var(--surface-1);
+  color: var(--parchment-dim);
+  text-align: left;
   cursor: pointer;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease),
+    border-color var(--dur-2) var(--ease);
+}
+.access-index {
+  grid-area: index;
+  align-self: start;
+  font-family: var(--font-ui);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  color: var(--parchment-mute);
+  padding-top: 2px;
+  font-variant-numeric: tabular-nums;
   transition: color var(--dur-1) var(--ease);
 }
-.auth-tab::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -1px;
-  height: 1px;
-  background: var(--signal);
-  transform: scaleX(0);
-  transition: transform var(--dur-2) var(--ease);
+.access-cell strong {
+  grid-area: label;
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: 0.005em;
+  color: inherit;
 }
-.auth-tab:hover:not(:disabled) {
-  color: var(--parchment-dim);
+.access-hint {
+  grid-area: hint;
+  font-size: 0.74rem;
+  line-height: 1.35;
+  color: var(--parchment-mute);
 }
-.auth-tab[aria-selected="true"],
-.auth-tab-table[aria-selected="true"],
-.auth-tab-account[aria-selected="true"] {
+.access-cell:hover:not(:disabled) {
+  background: var(--surface-2);
   color: var(--parchment);
-  background: transparent;
-  border-color: transparent;
 }
-.auth-tab[aria-selected="true"]::after {
-  transform: scaleX(1);
+.access-cell[aria-selected="true"] {
+  border-left-color: var(--signal);
+  background: var(--surface-3);
+  color: var(--parchment);
 }
-.auth-tab:disabled {
-  opacity: 0.45;
+.access-cell[aria-selected="true"] .access-index {
+  color: var(--signal);
+}
+.access-cell:disabled {
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
@@ -4676,94 +4570,105 @@ html[data-app-stage="console"] #gt-frame {
   width: 100%;
 }
 
-/* --- scroll narrative: three chapters --------------------------------- */
-.entry-chapters {
-  max-width: 1680px;
+/* --- the chapter track: one continuous transformation ------------------ */
+/* The track holds no imagery. It reports scroll progress; the persistent
+   scene behind it is what transforms. Text scrolls past normally. */
+.entry-track {
+  position: relative;
+  z-index: 1;
+  max-width: 1720px;
   margin: 0 auto;
-  padding: 0 clamp(28px, 5vw, 88px) clamp(48px, 8vh, 110px);
+  padding: 0 clamp(28px, 5vw, 88px);
   border-top: 1px solid var(--line);
+}
+.entry-index {
+  position: fixed;
+  left: clamp(14px, 2vw, 30px);
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  z-index: 4;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--dur-2) var(--ease);
+}
+.entry-track:hover ~ *,
+html[data-app-stage="entry"] .entry-index {
+  opacity: 1;
+}
+.entry-index li {
+  font-family: var(--font-ui);
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  color: var(--parchment-mute);
+  writing-mode: vertical-rl;
+  transition: color var(--dur-1) var(--ease);
+}
+.entry-index li.is-active {
+  color: var(--signal);
 }
 .entry-chapter {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: clamp(24px, 4vw, 72px);
-  align-items: center;
-  padding: clamp(48px, 9vh, 110px) 0;
-  border-bottom: 1px solid var(--line);
-}
-.entry-chapter:last-child {
-  border-bottom: 0;
+  align-content: center;
+  min-height: 92vh;
+  padding: 8vh 0;
 }
 .entry-chapter-copy {
-  position: sticky;
-  top: 22vh;
   display: grid;
   gap: 16px;
-  align-content: start;
+  max-width: 40ch;
+  margin-left: clamp(0px, 6vw, 120px);
+  opacity: 0.34;
+  transform: translateY(14px);
+  transition: opacity var(--dur-3) var(--ease), transform var(--dur-3) var(--ease);
+}
+.entry-chapter.is-active .entry-chapter-copy {
+  opacity: 1;
+  transform: none;
+}
+/* alternate the sides so the scene stays readable behind the copy.
+   Keyed off data-chapter, not :nth-child — the index <ol> is the first child. */
+.entry-chapter[data-chapter="1"] .entry-chapter-copy {
+  margin-left: auto;
+  margin-right: clamp(0px, 6vw, 120px);
 }
 .entry-chapter-index {
   font-family: var(--font-display);
-  font-size: clamp(46px, 6vw, 88px);
+  font-size: clamp(46px, 6vw, 92px);
   line-height: 0.8;
   color: var(--brass);
-  opacity: 0.55;
+  opacity: 0.5;
+  margin: 0;
 }
 .entry-chapter h2 {
   margin: 0;
-  font-size: clamp(26px, 3vw, 40px);
-  line-height: 1.02;
-  max-width: 16ch;
+  font-size: clamp(28px, 3.4vw, 46px);
+  line-height: 1;
+  max-width: 15ch;
 }
 .entry-chapter p {
   margin: 0;
-  max-width: 44ch;
   color: var(--parchment-dim);
   line-height: 1.55;
 }
-.entry-chapter-figure {
-  position: relative;
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: var(--r-panel);
-  background: var(--surface-1);
-  aspect-ratio: 4 / 3;
-}
-.entry-chapter-figure img {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  max-width: none;
-  object-fit: cover;
-  object-position: 50% 50%;
-  /* zoom toward the board detail this chapter is about */
-  transform-origin: var(--focus, 50% 50%);
-  transform: translate3d(0, var(--shift, 0px), 0) scale(var(--zoom, 1.6));
-  transition: transform var(--dur-3) var(--ease);
-  will-change: transform;
-}
-.entry-chapter-figure figcaption {
-  position: absolute;
-  left: 12px;
-  bottom: 12px;
-  padding: 5px 9px;
-  background: color-mix(in srgb, var(--bg-void) 80%, transparent);
-  border: 1px solid var(--line-strong);
-  font-family: var(--font-ui);
-  font-size: 0.58rem;
-  font-weight: 600;
-  letter-spacing: 0.2em;
+.entry-chapter-cue {
+  font-size: 0.72rem !important;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--parchment-dim);
-}
-.entry-chapter:nth-child(even) .entry-chapter-copy {
-  order: 2;
+  color: var(--parchment-mute) !important;
 }
 
 .entry-foot {
-  max-width: 1680px;
+  position: relative;
+  z-index: 1;
+  max-width: 1720px;
   margin: 0 auto;
-  padding: 24px clamp(28px, 5vw, 88px) 40px;
+  padding: 24px clamp(28px, 5vw, 88px) 64px;
   border-top: 1px solid var(--line);
   display: flex;
   flex-wrap: wrap;
@@ -4782,6 +4687,39 @@ html[data-app-stage="console"] #gt-frame {
   color: var(--parchment-dim);
 }
 
+/* --- persistent utility strip (Izanami) -------------------------------- */
+.entry-utility {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 4;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px clamp(20px, 4vw, 44px);
+  border-top: 1px solid var(--line);
+  background: linear-gradient(to top, var(--bg-void) 40%, transparent);
+  font-family: var(--font-ui);
+  font-size: 0.6rem;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--parchment-mute);
+  pointer-events: none;
+}
+.entry-utility-right {
+  display: flex;
+  gap: 18px;
+  font-variant-numeric: tabular-nums;
+}
+.entry-scroll-cue {
+  color: var(--brass);
+}
+html[data-app-stage="console"] .entry-utility {
+  display: none;
+}
+
 /* masked line reveal used by ui-refresh.js */
 .gt-reveal {
   opacity: 0;
@@ -4791,25 +4729,6 @@ html[data-app-stage="console"] #gt-frame {
 .gt-reveal.gt-in {
   opacity: 1;
   transform: none;
-}
-.gt-chapter-in .entry-chapter-copy > * {
-  animation: gt-rise var(--dur-3) var(--ease) both;
-}
-.gt-chapter-in .entry-chapter-copy > *:nth-child(2) {
-  animation-delay: 80ms;
-}
-.gt-chapter-in .entry-chapter-copy > *:nth-child(3) {
-  animation-delay: 160ms;
-}
-@keyframes gt-rise {
-  from {
-    opacity: 0;
-    transform: translateY(18px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
 }
 
 /* ------------------------------------------------------------ 6. CONTROLS */
@@ -5888,31 +5807,49 @@ html.theme-classroom .rail,
 /* -------------------------------------------------- 9. RESPONSIVE TARGETS */
 @media (max-width: 1180px) {
   .entry-stage {
-    grid-template-columns: minmax(0, 54fr) minmax(360px, 46fr);
+    grid-template-columns: minmax(0, 52fr) minmax(370px, 48fr);
     gap: clamp(24px, 3.6vw, 56px);
   }
-  .table-map {
-    width: min(320px, 46%);
+  .auth-visual h1 {
+    font-size: clamp(38px, 5.6vw, 62px);
+  }
+  .entry-chapter-copy {
+    margin-left: 0;
+  }
+  .entry-chapter[data-chapter="1"] .entry-chapter-copy {
+    margin-right: 0;
   }
 }
 
-/* short laptop viewports: keep the console fully visible */
+/* short laptop viewports: the console and its primary action stay in the
+   first fold at 1280x640 without shrinking the form controls */
 @media (max-height: 760px) and (min-width: 901px) {
   .entry-stage {
     align-items: start;
+    min-height: 0;
     padding-top: 40px;
-    padding-bottom: 40px;
+    padding-bottom: 56px;
   }
   .auth-visual h1 {
-    font-size: clamp(34px, 3.8vw, 52px);
+    font-size: clamp(34px, 3.9vw, 54px);
   }
-  .table-map {
-    width: min(260px, 38%);
+  .auth-visual {
+    gap: 16px;
   }
   .auth-card {
-    top: 28px;
+    top: 24px;
     padding: 20px;
-    gap: 16px;
+    gap: 14px;
+  }
+  .access-cell {
+    min-height: 58px;
+    padding: 9px 12px;
+  }
+  .access-hint {
+    display: none;
+  }
+  .entry-chapter {
+    min-height: 108vh;
   }
 }
 
@@ -5921,7 +5858,7 @@ html.theme-classroom .rail,
     display: flex;
     flex-direction: column;
     min-height: 0;
-    padding: 24px 20px 32px;
+    padding: 24px 20px 40px;
     gap: 28px;
   }
   /* console first on small screens: the form must be in the first fold */
@@ -5930,50 +5867,90 @@ html.theme-classroom .rail,
     position: static;
     max-width: none;
     padding: 20px;
+    backdrop-filter: none;
+    background: var(--surface-1);
   }
   .auth-visual h1 {
-    font-size: clamp(32px, 8vw, 46px);
+    font-size: clamp(32px, 8.6vw, 46px);
     max-width: 20ch;
   }
+  /* the 3D scene reads poorly at this size: show the real board plate and
+     drop the scene back to a quiet ground */
+  html[data-app-stage="entry"] #gt-webgl {
+    opacity: 0.5;
+  }
   .table-map {
-    width: min(230px, 62%);
+    position: relative;
+    display: block;
+    align-self: flex-start;
+    width: min(280px, 64%);
+    padding: 8px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-panel);
+    background: var(--surface-1);
+    box-shadow: var(--shadow-high);
+  }
+  .table-map img {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1;
+    object-fit: contain;
+    border-radius: 2px;
+  }
+  .entry-index {
+    display: none;
   }
   .entry-chapter {
-    grid-template-columns: 1fr;
-    gap: 20px;
-    padding: 36px 0;
+    min-height: 0;
+    padding: 34px 0;
   }
   .entry-chapter-copy {
-    position: static;
+    max-width: none;
+    margin: 0;
+    opacity: 1;
+    transform: none;
   }
-  .entry-chapter:nth-child(even) .entry-chapter-copy {
-    order: 0;
+  .entry-chapter[data-chapter="1"] .entry-chapter-copy {
+    margin: 0;
   }
-  .entry-chapters {
-    padding: 0 20px 40px;
+  .entry-track {
+    padding: 0 20px 32px;
   }
   .entry-foot {
-    padding: 20px;
+    padding: 20px 20px 56px;
+  }
+  .entry-utility {
+    font-size: 0.55rem;
+    letter-spacing: 0.14em;
+    padding: 8px 16px;
+  }
+  .entry-scroll-cue {
+    display: none;
   }
   .topbar {
     padding: 16px 18px;
   }
 }
 
+@media (max-width: 520px) {
+  .access-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .access-cell {
+    min-height: 56px;
+  }
+}
+
 @media (max-width: 430px) {
   .entry-stage {
-    padding: 18px 16px 28px;
+    padding: 18px 16px 32px;
   }
   .auth-card {
     padding: 16px;
   }
-  .auth-tab {
-    min-width: 76px;
-    font-size: 0.64rem;
-    letter-spacing: 0.1em;
-  }
   .table-map {
-    width: 78%;
+    width: 82%;
   }
   .auth-visual h1 {
     font-size: 34px;
@@ -5990,7 +5967,7 @@ html.theme-classroom .rail,
 
 /* -------------------------------- 10. REDUCED MOTION / FORCED COLORS / A11Y */
 html.reduced-motion .table-map img,
-html.reduced-motion .entry-chapter-figure img {
+html.reduced-motion .entry-fallback-slab {
   transform: none !important;
   transition: none !important;
 }
@@ -6019,7 +5996,7 @@ html.reduced-motion .status-pill.status-saving::before {
     transform: none;
   }
   .table-map img,
-  .entry-chapter-figure img {
+  .entry-fallback-slab {
     transform: none !important;
   }
 }
@@ -6027,14 +6004,14 @@ html.reduced-motion .status-pill.status-saving::before {
 @media (forced-colors: active) {
   .button,
   .button-secondary,
-  .auth-tab,
+  .access-cell,
   .nav-button,
   .panel,
   .auth-card,
   .status-pill {
     border: 1px solid CanvasText;
   }
-  .auth-tab[aria-selected="true"]::after,
+  .access-cell[aria-selected="true"],
   .nav-button[aria-current="page"] {
     forced-color-adjust: none;
   }
@@ -6077,7 +6054,7 @@ textarea:focus-visible,
 .mini-button:focus-visible,
 .note-chip:focus-visible,
 .theme-button:focus-visible,
-.auth-tab:focus-visible,
+.access-cell:focus-visible,
 .nav-button:focus-visible,
 .mobile-nav-button:focus-visible,
 .settings-trigger:focus-visible,
