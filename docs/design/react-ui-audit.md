@@ -143,3 +143,73 @@ missing capability.
 3. ASCII/canvas legibility across quality tiers and themes — defect 4.
 4. Full sweep: every surface × three themes × seven widths, keyboard, reduced
    motion, canvas-failure fallback, realtime.
+
+---
+
+## Slice 0 — design-language recovery (shipped)
+
+Full extraction in `docs/design/legacy-design-language.md`; legacy captures in
+`docs/design/evidence/legacy/`, post-change captures in
+`docs/design/evidence/react/slice0/`.
+
+Landed in the token layer:
+
+- **Instrument Serif restored as the display face.** Self-hosted (the CSP is
+  `font-src 'self'`), 43 KB for both cuts, with Newsreader kept as fallback.
+  `"Newsreader", Georgia, serif` was hardcoded 23 times in `surfaces.css`, which
+  is why the display face never followed the token; all 23 now use
+  `var(--font-display)`. Set in Newsreader the entry headline needed four lines;
+  in Instrument Serif it needs two, as the approved design did.
+- **Rules are translucent again** — `--line` moved from an opaque `#34382c` to
+  `rgb(232 225 210 / 0.11)`. This alone removes the olive grid that made the
+  entry page read as a table.
+- **Motion, spacing and type scales added.** None existed. `surfaces.css` —
+  5,705 lines — contained two `transition` declarations in total. The four
+  duration classes map to the timing contract.
+- **Missing tokens restored**: `--canvas-sunk`, `--surface-strong`, `--felt`,
+  `--ink-dim`, `--ink-faint`, `--brass-soft`, `--signal-soft`, the three-step
+  radius (controls are 2px again), `--shadow-low`, `--shadow-high`, and the
+  double-ring `--focus-ring`.
+- **Palette re-warmed** to the approved values: ink `#e8e1d2`, brass `#b18a43`,
+  signal `#c8f04a`, danger `#e2705e`.
+- **Contrast theme rescued.** It was `--brass: #ffff00`, `--signal: #00ff66`,
+  every surface flat black, `--muted` equal to `--ink` so all text hierarchy was
+  gone. It is now a high-contrast rendering of the same palette with four
+  surface steps and three ink steps.
+- **`#00ff66` leak removed** from `surfaces.css` — the ASCII tint is a parameter
+  of that effect, not a UI colour.
+- **Reduced motion now means "no positional animation", not "no feedback".**
+  The blanket `transition-duration: 0.01ms` made every control feel dead; colour
+  and opacity now still transition, under 120 ms.
+
+### Correction — defect 12 is not real
+
+The survey harness I added in slice 1 passed `setTheme` to `page.evaluate` as a
+**string**, so Playwright evaluated it as an expression and discarded the
+argument. The theme was never applied, and every `classroom-*` and `contrast-*`
+file in `docs/design/evidence/react/survey/` is actually the Table theme. The
+claim that "in Classroom and Contrast the command rail renders identically to
+Table" was an artefact of that bug, not a finding.
+
+With the harness fixed, both themes apply correctly across the rail, header and
+primitives — see `evidence/react/slice0/survey/classroom-2-play.png` and
+`contrast-3-market.png`. **Defect 12 is closed as not-reproducible.** The theme
+work remaining is the Market palette (defect 13), which is real and is worse in
+Contrast, where seven hues compete against a pure-black ground.
+
+Two supporting fixes:
+
+- `scripts/survey-surfaces.mjs` now seeds the theme into stored UI preferences
+  before boot, uses a fresh context per theme, and **asserts** that
+  `html[data-theme]` matches before capturing, so it can no longer produce
+  mislabelled evidence.
+- `app/fixture.ts` was discarding stored UI preferences (`ui: {}`), so
+  `?fixture=host` could not exercise themes or reduced motion at all. Session,
+  auth and backend are still discarded; UI preferences are now honoured.
+
+### Confirmed still open after slice 0
+
+Defects 4, 5, 6, 7, 8, 9, 10, 11, 13, 14 all reproduce. Defect 9 is especially
+clear in `evidence/react/slice0/survey/classroom-2-play.png`, where "Aanya owns
+the table." is clipped by the sticky workspace header at rest. Defect 13 is
+clear in `contrast-3-market.png`.

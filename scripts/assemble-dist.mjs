@@ -11,26 +11,25 @@ const copyDirectory = async (relativePath) => {
   });
 };
 
+const FONT_FILES = [
+  "InstrumentSerif-Regular.woff2",
+  "InstrumentSerif-Italic.woff2",
+  "NewsreaderVariable.woff2",
+  "NewsreaderVariable-Italic.woff2",
+  "SourceSans3Variable.woff2",
+  "SourceSans3Variable-Italic.woff2",
+];
+
 await mkdir(distRoot, { recursive: true });
 await mkdir(path.join(distRoot, "assets/fonts"), { recursive: true });
 await Promise.all([
   copyDirectory("game_data"),
   copyDirectory("outputs/final_assets/board"),
-  cp(
-    path.join(repoRoot, "assets/fonts/NewsreaderVariable.woff2"),
-    path.join(distRoot, "assets/fonts/NewsreaderVariable.woff2"),
-  ),
-  cp(
-    path.join(repoRoot, "assets/fonts/NewsreaderVariable-Italic.woff2"),
-    path.join(distRoot, "assets/fonts/NewsreaderVariable-Italic.woff2"),
-  ),
-  cp(
-    path.join(repoRoot, "assets/fonts/SourceSans3Variable.woff2"),
-    path.join(distRoot, "assets/fonts/SourceSans3Variable.woff2"),
-  ),
-  cp(
-    path.join(repoRoot, "assets/fonts/SourceSans3Variable-Italic.woff2"),
-    path.join(distRoot, "assets/fonts/SourceSans3Variable-Italic.woff2"),
+  ...FONT_FILES.map((file) =>
+    cp(
+      path.join(repoRoot, "assets/fonts", file),
+      path.join(distRoot, "assets/fonts", file),
+    ),
   ),
 ]);
 

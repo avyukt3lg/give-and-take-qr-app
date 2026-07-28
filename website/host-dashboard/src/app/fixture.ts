@@ -83,9 +83,13 @@ export function createFixtureState(
   }
   session.view = "play";
 
+  // Session, auth and backend are discarded so the fixture is deterministic and
+  // never touches a real table. UI preferences are kept: theme and reduced
+  // motion are display settings, and honouring them is what makes the fixture
+  // usable for verifying themes and the reduced-motion path.
   const state = createInitialAppState(
     game,
-    { ...hydration, auth: null, backend: null, session: null, ui: {} },
+    { ...hydration, auth: null, backend: null, session: null },
   );
   return {
     ...state,

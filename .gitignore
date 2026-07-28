@@ -8,3 +8,4 @@ test-results/
 coverage/
 .DS_Store
 *.log
+docs/design/NEXT-SESSION-PROMPT.md

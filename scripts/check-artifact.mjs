@@ -13,6 +13,8 @@ const required = [
   "website/host-dashboard/index.html",
   "game_data/game_config.json",
   "assets/fonts/SourceSans3Variable.woff2",
+  "assets/fonts/InstrumentSerif-Regular.woff2",
+  "assets/fonts/InstrumentSerif-Italic.woff2",
   "outputs/final_assets/board/give_and_take_board_web_1280.webp",
 ];
 

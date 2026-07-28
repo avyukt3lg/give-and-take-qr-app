@@ -26,6 +26,26 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+/* Instrument Serif is the display face of the approved design language: a true
+   display serif with high stroke contrast and wide letterforms. Newsreader is
+   the fallback — it is a text face and sets the same headline in twice the
+   lines. Self-hosted because the CSP is font-src 'self'. */
+@font-face {
+  font-family: "Instrument Serif";
+  src: url("/give-and-take-qr-app/assets/fonts/InstrumentSerif-Regular.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Instrument Serif";
+  src: url("/give-and-take-qr-app/assets/fonts/InstrumentSerif-Italic.woff2") format("woff2");
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+}
+
 @font-face {
   font-family: "Newsreader";
   src: url("/give-and-take-qr-app/assets/fonts/NewsreaderVariable.woff2") format("woff2");
@@ -52,65 +72,145 @@
 
 :root {
   color-scheme: dark;
-  --canvas: #090a08;
-  --canvas-raised: #10120f;
-  --surface: #151711;
-  --surface-strong: #1c1f17;
-  --ink: #f3ecdc;
-  --muted: #aaa99d;
-  --line: #34382c;
-  --line-strong: #5d634f;
-  --brass: #d0a95c;
-  --brass-ink: #241a09;
-  --signal: #c7ff3f;
-  --signal-ink: #111800;
-  --positive: #57d889;
-  --danger: #ff6b5f;
-  --warning: #f0c46a;
-  --radius: 0.25rem;
+
+  /* Ground and surfaces — four ascending steps plus a sunk well and the felt.
+     Values ported from the approved language; see docs/design/legacy-design-language.md */
+  --canvas: #0b0c0a;
+  --canvas-sunk: #070806;
+  --canvas-raised: #101310;
+  --surface: #161a15;
+  --surface-strong: #1d231c;
+  --felt: #1d2a22; /* the only green in the system — board surfaces only */
+
+  /* Ink — three steps. --muted aliases --ink-dim so existing consumers stay
+     legible; --ink-faint is for uppercase, letterspaced eyebrows only. */
+  --ink: #e8e1d2;
+  --ink-dim: #b4ae9f;
+  --muted: #b4ae9f;
+  --ink-faint: #8c8779;
+
+  /* Accents. Chartreuse is reserved for primary action, active state, success. */
+  --brass: #b18a43;
+  --brass-ink: #0b0c0a;
+  --brass-soft: rgb(177 138 67 / 0.16);
+  --signal: #c8f04a;
+  --signal-ink: #0b0c0a;
+  --signal-soft: rgb(200 240 74 / 0.14);
+  --positive: #c8f04a;
+  --danger: #e2705e;
+  --warning: #dfa94f;
+
+  /* Rules are translucent tints of the ink, never opaque colours. This is what
+     makes a hairline vanish into the ground and register only where it crosses
+     a lighter surface. */
+  --line: rgb(232 225 210 / 0.11);
+  --line-strong: rgb(232 225 210 / 0.22);
+
+  /* Three radius steps. Controls are near-square. */
+  --radius: 2px;
+  --r-panel: 4px;
+  --r-shell: 6px;
+
+  /* Spacing — 4px base, widening at the top end. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+
+  /* Motion. Four classes, matching the timing contract: every animation must
+     communicate a state change, and its class says which kind. */
+  --dur-control: 180ms; /* button press, tab switch, toggle, input focus */
+  --dur-panel: 340ms; /* drawer, dialog, popover, tab panel, accordion */
+  --dur-surface: 560ms; /* rail destination change, phase advance */
+  --dur-narrative: 900ms; /* entry chapters, board reveal, code reveal */
+  --ease-control: cubic-bezier(0.33, 1, 0.68, 1);
+  --ease-panel: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-surface: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Type */
+  --font-display: "Instrument Serif", Newsreader, Georgia, "Times New Roman", serif;
+  --font-ui: "Source Sans 3", system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --fs-display: clamp(38px, 5.2vw, 76px);
+  --fs-h1: clamp(28px, 3.2vw, 44px);
+  --fs-h2: clamp(22px, 2.2vw, 30px);
+  --fs-h3: 1.15rem;
+
+  /* Depth. --shadow-low is a hairline highlight, not a drop shadow. */
+  --shadow-low: 0 1px 0 rgb(232 225 210 / 0.03);
   --shadow-print: 0 1rem 3rem rgb(0 0 0 / 0.28);
-  font-family: "Source Sans 3", system-ui, sans-serif;
+  --shadow-high: 0 40px 120px rgb(0 0 0 / 0.55);
+
+  /* Double ring so focus reads on any ground, light or dark. */
+  --focus-ring: 0 0 0 2px var(--canvas), 0 0 0 4px var(--signal);
+
+  font-family: var(--font-ui);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
 
+/* Classroom — bright and projector-friendly. Not an inverted dark theme: it is
+   parchment-grounded, and it keeps the same brass/moss identity. */
 [data-theme="classroom"] {
   color-scheme: light;
-  --canvas: #e9e1cf;
-  --canvas-raised: #f3eddf;
-  --surface: #fffdf7;
-  --surface-strong: #eee5d2;
-  --ink: #15150f;
-  --muted: #5f6057;
-  --line: #c9bfa9;
-  --line-strong: #7e745f;
-  --brass: #744c0e;
-  --brass-ink: #fff9e9;
-  --signal: #376c1e;
-  --signal-ink: #ffffff;
-  --positive: #176b3a;
-  --danger: #a62823;
-  --warning: #805a0b;
+  --canvas: #e8e1d2;
+  --canvas-sunk: #d9d0bd;
+  --canvas-raised: #efe9dc;
+  --surface: #f8f4ec;
+  --surface-strong: #fffdf7;
+  --felt: #dfe4d5;
+  --ink: #171a15;
+  --ink-dim: #3d443a;
+  --muted: #3d443a;
+  --ink-faint: #5a6155;
+  --brass: #6e5417;
+  --brass-ink: #fffdf6;
+  --brass-soft: rgb(110 84 23 / 0.12);
+  --signal: #4b6a0f;
+  --signal-ink: #fffdf6;
+  --signal-soft: rgb(75 106 15 / 0.12);
+  --positive: #4b6a0f;
+  --danger: #a4372a;
+  --warning: #855012;
+  --line: rgb(23 26 21 / 0.16);
+  --line-strong: rgb(23 26 21 / 0.34);
+  --shadow-low: 0 1px 0 rgb(23 26 21 / 0.04);
   --shadow-print: 0 1rem 2.5rem rgb(53 44 25 / 0.13);
+  --shadow-high: 0 30px 80px rgb(70 52 25 / 0.18);
 }
 
+/* Contrast — a high-contrast rendering of this palette, not a different one.
+   It keeps four surface steps and three ink steps so hierarchy survives; it
+   just raises every ratio. Pure-neon accents were off-system and are the
+   finance-terminal cliché the language excludes. */
 [data-theme="contrast"] {
   color-scheme: dark;
   --canvas: #000000;
-  --canvas-raised: #000000;
-  --surface: #000000;
-  --surface-strong: #111111;
+  --canvas-sunk: #000000;
+  --canvas-raised: #060806;
+  --surface: #0d100c;
+  --surface-strong: #171b16;
+  --felt: #16241b;
   --ink: #ffffff;
-  --muted: #ffffff;
-  --line: #ffffff;
-  --line-strong: #ffffff;
-  --brass: #ffff00;
+  --ink-dim: #f1f5ee;
+  --muted: #f1f5ee;
+  --ink-faint: #d2d8cd;
+  --brass: #f0cf7d;
   --brass-ink: #000000;
-  --signal: #00ff66;
+  --brass-soft: rgb(240 207 125 / 0.2);
+  --signal: #d9ff6b;
   --signal-ink: #000000;
-  --positive: #00ff66;
-  --danger: #ff5c5c;
-  --warning: #ffff00;
+  --signal-soft: rgb(217 255 107 / 0.2);
+  --positive: #d9ff6b;
+  --danger: #ff9d8c;
+  --warning: #ffc978;
+  --line: rgb(255 255 255 / 0.4);
+  --line-strong: rgb(255 255 255 / 0.72);
+  --shadow-low: 0 1px 0 rgb(255 255 255 / 0.08);
+  --focus-ring: 0 0 0 2px #000, 0 0 0 5px var(--signal);
 }
 
 * {
@@ -186,11 +286,26 @@ textarea,
 }
 
 .display-serif {
-  font-family: "Newsreader", Georgia, serif;
-  letter-spacing: -0.035em;
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+}
+
+/* The signature treatment: an expressive brass italic inside an otherwise
+   parchment serif headline. */
+.display-serif em,
+.display-serif i {
+  font-style: italic;
+  color: var(--brass);
 }
 
 @media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-control: 100ms;
+    --dur-panel: 0ms;
+    --dur-surface: 0ms;
+    --dur-narrative: 0ms;
+  }
+
   html {
     scroll-behavior: auto;
   }
@@ -201,7 +316,16 @@ textarea,
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
-    transition-duration: 0.01ms !important;
+  }
+
+  /* Reduced motion means no positional or scale animation — not "no feedback".
+     Colour and opacity still respond, under 120ms, so controls read as live. */
+  *,
+  *::before,
+  *::after {
+    transition-property: opacity, color, background-color, border-color, box-shadow,
+      fill, stroke;
+    transition-duration: 100ms !important;
   }
 }
 
