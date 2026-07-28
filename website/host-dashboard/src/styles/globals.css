@@ -1,0 +1,212 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@theme inline {
+  --color-background: var(--canvas);
+  --color-foreground: var(--ink);
+  --color-card: var(--surface);
+  --color-card-foreground: var(--ink);
+  --color-popover: var(--surface);
+  --color-popover-foreground: var(--ink);
+  --color-primary: var(--brass);
+  --color-primary-foreground: var(--brass-ink);
+  --color-secondary: var(--surface-strong);
+  --color-secondary-foreground: var(--ink);
+  --color-muted: var(--surface-strong);
+  --color-muted-foreground: var(--muted);
+  --color-accent: var(--signal);
+  --color-accent-foreground: var(--signal-ink);
+  --color-destructive: var(--danger);
+  --color-border: var(--line);
+  --color-input: var(--line);
+  --color-ring: var(--signal);
+  --radius-sm: calc(var(--radius) - 1px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@font-face {
+  font-family: "Newsreader";
+  src: url("/give-and-take-qr-app/assets/fonts/NewsreaderVariable.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Newsreader";
+  src: url("/give-and-take-qr-app/assets/fonts/NewsreaderVariable-Italic.woff2") format("woff2");
+  font-style: italic;
+  font-weight: 200 800;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Source Sans 3";
+  src: url("/give-and-take-qr-app/assets/fonts/SourceSans3Variable.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 200 900;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: dark;
+  --canvas: #090a08;
+  --canvas-raised: #10120f;
+  --surface: #151711;
+  --surface-strong: #1c1f17;
+  --ink: #f3ecdc;
+  --muted: #aaa99d;
+  --line: #34382c;
+  --line-strong: #5d634f;
+  --brass: #d0a95c;
+  --brass-ink: #241a09;
+  --signal: #c7ff3f;
+  --signal-ink: #111800;
+  --positive: #57d889;
+  --danger: #ff6b5f;
+  --warning: #f0c46a;
+  --radius: 0.25rem;
+  --shadow-print: 0 1rem 3rem rgb(0 0 0 / 0.28);
+  font-family: "Source Sans 3", system-ui, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+[data-theme="classroom"] {
+  color-scheme: light;
+  --canvas: #e9e1cf;
+  --canvas-raised: #f3eddf;
+  --surface: #fffdf7;
+  --surface-strong: #eee5d2;
+  --ink: #15150f;
+  --muted: #5f6057;
+  --line: #c9bfa9;
+  --line-strong: #7e745f;
+  --brass: #744c0e;
+  --brass-ink: #fff9e9;
+  --signal: #376c1e;
+  --signal-ink: #ffffff;
+  --positive: #176b3a;
+  --danger: #a62823;
+  --warning: #805a0b;
+  --shadow-print: 0 1rem 2.5rem rgb(53 44 25 / 0.13);
+}
+
+[data-theme="contrast"] {
+  color-scheme: dark;
+  --canvas: #000000;
+  --canvas-raised: #000000;
+  --surface: #000000;
+  --surface-strong: #111111;
+  --ink: #ffffff;
+  --muted: #ffffff;
+  --line: #ffffff;
+  --line-strong: #ffffff;
+  --brass: #ffff00;
+  --brass-ink: #000000;
+  --signal: #00ff66;
+  --signal-ink: #000000;
+  --positive: #00ff66;
+  --danger: #ff5c5c;
+  --warning: #ffff00;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--canvas);
+  scroll-behavior: smooth;
+  scrollbar-color: var(--brass) var(--canvas);
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  overflow-x: hidden;
+  background: var(--canvas);
+  color: var(--ink);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button,
+a,
+input,
+select,
+textarea,
+[tabindex]:not([tabindex="-1"]) {
+  -webkit-tap-highlight-color: transparent;
+}
+
+:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 3px;
+}
+
+::selection {
+  background: var(--signal);
+  color: var(--signal-ink);
+}
+
+.skip-link {
+  position: fixed;
+  z-index: 1000;
+  inset: 0 auto auto 0;
+  padding: 0.75rem 1rem;
+  background: var(--signal);
+  color: var(--signal-ink);
+  font-weight: 800;
+  transform: translateY(-120%);
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.display-serif {
+  font-family: "Newsreader", Georgia, serif;
+  letter-spacing: -0.035em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (forced-colors: active) {
+  * {
+    forced-color-adjust: auto;
+  }
+}
