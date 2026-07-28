@@ -1,0 +1,123 @@
+{
+  "version": 1,
+  "project": {
+    "name": "Give And Take Table Companion",
+    "productType": "physical board-game companion",
+    "stack": [
+      "React 19",
+      "TypeScript",
+      "Vite",
+      "Tailwind CSS v4",
+      "shadcn/ui",
+      "Radix UI",
+      "Motion",
+      "Canvas2D"
+    ]
+  },
+  "sources": {
+    "tokens": [
+      "website/host-dashboard/src/styles/globals.css"
+    ],
+    "components": [
+      "website/host-dashboard/src/components"
+    ],
+    "assets": [
+      "assets"
+    ],
+    "instructions": [
+      "CLAUDE.md",
+      "docs/design/digital-table-handoff.md"
+    ]
+  },
+  "design": {
+    "colorMode": "table-dark, classroom-light, projection-contrast",
+    "colors": {
+      "canvas": "warm black or warm paper",
+      "surface": "ink slab or bone sheet",
+      "ink": "bone or near-black",
+      "accent": "brass",
+      "signal": "chartreuse",
+      "danger": "semantic red"
+    },
+    "typography": {
+      "display": "Newsreader editorial serif",
+      "interface": "Inter",
+      "labels": "uppercase tracking with tabular numerals"
+    },
+    "spacing": {
+      "touchTarget": "44px minimum",
+      "rhythm": "8px operational rhythm with larger editorial intervals"
+    },
+    "radius": {
+      "default": "4px",
+      "rule": "print-like, never pill-shaped except status dots"
+    },
+    "shadows": {
+      "default": "sparse physical sheet depth",
+      "avoid": "generic glowing card shadows"
+    },
+    "motion": {
+      "route": "240-320ms",
+      "reveal": "450-650ms",
+      "rule": "one active signature effect per surface"
+    },
+    "density": "operational and projection-friendly"
+  },
+  "components": {
+    "installed": [],
+    "preferredPrimitives": [
+      "shadcn/ui New York",
+      "Radix UI",
+      "native semantic tables and forms"
+    ],
+    "patterns": [
+      "Now zone",
+      "phase rail",
+      "editorial ledger",
+      "projection display",
+      "five-item mobile navigation"
+    ]
+  },
+  "constraints": {
+    "must": [
+      "Preserve all game mechanics, Supabase RPCs and persisted session shapes",
+      "Maintain 44px touch targets, visible focus and keyboard navigation",
+      "Support Table, Classroom, Contrast and reduced-motion modes",
+      "Keep one Canvas or WebGL renderer active at a time",
+      "Keep all critical data and controls in semantic DOM"
+    ],
+    "avoid": [
+      "Scroll hijacking",
+      "Hover-only actions",
+      "Generic glass cards and decorative gradients",
+      "Moving critical values",
+      "Multiple simultaneous render loops",
+      "Pill-shaped controls",
+      "Copying reference websites or paid 21st component code"
+    ]
+  },
+  "decisions": [
+    {
+      "decision": "Use the manufacturer box art as a live Canvas2D dither hero",
+      "reason": "It is product-native and same-origin, unlike a stock portrait."
+    },
+    {
+      "decision": "Use LiquidButton once and MetalButton only for physical game commitments",
+      "reason": "Tactility should communicate importance rather than become decoration."
+    },
+    {
+      "decision": "Recompose mobile layouts instead of scaling desktop compositions",
+      "reason": "Projection and tabletop density do not translate directly to phones."
+    },
+    {
+      "decision": "Main contains source; GitHub Actions deploys dist",
+      "reason": "Remove source/deploy drift while preserving the exact Pages URL."
+    }
+  ],
+  "evidence": [
+    "Live site desktop and mobile review on 2026-07-28",
+    "21st component 20779 All about the Benjamins used as visual reference only",
+    "Current digital-table design handoff and prior browser QA"
+  ],
+  "generatedAt": "2026-07-28T04:40:30.016Z"
+}

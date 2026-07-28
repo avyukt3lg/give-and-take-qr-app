@@ -1,9 +1,9 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="utf-8" />
+    <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#0b0c0a" />
+    <meta name="theme-color" content="#090a08" />
     <meta name="color-scheme" content="dark light" />
     <meta name="application-name" content="Give And Take" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -11,98 +11,46 @@
     <meta name="apple-mobile-web-app-title" content="Give And Take" />
     <meta
       name="description"
-      content="Give And Take QR web app for classroom setup, guest play, session codes, market tracking, player ledgers, and final scoring."
+      content="The cinematic table companion for Give And Take: setup, live turns, market tracking, player ledgers and final scoring."
     />
-    <title>Give And Take QR App</title>
-    <link rel="canonical" href="https://avyukt3lg.github.io/give-and-take-qr-app/website/host-dashboard/" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://*.supabase.co wss://*.supabase.co ws:; worker-src 'self' blob:; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'"
+    />
+    <title>Give And Take — Table Companion</title>
+    <link
+      rel="canonical"
+      href="https://avyukt3lg.github.io/give-and-take-qr-app/website/host-dashboard/"
+    />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Give And Take" />
-    <meta property="og:title" content="Give And Take — QR Table Companion" />
+    <meta property="og:title" content="Give And Take — Table Companion" />
     <meta
       property="og:description"
-      content="Run a Give And Take table with setup guidance, live turns, market tracking, player ledgers, and final scoring."
+      content="Run the physical Give And Take board game with a focused, shared digital table."
     />
-    <meta property="og:url" content="https://avyukt3lg.github.io/give-and-take-qr-app/website/host-dashboard/" />
+    <meta
+      property="og:url"
+      content="https://avyukt3lg.github.io/give-and-take-qr-app/website/host-dashboard/"
+    />
     <meta
       property="og:image"
       content="https://avyukt3lg.github.io/give-and-take-qr-app/outputs/final_assets/board/give_and_take_board_web_1280.webp"
     />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Give And Take — QR Table Companion" />
-    <meta
-      name="twitter:description"
-      content="Setup, live turns, market tracking, player ledgers, and scoring for the physical Give And Take board game."
-    />
-    <meta
-      name="twitter:image"
-      content="https://avyukt3lg.github.io/give-and-take-qr-app/outputs/final_assets/board/give_and_take_board_web_1280.webp"
-    />
     <link
       rel="icon"
-      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23081412'/%3E%3Cpath d='M12 12h40v40H12z' fill='none' stroke='%23d8ad55' stroke-width='2'/%3E%3Ctext x='32' y='39' text-anchor='middle' font-family='Arial,sans-serif' font-size='22' font-weight='800' fill='%23f4e7c8'%3EGT%3C/text%3E%3C/svg%3E"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23090a08'/%3E%3Cpath d='M12 12h40v40H12z' fill='none' stroke='%23d0a95c' stroke-width='2'/%3E%3Ctext x='32' y='39' text-anchor='middle' font-family='Arial,sans-serif' font-size='22' font-weight='800' fill='%23f2ead9'%3EGT%3C/text%3E%3C/svg%3E"
     />
-    <!-- Boot performance: start the slow work during HTML parse instead of after the script chain. -->
-    <link rel="preconnect" href="https://esm.sh" crossorigin />
-    <link rel="dns-prefetch" href="https://esm.sh" />
-    <link rel="preload" href="game-data.js" as="script" />
-    <link rel="preload" href="supabase-config.js?v=20260727-v4d" as="script" />
-    <link rel="preload" href="app.js?v=20260727-v4d" as="script" />
-    <link rel="preload" href="../../game_data/game_config.json?v=20260727-v4d" as="fetch" crossorigin />
-    <link rel="preload" href="../../assets/fonts/InterVariable.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="preload" href="../../assets/fonts/NewsreaderVariable.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <!-- Display face. Self-hosted Newsreader is the fallback when this is
-         unavailable (offline, or a strict font-src policy). -->
-    <link
-      href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap"
-      rel="stylesheet"
-    />
-    <link rel="stylesheet" href="styles.css?v=20260727-v4d" />
-    <noscript>
-      <style>
-        #app,
-        .skip-link {
-          display: none;
-        }
-      </style>
-    </noscript>
   </head>
   <body>
-    <a class="skip-link" href="#main-content">Skip to game controls</a>
     <noscript>
-      <main id="no-script-content" class="no-script">
+      <main class="no-script">
         <h1>Give And Take</h1>
-        <p>This QR app needs JavaScript to run the game session.</p>
+        <p>This table companion requires JavaScript.</p>
       </main>
     </noscript>
-
-    <canvas id="gt-webgl" aria-hidden="true"></canvas>
-    <div id="gt-grain" aria-hidden="true"></div>
-    <div id="gt-frame" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
-
-    <div id="gt-loader" aria-hidden="true">
-      <div class="gt-mark">Give <em>and</em> Take</div>
-      <div class="gt-sub">Table companion</div>
-      <div class="gt-pct">0</div>
-      <div class="gt-bar"><i></i></div>
-    </div>
-
-    <div id="app" class="boot-shell">
-      <main id="main-content" class="boot-card" tabindex="-1">
-        <p class="kicker">Give And Take</p>
-        <h1>Loading game rules...</h1>
-        <p>Reading the current S00-S43 prototype contract.</p>
-      </main>
-    </div>
-
-    <div id="live-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
-    <div id="live-alert" class="sr-only" role="alert" aria-live="assertive" aria-atomic="true"></div>
-
-    <script src="game-data.js"></script>
-    <script src="supabase-config.js?v=20260727-v4d"></script>
-    <script src="app.js?v=20260727-v4d"></script>
-    <script src="ui-refresh.js?v=20260727-v4d"></script>
-    <script type="module" src="webgl-hero.js?v=20260727-v4d"></script>
+    <div id="root"></div>
+    <script type="module" src="/website/host-dashboard/src/main.tsx"></script>
   </body>
 </html>
