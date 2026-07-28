@@ -114,6 +114,25 @@ runtime contract.
 
 ## Production acceptance
 
-Pending the green migration-branch workflow, Pages switch and final read-only
-production smoke. This section will be updated only after the exact public URL
-serves the verified React artifact.
+Accepted on 2026-07-28:
+
+- Migration-branch validation passed at commit
+  `eee27f702804ca2b803f63922f251ebd4d2f51f0` in
+  [Actions run 30334559774](https://github.com/avyukt3lg/give-and-take-qr-app/actions/runs/30334559774).
+- Pages was changed from legacy branch publishing to `build_type: workflow`.
+  The verified source was then fast-forwarded to `main`.
+- The first React production build and deployment passed in
+  [Actions run 30334689998](https://github.com/avyukt3lg/give-and-take-qr-app/actions/runs/30334689998).
+- The exact canonical URL,
+  <https://avyukt3lg.github.io/give-and-take-qr-app/website/host-dashboard/>,
+  returned the React document and hashed Vite module
+  `index-C8skAFxl.js` with HTTP 200.
+- Direct `index.html` reload, the root redirect, query/hash preservation,
+  `404.html`, the initial module graph, CSS and required board asset all
+  returned HTTP 200. The deployed document carries the authored CSP.
+- Read-only browser smoke confirmed the Table, Classroom and Contrast themes
+  at 1440×900 and the authored mobile composition at 390×844. No host or player
+  session was created in production.
+- Remote rollback branch `legacy-pages` and annotated tag
+  `pre-react-pages-2026-07-28` remain pinned to legacy commit
+  `48cc41fac5bbc817a13ae353c967d7d41957fd80`.
