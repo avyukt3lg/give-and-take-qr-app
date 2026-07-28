@@ -346,6 +346,12 @@ export function EntryScreen({
               </Button>
             </div>
           )}
+          <header className="entry-console__head">
+            <p className="eyebrow">Table entry</p>
+            <h2 id="entry-console-title" className="display-serif">
+              Enter the table
+            </h2>
+          </header>
           <Tabs
             value={mode}
             onValueChange={(value) => onModeChange(value as AccessMode)}

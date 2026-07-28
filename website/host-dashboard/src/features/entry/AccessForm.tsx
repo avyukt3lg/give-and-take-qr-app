@@ -74,11 +74,16 @@ export function AccessForm({
   };
 
   return (
-    <form className="access-form" onSubmit={submit} aria-busy={pending}>
-      <header>
-        <p className="eyebrow">Table entry</p>
-        <h2 className="display-serif">{item.title}</h2>
-      </header>
+    <form
+      className="access-form"
+      onSubmit={submit}
+      aria-busy={pending}
+      aria-label={item.title}
+    >
+      <p className="access-form__mode">
+        <strong>{item.title}</strong>
+        <span>{item.previewTitle}</span>
+      </p>
 
       {(mode === "guest" || mode === "join" || mode === "signup") && (
         <div className="field">
@@ -154,10 +159,7 @@ export function AccessForm({
         </>
       )}
 
-      <div className="entry-preview">
-        <strong>{item.previewTitle}</strong>
-        <p>{item.preview}</p>
-      </div>
+      <p className="entry-preview">{item.preview}</p>
 
       <p className="backend-note">
         <span aria-hidden="true" />

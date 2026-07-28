@@ -340,7 +340,7 @@ button.bg-destructive {
   align-items: center;
   gap: clamp(1.5rem, 3vw, 4.5rem);
   margin: 0 auto;
-  padding: clamp(3rem, 7vw, 7rem) var(--entry-gutter);
+  padding: clamp(1.75rem, 3.2vw, 3.75rem) var(--entry-gutter);
 }
 
 .entry-hero__copy {
@@ -404,7 +404,7 @@ button.bg-destructive {
 .entry-art {
   position: relative;
   align-self: stretch;
-  min-height: 34rem;
+  min-height: min(34rem, 62svh);
   perspective: 1200px;
 }
 
@@ -453,7 +453,7 @@ button.bg-destructive {
 .entry-ascii img {
   width: 100%;
   height: 100%;
-  min-height: 34rem;
+  min-height: min(34rem, 62svh);
   object-fit: cover;
 }
 
@@ -522,6 +522,21 @@ button.bg-destructive {
   min-height: 44px;
 }
 
+.entry-console__head {
+  display: grid;
+  gap: 0.3rem;
+  padding: clamp(0.9rem, 1.6vw, 1.3rem) clamp(1.1rem, 2vw, 1.65rem)
+    clamp(0.8rem, 1.4vw, 1.1rem);
+  border-bottom: 1px solid var(--line);
+}
+
+.entry-console__head h2 {
+  margin: 0;
+  font-size: clamp(1.6rem, 2vw, 2.15rem);
+  font-weight: 520;
+  line-height: 1;
+}
+
 .access-tabs {
   display: grid !important;
   width: 100% !important;
@@ -535,7 +550,7 @@ button.bg-destructive {
 
 .access-tabs [role="tab"] {
   display: grid !important;
-  min-height: 5.3rem;
+  min-height: 4.5rem;
   grid-template-columns: auto 1fr;
   grid-template-rows: auto auto;
   justify-content: stretch !important;
@@ -589,33 +604,37 @@ button.bg-destructive {
 
 .access-form {
   display: grid;
-  gap: 1rem;
-  padding: clamp(1.1rem, 2vw, 1.65rem);
+  gap: 0.85rem;
+  padding: clamp(1rem, 2vw, 1.5rem);
 }
 
-.access-form header {
-  padding-bottom: 0.3rem;
+.access-form__mode {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.15rem 0.6rem;
+  margin: 0;
 }
 
-.access-form header h2 {
-  margin: 0.3rem 0 0;
-  font-size: clamp(2rem, 2.7vw, 2.8rem);
-  font-weight: 520;
-  line-height: 1;
+.access-form__mode strong {
+  font-size: 0.86rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.access-form__mode span {
+  color: var(--muted);
+  font-size: 0.64rem;
+  font-weight: 720;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
 }
 
 .entry-preview {
-  padding: 0.85rem 0.9rem;
+  margin: 0;
+  padding: 0.7rem 0.85rem;
   border-left: 2px solid var(--brass);
   background: color-mix(in srgb, var(--surface-strong) 74%, transparent);
-}
-
-.entry-preview strong {
-  font-size: 0.76rem;
-}
-
-.entry-preview p {
-  margin: 0.25rem 0 0;
   color: var(--muted);
   font-size: 0.72rem;
   line-height: 1.5;
@@ -669,12 +688,14 @@ button.bg-destructive {
   grid-template-columns: minmax(16rem, 0.55fr) minmax(28rem, 1fr);
   gap: clamp(3rem, 8vw, 9rem);
   margin: 0 auto;
-  padding: clamp(6rem, 12vw, 13rem) var(--entry-gutter);
+  padding: clamp(3rem, 5vw, 5.5rem) var(--entry-gutter)
+    clamp(5rem, 9vw, 10rem);
+  border-top: 1px solid var(--line);
 }
 
 .entry-chapters > header {
   position: sticky;
-  top: 8rem;
+  top: 7rem;
   align-self: start;
 }
 
@@ -4527,11 +4548,11 @@ button.bg-destructive {
 
   .entry-art {
     min-height: min(42rem, 78vw);
-    order: 2;
+    order: 3;
   }
 
   .entry-console {
-    order: 3;
+    order: 2;
   }
 
   .entry-chapters {
@@ -4916,8 +4937,8 @@ button.bg-destructive {
     display: none;
   }
 
-  .access-form header h2 {
-    font-size: 1.9rem;
+  .entry-console__head h2 {
+    font-size: 1.7rem;
   }
 
   .entry-art__caption {
@@ -5390,24 +5411,100 @@ button.bg-destructive {
   }
 }
 
-@media (max-height: 680px) and (min-width: 901px) {
+@media (max-height: 840px) and (min-width: 901px) {
   .entry-hero {
     min-height: auto;
-    padding-block: 2rem;
+    padding-block: 1.75rem;
   }
 
   .entry-art,
   .entry-ascii,
   .entry-ascii canvas,
   .entry-ascii img {
-    min-height: 28rem;
+    min-height: 26rem;
   }
 
   .access-form {
-    gap: 0.65rem;
+    gap: 0.7rem;
   }
 
-  .entry-preview {
+  .access-tabs [role="tab"] {
+    min-height: 4rem;
+  }
+
+  .entry-chapters {
+    padding-top: clamp(2.5rem, 4vw, 4rem);
+  }
+}
+
+@media (max-height: 730px) and (min-width: 901px) {
+  .entry-hero {
+    align-items: start;
+    padding-block: 1.25rem;
+  }
+
+  .entry-hero__copy h1 {
+    margin-block: 0.8rem 1rem;
+    font-size: clamp(2.6rem, 4.2vw, 4rem);
+  }
+
+  .entry-proof {
+    margin-top: clamp(1rem, 2vw, 1.6rem);
+  }
+
+  .entry-proof div {
+    padding-block: 0.65rem;
+  }
+
+  .entry-art,
+  .entry-ascii,
+  .entry-ascii canvas,
+  .entry-ascii img {
+    min-height: 21rem;
+  }
+
+  .entry-console__head {
+    padding-block: 0.7rem 0.6rem;
+  }
+
+  .entry-console__head h2 {
+    font-size: 1.5rem;
+  }
+
+  .access-tabs {
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  .access-tabs [role="tab"] {
+    min-height: 3.3rem;
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto;
+    padding: 0.55rem 0.5rem !important;
+    border-right: 1px solid var(--line) !important;
+  }
+
+  .access-tabs [role="tab"]:nth-child(even) {
+    border-right: 1px solid var(--line) !important;
+  }
+
+  .access-tabs [role="tab"]:last-child {
+    border-right: 0 !important;
+  }
+
+  .access-tabs [role="tab"] > span {
+    grid-row: auto;
+  }
+
+  .access-tabs [role="tab"] > small {
+    display: none;
+  }
+
+  .access-form {
+    gap: 0.6rem;
+  }
+
+  .entry-preview,
+  .backend-note {
     display: none;
   }
 
