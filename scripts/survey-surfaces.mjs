@@ -20,6 +20,11 @@ const surfaces = [
   "help",
 ];
 
+// Serialized into the page by Playwright, so it runs in the browser realm.
+const setTheme = `(value) => {
+  document.documentElement.dataset.theme = value;
+}`;
+
 await mkdir(outDir, { recursive: true });
 
 const browser = await chromium.launch();
@@ -43,9 +48,7 @@ for (const [index, surface] of surfaces.entries()) {
 }
 
 for (const theme of ["classroom", "contrast"]) {
-  await page.evaluate((value) => {
-    document.documentElement.dataset.theme = value;
-  }, theme);
+  await page.evaluate(setTheme, theme);
   for (const [index, surface] of [
     ["1", "setup"],
     ["2", "play"],
@@ -56,9 +59,7 @@ for (const theme of ["classroom", "contrast"]) {
       .nth(Number(index) - 1)
       .click();
     await page.waitForTimeout(900);
-    await page.evaluate((value) => {
-      document.documentElement.dataset.theme = value;
-    }, theme);
+    await page.evaluate(setTheme, theme);
     await page.waitForTimeout(400);
     await page.screenshot({ path: `${outDir}/${theme}-${index}-${surface}.png` });
     console.log(`captured ${theme}-${index}-${surface}.png`);
