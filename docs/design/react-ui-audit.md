@@ -98,6 +98,45 @@ installs production dependencies only, and a stale mixed `node_modules` made
 `vitest` report 13 spurious `React.act is not a function` failures. Unset
 `NODE_ENV` before installing or running any check locally.
 
+## Full-surface survey (2026-07-28, after slice 1)
+
+Captured with `scripts/survey-surfaces.mjs` against the dev fixture
+(`?fixture=host`) at 1440×900: all seven host surfaces in Table, plus Setup,
+Play and Market in Classroom and Contrast. Files in
+[`evidence/react/survey/`](evidence/react/survey/).
+
+New defects, none of which the deterministic review can see:
+
+| # | Defect | Evidence |
+| --- | --- | --- |
+| 9 | Play headline sits under the sticky workspace header at rest | `main h1` top = 83 px while `.workspace-header` occupies 0→88 px, `scrollTop` = 0. "Aanya owns the table." is occluded before the user touches anything. |
+| 10 | Defect 5 is systemic, not Setup-only | Every surface opens with 200–280 px of display headline before operational content. Market's is three lines ("One fictional market. Every screen in sync.") and pushes the price tape to 545 px. |
+| 11 | Stale phase eyebrow on every surface | The workspace header reads "TURN TABLE · ROLL" on Market, Ledger, Scores, Export and Help. The Play phase label leaks into surfaces it does not describe. |
+| 12 | Themes do not theme the whole system | In Classroom and Contrast the command rail renders identically to Table — dark ink against a parchment or true-black workspace. The requirement is that a theme alters the complete component system. |
+| 13 | Market palette is off-system | The seven price cards use blue, teal, orange, red, purple and yellow accents with matching sparklines. This is outside the moss/parchment/brass/chartreuse palette and is the finance-terminal cliché the design language explicitly excludes. |
+| 14 | Board strip overflows without affordance | The S00–S43 strip on Play clips mid-cell at the right edge with no scroll indication. |
+
+### Deterministic review
+
+`npx @21st-dev/cli@1.15.0 review website/host-dashboard/src` — 103 files, 122
+findings, zero errors or warnings. 120 are `design-hardcoded-color` (info) in
+`surfaces.css`, two are `responsive-overflow-hidden` (info) inside the vendored
+`command` and `select` shadcn primitives. The defects that matter on this
+project are compositional and only surface by looking at rendered states.
+
+### On rebuilding the ASCII engine
+
+`components/effects/ascii/` is already a complete implementation of the
+Benjamins pipeline: `preset.ts` is byte-identical to the published parameter
+set, `types.ts` declares all 25 render modes and all five animation styles, and
+`engine.ts` executes the documented order — background, primitives, tint, blur,
+post-effects, lights, mask reveal — across `engine.ts` (846), `renderers.ts`
+(600), `sampling.ts` (493), a Web Worker, and a dev parameter lab. A
+from-scratch rewrite would reproduce the same architecture and re-introduce
+solved problems in the worker handoff, quality tiers and `SceneOrchestrator`
+arbitration. The open defect is legibility at the entry hero's settings, not
+missing capability.
+
 ## Open slices
 
 2. Command Deck hierarchy — defects 5–8.
