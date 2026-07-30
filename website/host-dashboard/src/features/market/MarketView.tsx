@@ -141,13 +141,13 @@ export function MarketView({
                 <Direction aria-hidden="true" />
               </header>
               <strong>
+                {/* NumberTicker now announces the settled value itself, so the
+                    hand-rolled aria-hidden/sr-only pair is gone. */}
                 <NumberTicker
                   value={value}
                   startValue={previous}
-                  aria-hidden="true"
                   className="market-ticker"
                 />
-                <span className="sr-only">{value}</span>
               </strong>
               <p>{asset.name}</p>
               <small>

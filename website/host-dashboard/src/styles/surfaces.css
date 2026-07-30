@@ -1449,6 +1449,9 @@ button.bg-destructive {
   color: var(--muted);
 }
 
+/* Three connection states, told apart by glyph, word, rule weight and only then
+   colour. A 0.55rem dot changing fill was the whole distinction before, which is
+   state carried by colour alone and unreadable on a projector at 2m. */
 .save-indicator {
   display: grid;
   min-height: 4rem;
@@ -1457,22 +1460,101 @@ button.bg-destructive {
   gap: 0.65rem;
   padding: 0.65rem;
   border: 1px solid var(--line);
+  border-left-width: 1px;
+  transition:
+    border-color var(--dur-control) var(--ease-control),
+    color var(--dur-control) var(--ease-control);
 }
 
-.save-indicator > span {
-  width: 0.55rem;
-  height: 0.55rem;
+.save-indicator__glyph {
+  display: grid;
+  width: 1.35rem;
+  height: 1.35rem;
+  place-items: center;
+  border: 1px solid var(--line-strong);
   border-radius: 50%;
-  background: var(--warning);
+  color: var(--muted);
 }
 
-.save-indicator[data-state="saved"] > span {
-  background: var(--positive);
+.save-indicator__glyph svg {
+  width: 0.8rem;
+  height: 0.8rem;
 }
 
-.save-indicator[data-state="error"] > span,
-.save-indicator[data-state="offline"] > span {
-  background: var(--danger);
+.save-indicator[data-tone="settled"] .save-indicator__glyph {
+  border-color: color-mix(in srgb, var(--positive) 55%, transparent);
+  color: var(--positive);
+}
+
+.save-indicator[data-tone="working"] .save-indicator__glyph {
+  border-color: color-mix(in srgb, var(--warning) 60%, transparent);
+  color: var(--warning);
+}
+
+/* The broken state is the only one that changes the panel's own weight, so it
+   registers peripherally without any colour being read. */
+.save-indicator[data-tone="broken"] {
+  border-color: var(--danger);
+  border-left-width: 3px;
+}
+
+.save-indicator[data-tone="broken"] .save-indicator__glyph {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.save-indicator[data-tone="broken"] strong {
+  color: var(--danger);
+}
+
+/* A slow pulse only while a request is actually in flight — never on a settled
+   or broken table, where a moving element beside a control is noise. It animates
+   opacity alone, so it cannot shift the row. */
+@keyframes sync-breath {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.save-indicator[data-busy] .save-indicator__glyph {
+  animation: sync-breath 1.6s var(--ease-panel) infinite;
+}
+
+.save-indicator__revision {
+  display: flex;
+  min-width: 2.75rem;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 0.1rem;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+}
+
+/* Reduced motion drops the pulse and marks the working state with a rule weight
+   instead, so "busy" is still distinguishable without movement. */
+@media (prefers-reduced-motion: reduce) {
+  .save-indicator[data-busy] .save-indicator__glyph {
+    animation: none;
+  }
+
+  .save-indicator[data-busy] {
+    border-left-width: 3px;
+    border-color: var(--warning);
+  }
+}
+
+[data-theme="contrast"] .save-indicator__glyph {
+  border-width: 2px;
+}
+
+[data-theme="contrast"] .save-indicator[data-tone="broken"] {
+  border-left-width: 5px;
 }
 
 .save-indicator > div {
@@ -1481,9 +1563,11 @@ button.bg-destructive {
   min-width: 0;
 }
 
+/* `capitalize` existed to make the raw state words ("saving", "offline") look
+   like labels. SyncIndicator now supplies real ones, so it would only fight
+   "Sync failed". */
 .save-indicator strong {
   font-size: 0.7rem;
-  text-transform: capitalize;
 }
 
 .save-indicator small {
@@ -2072,10 +2156,38 @@ button.bg-destructive {
   border-right: 0;
 }
 
+/* The chartreuse rule that marked the active phase was an inset box-shadow,
+   which can only swap instantly. It is now a single positioned element shared
+   across the four steps via layoutId, so advancing the phase moves it and the
+   direction of travel is visible. The background and ink still change here, so
+   the active step is never identified by the underline alone. */
 .phase-rail > div[data-active] {
   background: var(--surface);
   color: var(--ink);
-  box-shadow: inset 0 -3px var(--signal);
+}
+
+.travelling-underline {
+  position: absolute;
+  z-index: 1;
+  inset: auto 0 0;
+  height: 3px;
+  background: var(--signal);
+}
+
+/* The confirmed copy state. Chartreuse is reserved for primary action, active
+   state and success — this is success, so it is the one accent that belongs. The
+   label changes too, so the state never rests on colour. */
+.copy-button[data-confirmed] {
+  border-color: var(--signal);
+  color: var(--signal);
+}
+
+[data-theme="contrast"] .copy-button[data-confirmed] {
+  border-width: 2px;
+}
+
+[data-theme="contrast"] .travelling-underline {
+  height: 5px;
 }
 
 .phase-rail > div[data-complete] {

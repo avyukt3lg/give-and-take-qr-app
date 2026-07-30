@@ -468,3 +468,177 @@ the same `overflow-x` pattern and will want it in the sweep.
 85/85 unit · `check:artifact` verified 44 spaces and 81 cards · 11/11
 `desktop-chromium` e2e including the axe audit across Table, Classroom and
 Contrast.
+
+## Slice 6 — the Command Deck motion layer
+
+Evidence in `evidence/react/slice6/`: `survey/` for the settled states across
+three themes, `motion/` for a frame sequence across a real phase advance plus
+the machine-checked report.
+
+Every effect below has a one-sentence answer to "what does this tell the user?"
+recorded in the source next to it. Nothing here is present because it looks
+good, and two candidate effects were rejected outright — see the end.
+
+### Verifying motion, rather than asserting it
+
+Static screenshots cannot prove an animation ran and cannot prove it did not
+shift the layout, so `scripts/verify-motion.mjs` drives a genuine Roll → Resolve
+advance and samples eight frames across it, in both the animated and the
+reduced-motion state. Current output:
+
+```
+ok  animated: blur-fade observed mid-transition (opacities 0.43, 0.98, 1.00, ...)
+ok  animated: instruction never drops below 0.35 opacity (min 0.43)
+ok  animated: Now zone box unchanged through the transition ({x:355,y:331,w:1042,h:272})
+ok  animated: phase advanced Roll -> Resolve
+ok  animated: underline travelled (x 356 -> 616)
+ok  reduced: instruction fully opaque immediately (1)
+ok  reduced: no blur left applied (none)
+ok  reduced: phase still advanced Roll -> Resolve
+ok  reduced: active phase is still marked — the state is designed, not disabled
+PASS (12 checks)
+```
+
+Two traps the harness itself fell into, both worth keeping:
+
+- **The die is a two-step control.** Selecting a face does not advance the phase;
+  it has to be committed with "Record die and show destination". The first run
+  reported `Roll -> Roll` and every downstream check failed for the right
+  reason — nothing had happened.
+- **Playwright's element screenshots scroll the target into view**, so a
+  `getBoundingClientRect().y` reports the *page scrolling* as layout drift. The
+  first version of the stability check failed with `y: -233 -> -1`, which was not
+  a layout shift at all. Geometry is now document-relative.
+
+### Now-zone re-key — enter-only, and not `AnimatePresence`
+
+The brief's most important motion. A host looks away to move a pawn; on looking
+back, an instruction panel that swapped silently is indistinguishable from one
+that never changed, and following a stale instruction is a real failure mode.
+
+The obvious implementation is wrong. `AnimatePresence mode="wait"` runs the
+outgoing exit to completion *before* the incoming enter begins — 340ms of empty
+panel, then 340ms of fade, on every phase change. An instruction the host cannot
+read for a third of a second is worse than one that swaps silently.
+`mode="popLayout"` is no better: it pulls the outgoing child out of flow and
+collapses the zone.
+
+So `NowRekey` changes the child's `key` and animates only the arriving content,
+and it starts at **opacity 0.4, not 0** — the text resolves into focus rather
+than appearing from nothing, so the panel is legible on the first frame and the
+change still registers. Measured minimum across the transition: 0.43.
+
+Its change key is deliberately narrower than the `transitionKey` already in
+`PlayView`. That key includes the pending physical confirmations, so re-keying on
+it would blur-fade an instruction whose text has not changed every time the host
+ticks a checkbox.
+
+### Phase advance — a travelling underline
+
+Was `box-shadow: inset 0 -3px var(--signal)` on `[data-active]`, which can only
+swap instantly. Now one element shared across the four steps via `layoutId`, so
+advancing moves it: measured travel x 356 → 616. The four phases are a sequence
+the host walks through, so direction of travel is information, which is why this
+is a shared layout rather than four cross-faded underlines.
+
+The active step still changes background and ink, so it is never identified by
+the underline alone — and under reduced motion the underline appears at the
+active step instead of travelling to it.
+
+### Connection state — four channels, not a dot
+
+The defect was real and worse than "differentiated only by a dot colour": the
+whole distinction between synced, saving and offline was the fill of a 0.55rem
+circle, plus the **raw state word** rendered directly (`saving`, `offline`,
+`idle`) with `text-transform: capitalize` to make it look intentional.
+
+`SyncIndicator` gives each state a distinct glyph, a real word, a rule weight and
+only then a colour:
+
+| state | word | glyph | weight |
+| --- | --- | --- | --- |
+| `saved` / `idle` | Synced / Ready | check | 1px |
+| `saving` / `connecting` | Saving / Connecting | refresh | 1px + pulse |
+| `offline` | Offline | cloud-off | 3px danger |
+| `error` | Sync failed | warning triangle | 3px danger |
+
+The slow pulse runs **only while a request is genuinely in flight** — never on a
+settled or broken table, where a moving element beside a control is noise. It
+animates opacity alone so it cannot shift the row. Under reduced motion the pulse
+is replaced by a rule weight, so "busy" stays distinguishable without movement.
+
+Broken states escalate to `role="alert"` / `aria-live="assertive"`, because a
+table that has stopped reaching the server interrupts what the host is doing. A
+routine save stays `role="status"` / polite.
+
+The revision counter moved here from beside the table code, which is where it
+means something — it is the host's proof a save landed, so it belongs next to the
+connection state. It is ticked, and its slot has a reserved `min-width` so an
+arriving revision cannot reflow the row.
+
+### NumberTicker — rewritten, not adopted as-is
+
+The vendored Magic UI component had three problems for an operational surface:
+
+1. **`useSpring({ damping: 60, stiffness: 100 })` has no duration guarantee** and
+   settled well past a second. The contract caps this class at 400ms, so it is
+   now a fixed tween at 340ms.
+2. **It rendered `startValue` on mount.** A metric could display `0` — or the
+   previous figure — while the host was reading it. On a surface where the host
+   reads cash and portfolio off the screen that is a correctness bug, not a
+   polish issue. The committed value is now the first paint, and animation only
+   ever runs from a genuinely previous value.
+3. **Accessibility was left to every call site.** `MarketView` hand-rolled the
+   `aria-hidden` + `sr-only` pair; `ScoresView` did not, so a screen reader there
+   was read mid-tween digits. Handled once, inside the component. Both call
+   sites lost their workarounds.
+
+Added a `format` callback so `formatMoney` can drive cash and portfolio.
+Position is deliberately **not** ticked: counting through S09, S10, S11 would
+imply the pawn travelled those spaces, and on this board it may not have.
+
+**Unexpected result: initial JS fell from 230.57 KB to 159.07 KB gzip.** Dropping
+`useInView`, `useSpring` and `AnimatePresence` shed Motion's scroll-tracking and
+presence systems. `layoutId` still pulls in the layout animation system and the
+underline demonstrably travels, so this is a real 71 KB saving rather than a lost
+feature.
+
+### Copy feedback — confirmation at the control
+
+The only confirmation for copying the table code was a message in a live region
+elsewhere on the page: correct for a screen reader, invisible to a host looking
+at the button they just pressed. The table code is how players join, so the host
+needs to know it is on the clipboard before pasting it.
+
+This required an honest contract change. `copyText` now returns
+`Promise<boolean>`, and `onCopyCode` / `onCopy` return it, because a control
+cannot truthfully confirm an outcome it was never told. `CopyButton` shows the
+confirmed state for 2s and **changes its label**, so the state is not carried by
+a glyph or a colour alone. Failure is deliberately not shown at the control:
+`copyText` already raises an assertive message, and the honest outcome of a
+failed copy is that the button simply does not confirm. Applied to the Export
+JSON copy too — same defect.
+
+### Rejected
+
+- **`progressive-blur` on the board strip** (slice 5, recorded above) — trades
+  the legibility of the S-codes for a hint.
+- **Ticking the position metric** — would assert movement the pawn did not make.
+
+### Not yet built
+
+Rail destination `layoutId` marker, evidence/ledger row stagger, export
+determinate progress, theme clip-path wipe, and the entry → Deck transition.
+The four primitives that the rest depend on — `NowRekey`,
+`TravellingUnderline`, the rewritten ticker, and the measured-state indicator
+pattern — are in place, and `scripts/verify-motion.mjs` is the harness to prove
+the remainder.
+
+### Verification
+
+`typecheck` clean · `lint` 0 errors, 4 pre-existing warnings · 92/92 unit (7 new
+in `test/ui/deck-feedback.test.tsx` covering the copy confirmation, the three
+sync states, the pulse gating, and the ticker's committed value) ·
+`check:artifact` verified 44 spaces and 81 cards · 11/11 `desktop-chromium` e2e
+including the axe audit and the reduced-motion/forced-colors spec · 12/12 motion
+checks.

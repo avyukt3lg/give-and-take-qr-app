@@ -1,0 +1,16 @@
+Command Deck motion verification
+
+  ok   animated: Now zone present (phase Roll)
+  ok   animated: phase underline rendered for the active step
+  ok   animated: blur-fade observed mid-transition (opacities 0.43, 0.98, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00)
+  ok   animated: instruction settles fully opaque
+  ok   animated: instruction never drops below 0.35 opacity (min 0.43)
+  ok   animated: Now zone box unchanged through the transition ({"x":355,"y":331,"w":1042,"h":272})
+  ok   animated: phase advanced Roll -> Resolve
+  ok   animated: underline travelled (x 356 -> 616)
+  ok   reduced: instruction fully opaque immediately (1)
+  ok   reduced: no blur left applied (none)
+  ok   reduced: phase still advanced Roll -> Resolve
+  ok   reduced: active phase is still marked — the state is designed, not disabled
+
+PASS (12 checks)

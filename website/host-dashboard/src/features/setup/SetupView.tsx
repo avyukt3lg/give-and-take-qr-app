@@ -1,8 +1,8 @@
-import { Box, Check, Copy, UsersRound } from "lucide-react";
+import { Box, Check, UsersRound } from "lucide-react";
 
 import type { GameDefinition, GameSession } from "@/domain/types";
 import { MetalButton } from "@/components/actions/MetalButton";
-import { Button } from "@/components/ui/button";
+import { CopyButton } from "@/components/ui/copy-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -29,7 +29,8 @@ export interface SetupViewProps {
     patch: { name?: string; profileId?: string },
   ): void;
   onStart(): void;
-  onCopyCode(): void;
+  /** Resolves true when the write landed, so the control can confirm inline. */
+  onCopyCode(): Promise<boolean> | boolean;
   onSetupCheck(key: string, checked: boolean): void;
 }
 
@@ -91,10 +92,11 @@ export function SetupView({
             detail="Share after seating players"
             signal
           />
-          <Button variant="outline" onClick={onCopyCode}>
-            <Copy aria-hidden="true" />
-            Copy table code
-          </Button>
+          <CopyButton
+            onCopy={onCopyCode}
+            label="Copy table code"
+            confirmedLabel="Code copied"
+          />
         </div>
       </section>
 

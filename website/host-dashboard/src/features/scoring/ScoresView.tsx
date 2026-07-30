@@ -91,10 +91,7 @@ export function ScoresView({
                   </div>
                   <strong className="score-total">
                     {final ? (
-                      <NumberTicker
-                        value={score.total}
-                        aria-label={`${score.total} out of 100`}
-                      />
+                      <NumberTicker value={score.total} startValue={0} />
                     ) : (
                       score.total
                     )}

@@ -1,15 +1,14 @@
-import { RotateCw } from "lucide-react";
 import type { PropsWithChildren } from "react";
 
 import type { CompanionMode, GameSession, ThemeId, ViewId } from "@/domain/types";
 import type { HostUnsyncedState } from "@/state";
 import type { BackendSnapshot } from "@/app/contracts";
 import { BrandMark } from "@/components/brand/BrandMark";
-import { Button } from "@/components/ui/button";
 import { SettingsDialog } from "./SettingsDialog";
 import { MobileNavigation } from "./MobileNavigation";
 import { NAVIGATION_ITEMS, navigationItem } from "./navigation";
 import { SessionActions } from "./SessionActions";
+import { SyncIndicator } from "./SyncIndicator";
 
 export interface AppShellProps extends PropsWithChildren {
   session: GameSession;
@@ -73,7 +72,9 @@ export function AppShell({
         <div className="table-code-block" aria-label={`Session ${session.code}`}>
           <span>Live table</span>
           <strong>{session.code}</strong>
-          <small>Revision {backend.revision}</small>
+          {/* The revision moved to the sync indicator, which is where it means
+              something — it is the host's proof a save landed, so it belongs next
+              to the connection state rather than beside the table code. */}
         </div>
         <nav className="desktop-navigation" aria-label="Game sections">
           {NAVIGATION_ITEMS.map((item, index) => {
@@ -104,27 +105,7 @@ export function AppShell({
           })}
         </nav>
         <div className="command-rail__footer">
-          <div
-            className="save-indicator"
-            data-state={backend.state}
-            aria-live="polite"
-          >
-            <span aria-hidden="true" />
-            <div>
-              <strong>{backend.state === "saved" ? "Synced" : backend.state}</strong>
-              <small>{backend.detail}</small>
-            </div>
-            {(backend.state === "error" || backend.state === "offline") && (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={onRetrySave}
-                aria-label="Retry session sync"
-              >
-                <RotateCw aria-hidden="true" />
-              </Button>
-            )}
-          </div>
+          <SyncIndicator backend={backend} onRetry={onRetrySave} />
           <SessionActions
             hostUnsyncedState={hostUnsyncedState}
             playerLocked={playerLocked}

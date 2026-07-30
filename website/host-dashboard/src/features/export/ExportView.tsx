@@ -1,6 +1,5 @@
 import {
   CheckCircle2,
-  Clipboard,
   Download,
   FileJson2,
   FileSpreadsheet,
@@ -19,6 +18,7 @@ import {
   Metric,
   SurfaceIntro,
 } from "@/features/shared/SurfacePrimitives";
+import { CopyButton } from "@/components/ui/copy-button";
 import { formatMoney, formatTime } from "@/features/shared/format";
 
 export interface ExportViewProps {
@@ -27,7 +27,8 @@ export interface ExportViewProps {
   exportText: string;
   lastSavedAt: string | null;
   onRefresh(): void;
-  onCopy(): void;
+  /** Resolves true when the write landed, so the control can confirm inline. */
+  onCopy(): Promise<boolean> | boolean;
   onDownload(kind: "json" | "csv" | "print"): void;
 }
 
@@ -425,10 +426,9 @@ export function ExportView({
             <RefreshCw aria-hidden="true" />
             Refresh
           </Button>
-          <Button variant="outline" onClick={onCopy}>
-            <Clipboard aria-hidden="true" />
-            Copy
-          </Button>
+          {/* Same defect as the table code: the only confirmation was a message
+              elsewhere on screen. */}
+          <CopyButton onCopy={onCopy} label="Copy" confirmedLabel="Copied" />
         </div>
         <pre>{preview}</pre>
       </details>

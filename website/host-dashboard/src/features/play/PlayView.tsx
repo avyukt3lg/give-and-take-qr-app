@@ -53,10 +53,18 @@ import {
   Metric,
   SurfaceIntro,
 } from "@/features/shared/SurfacePrimitives";
+import { NowRekey, TravellingUnderline } from "@/features/shared/DeckMotion";
+import { NumberTicker } from "@/components/ui/number-ticker";
 import { formatMoney } from "@/features/shared/format";
 import { BoardRoute } from "./BoardRoute";
 
 const phases = ["Roll", "Resolve", "Log", "End"] as const;
+
+/** Index of a phase in the four-step turn sequence. */
+function phaseIndexOf(phase: GameSession["phase"]): number {
+  const found = phases.indexOf(phase as (typeof phases)[number]);
+  return found === -1 ? 0 : found;
+}
 
 type PrintedCard =
   | InvestmentCard
@@ -145,6 +153,17 @@ export function PlayView({
       ? pendingCard(game, pending.cardDeck, pending.cardId)
       : null;
   const allChecks = missingPhysicalChecks(session).length === 0;
+  const phaseIndex = phaseIndexOf(session.phase);
+  // Narrower than `transitionKey` below on purpose. That key includes the
+  // pending physical confirmations, and re-keying the Now zone when the host
+  // ticks a checkbox would blur-fade an instruction whose text has not changed.
+  // Only these four inputs alter what the zone renders.
+  const nowKey = [
+    session.currentPlayerIndex,
+    session.phase,
+    session.turn,
+    currentSpace?.id ?? "none",
+  ].join(":");
   const [choiceToConfirm, setChoiceToConfirm] = useState<string | null>(null);
   const physicalStageRef = useRef<HTMLDivElement>(null);
   const transitionKey = [
@@ -216,23 +235,20 @@ export function PlayView({
 
       <section className="phase-rail" aria-label="Turn phases">
         {phases.map((phase, index) => {
-          const currentPhaseIndex =
-            session.phase === "Roll"
-              ? 0
-              : session.phase === "Resolve"
-                ? 1
-                : session.phase === "Log"
-                  ? 2
-                  : 3;
+          const active = index === phaseIndex;
           return (
             <div
               key={phase}
-              data-active={index === currentPhaseIndex || undefined}
-              data-complete={index < currentPhaseIndex || undefined}
+              data-active={active || undefined}
+              data-complete={index < phaseIndex || undefined}
             >
               <span>{String(index + 1).padStart(2, "0")}</span>
               <strong>{phase}</strong>
               {index < phases.length - 1 && <ChevronRight aria-hidden="true" />}
+              {/* One underline, shared across the four steps, so advancing the
+                  phase moves it rather than swapping a class. The direction of
+                  travel is the information. */}
+              <TravellingUnderline active={active} layoutId="phase-underline" />
             </div>
           );
         })}
@@ -243,7 +259,11 @@ export function PlayView({
           <span>Now</span>
           <strong>{session.phase}</strong>
         </div>
-        <div className="now-zone__instruction">
+        {/* The instruction is the one thing a host must never read stale. A host
+            looks away to move a pawn; on looking back, a panel that swapped
+            silently is indistinguishable from one that never changed. Re-keying
+            on player, phase and turn says "this is new". */}
+        <NowRekey className="now-zone__instruction" changeKey={nowKey}>
           <p className="eyebrow">
             {currentSpace?.id ?? "S—"} · {currentSpace?.type ?? "Board space"}
           </p>
@@ -262,13 +282,26 @@ export function PlayView({
               : currentSpace?.effect ??
                 "Follow the printed instruction and confirm the physical result."}
           </p>
-        </div>
+        </NowRekey>
         <div className="now-zone__metrics">
-          <Metric label="Cash" value={formatMoney(current.cash)} />
+          {/* Cash and portfolio move on every resolved space. Ticking them means
+              an arriving figure reads as a change rather than a substitution the
+              host may not have noticed. */}
+          <Metric
+            label="Cash"
+            value={<NumberTicker value={current.cash} format={formatMoney} />}
+          />
           <Metric
             label="Portfolio"
-            value={formatMoney(portfolioValue(current, session.prices))}
+            value={
+              <NumberTicker
+                value={portfolioValue(current, session.prices)}
+                format={formatMoney}
+              />
+            }
           />
+          {/* Position is not ticked: counting through S09, S10, S11 would imply
+              the pawn travelled those spaces, and on this board it may not have. */}
           <Metric
             label="Position"
             value={`S${String(current.position).padStart(2, "0")}`}

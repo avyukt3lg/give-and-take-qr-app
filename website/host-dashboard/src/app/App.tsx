@@ -179,13 +179,18 @@ async function copyText(
   value: string,
   successMessage: string,
   dispatch: Dispatch<AppAction>,
-): Promise<void> {
+  // Returns whether the write landed, so a caller can show an inline confirmation
+  // at the control the host just pressed. The live-region message stays — it is
+  // what a screen reader hears — but a host watching the button needs the answer
+  // where they are looking, not elsewhere on screen.
+): Promise<boolean> {
   try {
     if (!navigator.clipboard?.writeText) {
       throw new Error("Clipboard access is not available in this browser.");
     }
     await navigator.clipboard.writeText(value);
     dispatch({ type: "MESSAGE_SET", message: successMessage });
+    return true;
   } catch (cause) {
     dispatch({
       type: "MESSAGE_SET",
@@ -195,6 +200,7 @@ async function copyText(
           : "Copy failed. Select and copy the text manually.",
       assertive: true,
     });
+    return false;
   }
 }
 
@@ -336,11 +342,7 @@ function SurfaceRouter({
             )
           }
           onCopyCode={() =>
-            void copyText(
-              session.code,
-              `${session.code} copied.`,
-              dispatch,
-            )
+            copyText(session.code, `${session.code} copied.`, dispatch)
           }
           onSetupCheck={(key, checked) =>
             dispatch({ type: "SETUP_CHECK_SET", key, checked })
@@ -481,7 +483,7 @@ function SurfaceRouter({
             })
           }
           onCopy={() =>
-            void copyText(
+            copyText(
               state.exportText || exportEvidence(session, game),
               "Formatted evidence JSON copied.",
               dispatch,
