@@ -200,7 +200,13 @@ async function copyText(
 
 function focusMain(): void {
   requestAnimationFrame(() => {
-    document.getElementById("main-content")?.focus({ preventScroll: false });
+    // preventScroll: false let the browser scroll #main-content flush to the
+    // viewport top, which slid the first 88px of the surface underneath the
+    // sticky workspace header — the Play headline was occluded at rest.
+    // Move focus for screen readers, then put the page at the actual top of
+    // the new surface ourselves.
+    document.getElementById("main-content")?.focus({ preventScroll: true });
+    window.scrollTo({ top: 0, behavior: "auto" });
   });
 }
 

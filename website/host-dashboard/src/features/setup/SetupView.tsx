@@ -65,14 +65,7 @@ export function SetupView({
     <div className="surface setup-surface">
       <SurfaceIntro
         eyebrow="01 · Prepare the physical game"
-        title="Build the table before the first roll."
-        description="The companion verifies people and printed components. Pawns, money, cards and the D6 stay on the table."
-        aside={
-          <Button variant="outline" onClick={onCopyCode}>
-            <Copy aria-hidden="true" />
-            Copy {session.code}
-          </Button>
-        }
+        title="Seat the players and confirm the printed components."
       />
 
       <section className="setup-now" aria-labelledby="setup-now-title">
@@ -89,12 +82,20 @@ export function SetupView({
             physical table is ready.
           </p>
         </div>
-        <Metric
-          label="Table code"
-          value={session.code}
-          detail="Share after seating players"
-          signal
-        />
+        {/* The code and the action to share it belong together, at the moment
+            sharing is what the host actually has to do. */}
+        <div className="setup-now__code">
+          <Metric
+            label="Table code"
+            value={session.code}
+            detail="Share after seating players"
+            signal
+          />
+          <Button variant="outline" onClick={onCopyCode}>
+            <Copy aria-hidden="true" />
+            Copy table code
+          </Button>
+        </div>
       </section>
 
       <div className="setup-layout">

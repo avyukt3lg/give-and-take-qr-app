@@ -81,8 +81,8 @@ export function MarketView({
     <div className="surface market-surface">
       <SurfaceIntro
         eyebrow="03 · Shared market tape"
-        title="One fictional market. Every screen in sync."
-        description="Read the current index, then update the matching physical tracker. No value can fall below one."
+        title="Read the current index, then update the physical tracker."
+        description="No value can fall below one."
         aside={
           <div className="market-intro-actions">
             <span className="market-live">

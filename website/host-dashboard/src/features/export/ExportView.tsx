@@ -52,8 +52,8 @@ export function ExportView({
     <div className="surface export-surface">
       <SurfaceIntro
         eyebrow="06 · Evidence archive"
-        title="Package the table, not just the score."
-        description="The export preserves players, decisions, market events, corrections, holdings and the complete scoring calculation."
+        title="Download the complete evidence record."
+        description="Players, decisions, market events, corrections, holdings and the full scoring calculation."
         aside={
           <Button onClick={() => onDownload("json")}>
             <Download aria-hidden="true" />

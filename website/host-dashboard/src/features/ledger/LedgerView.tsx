@@ -180,8 +180,7 @@ export function LedgerView({
     <div className="surface ledger-surface">
       <SurfaceIntro
         eyebrow="04 · Player evidence"
-        title="A ledger, not a stack of dashboard cards."
-        description="Each dossier connects cash, holdings and evidence to the decisions that produced them."
+        title="Review each player's holdings and the decisions behind them."
         aside={
           <span className="ledger-count">
             {session.players.length} registered players

@@ -49,6 +49,19 @@ export function AppShell({
 }: AppShellProps) {
   const current = navigationItem(view);
 
+  // The header eyebrow used to read "Turn table · <phase>" on every surface,
+  // so Market, Ledger, Scores, Export and Help all carried a phase that had
+  // nothing to do with them. Whose turn it is and which phase they are in is
+  // genuinely persistent context, so state that instead — it is never stale.
+  const activePlayer = session.started
+    ? session.players[session.currentPlayerIndex]
+    : undefined;
+  const headerContext = session.started
+    ? activePlayer
+      ? `${activePlayer.name} · ${session.phase}`
+      : session.phase
+    : "Table preparation";
+
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main-content">
@@ -65,11 +78,13 @@ export function AppShell({
         <nav className="desktop-navigation" aria-label="Game sections">
           {NAVIGATION_ITEMS.map((item, index) => {
             const Icon = item.icon;
+            const isCurrent = view === item.id;
             return (
               <button
                 type="button"
                 key={item.id}
-                aria-current={view === item.id ? "page" : undefined}
+                aria-current={isCurrent ? "page" : undefined}
+                aria-label={`${item.label} — ${item.description}`}
                 onClick={() => onViewChange(item.id)}
               >
                 <span className="desktop-navigation__index">
@@ -78,7 +93,11 @@ export function AppShell({
                 <Icon aria-hidden="true" />
                 <span>
                   <strong>{item.label}</strong>
-                  <small>{item.description}</small>
+                  {/* Seven descriptions at once overflowed the rail past the
+                      fold. Only the destination you are on has to explain
+                      itself; the rest are reachable by label, and the full
+                      description stays on every button's aria-label. */}
+                  {isCurrent && <small>{item.description}</small>}
                 </span>
               </button>
             );
@@ -118,12 +137,12 @@ export function AppShell({
       <section className="app-workspace">
         <header className="workspace-header">
           <div>
-            <p className="eyebrow">
-              {session.started ? `Turn table · ${session.phase}` : "Table preparation"}
-            </p>
+            <p className="eyebrow">{headerContext}</p>
             <h1 className="display-serif">{current.label}</h1>
           </div>
           <div className="workspace-header__tools">
+            {/* Duplicates the rail's table-code block wherever the rail is
+                visible, so it only earns its place once the rail is gone. */}
             <span className="header-code">{session.code}</span>
             <SettingsDialog
               theme={theme}

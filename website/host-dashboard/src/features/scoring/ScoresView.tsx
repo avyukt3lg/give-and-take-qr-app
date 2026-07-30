@@ -37,12 +37,14 @@ export function ScoresView({
       <SurfaceIntro
         eyebrow={`05 · ${final ? "Final review" : "Provisional scoreboard"}`}
         title={
-          final ? "The table has reached its result." : "A score still in motion."
+          final
+            ? "Review the evidence behind every category before exporting."
+            : "Provisional — these values change until every player finishes."
         }
         description={
           final
-            ? "Review the evidence behind every category before exporting the result."
-            : "These values will change until every player finishes or completes twelve turns."
+            ? undefined
+            : "Twelve turns each, or an early finish, closes the score."
         }
         aside={
           <Button onClick={onExport}>

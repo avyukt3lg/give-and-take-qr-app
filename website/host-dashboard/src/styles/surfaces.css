@@ -1306,16 +1306,24 @@ button.bg-destructive {
 .desktop-navigation button {
   position: relative;
   display: grid;
-  min-height: 4.75rem;
+  min-height: 2.9rem;
   grid-template-columns: 1.5rem 1.25rem 1fr;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.8rem 1.25rem;
+  padding: 0.5rem 1.25rem;
   border: 0;
   border-bottom: 1px solid var(--line);
   background: transparent;
   color: var(--muted);
   text-align: left;
+  transition: color var(--dur-control) var(--ease-control);
+}
+
+/* The destination you are on is taller because it carries its description.
+   Everything else is a label, so the rail fits above the fold again. */
+.desktop-navigation button[aria-current="page"] {
+  min-height: 3.9rem;
+  padding-block: 0.65rem;
 }
 
 .desktop-navigation button::before {
@@ -1459,12 +1467,28 @@ button.bg-destructive {
 
 .header-code {
   color: var(--signal);
-  font: 750 0.75rem/1 monospace;
+  font: 750 0.75rem/1 var(--font-mono);
   letter-spacing: 0.08em;
+}
+
+/* The command rail carries the table code, labelled and with the revision,
+   wherever it is visible. Above 900px this is a duplicate; below it, the rail
+   is gone and this becomes the only persistent table identity. */
+@media (min-width: 901px) {
+  .header-code {
+    display: none;
+  }
 }
 
 .surface-stage {
   min-height: calc(100vh - 5.5rem);
+  /* The workspace header is sticky, so anything scrolled to must clear it. */
+  scroll-margin-top: 5.5rem;
+}
+
+.surface-stage :target,
+.surface-stage [id] {
+  scroll-margin-top: 6.5rem;
 }
 
 .surface {
@@ -1473,13 +1497,16 @@ button.bg-destructive {
   padding: clamp(2rem, 4vw, 4.25rem) clamp(1rem, 3vw, 3.25rem) 7rem;
 }
 
+/* The operational header of a surface, not a page hero. The surface is named
+   by the h1 in the workspace header; this states the task and gets out of the
+   way. It was 272px on Setup, which pushed the Now zone below the fold. */
 .surface-intro {
   display: flex;
-  align-items: end;
+  align-items: baseline;
   justify-content: space-between;
-  gap: clamp(2rem, 7vw, 8rem);
-  margin-bottom: clamp(2rem, 4vw, 4rem);
-  padding-bottom: clamp(1.5rem, 3vw, 2.5rem);
+  gap: clamp(1rem, 3vw, 3rem);
+  margin-bottom: var(--space-5);
+  padding-bottom: var(--space-3);
   border-bottom: 1px solid var(--line);
 }
 
@@ -1488,19 +1515,20 @@ button.bg-destructive {
 }
 
 .surface-intro h2 {
-  max-width: 17ch;
-  margin: 0.7rem 0 0.9rem;
-  font-size: clamp(2.8rem, 5.2vw, 5.7rem);
-  font-weight: 450;
-  line-height: 0.91;
+  max-width: 52ch;
+  margin: var(--space-1) 0 0;
+  font-size: var(--fs-h3);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
 }
 
-.surface-intro > div:first-child > p:last-child {
+.surface-intro > div:first-child > p:last-child:not(.eyebrow) {
   max-width: 46rem;
-  margin: 0;
-  color: var(--muted);
-  font-size: clamp(0.92rem, 1.2vw, 1.08rem);
-  line-height: 1.6;
+  margin: var(--space-1) 0 0;
+  color: var(--ink-faint);
+  font-size: 0.85rem;
+  line-height: 1.5;
 }
 
 .surface-intro__aside {
@@ -1770,8 +1798,15 @@ button.bg-destructive {
   color: color-mix(in srgb, var(--signal) 52%, transparent);
   font-family: var(--font-display);
   font-size: clamp(5rem, 10vw, 9rem);
-  font-weight: 300;
+  font-weight: 400;
   line-height: 0.7;
+}
+
+.setup-now__code {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-3);
 }
 
 .setup-now h3 {

@@ -4,6 +4,13 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+/**
+ * The operational header for a surface. `title` is the directive — what the
+ * host does here — not a description of the product. The surface is already
+ * named by the h1 in the workspace header, so this heading states the task
+ * instead of repeating the name. `description` is for a real constraint the
+ * host must know, and is usually absent.
+ */
 export function SurfaceIntro({
   eyebrow,
   title,
@@ -12,7 +19,7 @@ export function SurfaceIntro({
 }: {
   eyebrow: string;
   title: string;
-  description: string;
+  description?: string;
   aside?: ReactNode;
 }) {
   return (
@@ -20,7 +27,7 @@ export function SurfaceIntro({
       <div>
         <p className="eyebrow">{eyebrow}</p>
         <h2 className="display-serif">{title}</h2>
-        <p>{description}</p>
+        {description && <p>{description}</p>}
       </div>
       {aside && <div className="surface-intro__aside">{aside}</div>}
     </header>

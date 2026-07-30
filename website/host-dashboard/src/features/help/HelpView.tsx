@@ -105,8 +105,7 @@ export function HelpView({
     <div className="surface help-surface">
       <SurfaceIntro
         eyebrow="07 · Searchable field guide"
-        title="The printed rulebook, indexed for the table."
-        description="Search the turn system and finance glossary without leaving the active session."
+        title="Search the turn system and the finance glossary."
       />
 
       <div className="help-search">

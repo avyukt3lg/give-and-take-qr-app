@@ -93,9 +93,7 @@ async function openAsHost(page: Page, table: MockTable) {
   await page.getByLabel("Host name").fill("Fixture Host");
   await page.getByRole("button", { name: "Host table" }).click();
   await expect(
-    page.getByRole("heading", {
-      name: "Build the table before the first roll.",
-    }),
+    page.getByRole("heading", { level: 1, name: "Setup" }),
   ).toBeVisible();
 }
 
@@ -236,9 +234,7 @@ test.describe("host and joined-player workflows", () => {
     await page.getByRole("button", { name: "New session" }).click();
     await page.getByRole("button", { name: "Create new session" }).click();
     await expect(
-      page.getByRole("heading", {
-        name: "Build the table before the first roll.",
-      }),
+      page.getByRole("heading", { level: 1, name: "Setup" }),
     ).toBeVisible();
     await expect
       .poll(() => table.calls.filter((call) => call === "create_game_session_public").length)

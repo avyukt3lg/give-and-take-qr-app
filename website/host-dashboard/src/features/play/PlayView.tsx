@@ -187,8 +187,7 @@ export function PlayView({
       <div className="surface play-surface">
         <SurfaceIntro
           eyebrow="02 · Run the table"
-          title="The first turn begins after setup."
-          description="Seat the players and start the physical game before entering a die result."
+          title="Start the table in Setup to begin the first turn."
         />
         <EmptyState title="No active turn">Return to Setup to start this table.</EmptyState>
       </div>
@@ -200,7 +199,6 @@ export function PlayView({
       <SurfaceIntro
         eyebrow={`02 · Turn ${Math.min(current.turnsTaken + 1, game.turnLimit)} of ${game.turnLimit}`}
         title={`${current.name} owns the table.`}
-        description="Read the Now zone aloud, complete the physical action, and record only what actually happened."
         aside={
           <Button
             variant="outline"
