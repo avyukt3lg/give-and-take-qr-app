@@ -213,3 +213,63 @@ Defects 4, 5, 6, 7, 8, 9, 10, 11, 13, 14 all reproduce. Defect 9 is especially
 clear in `evidence/react/slice0/survey/classroom-2-play.png`, where "Aanya owns
 the table." is clipped by the sticky workspace header at rest. Defect 13 is
 clear in `contrast-3-market.png`.
+
+---
+
+## Slice 1 — Command Deck hierarchy (shipped, `a039204`)
+
+Measured with `scripts/measure-deck.mjs`, added this slice, at 1440×900 and
+1280×742. Numbers verified twice: once on the dev server and once against a
+`--mode test` production build served by `vite preview`, because the fixture is
+correctly gated to DEV/test and the Deck therefore cannot be measured on the
+public URL without creating a real Supabase table.
+
+| Defect | Before | After |
+| --- | --- | --- |
+| 5 / 10 — marketing headline | Setup intro 272 px (146→418); every surface 200–280 px | Setup 55 px, Market 103 px, all seven 55–103 px |
+| 6 — Now zone below the fold | Now 476, roster 722, fold 742 | Now 225 / 218, roster 483 / 473 |
+| 7 — table code ×4 on Setup | rail, header, intro Copy button, Now metric | rail + Now metric; header code is now ≥901 px hidden, Copy moved beside the code |
+| 8 — rail overflow | nav 157→689, footer 689→835, overflows 742 by 93 | nav 157→596, footer ends at 742, no overflow |
+| 9 — Play headline occluded | intro top 58, header bottom 88 | intro top 146 / 139 on all seven surfaces |
+| 11 — stale phase eyebrow | "TURN TABLE · ROLL" on Market, Ledger, Scores, Export, Help | "Aanya · Roll" — the live player and phase |
+
+### How each was fixed
+
+`SurfaceIntro` is shared by all seven surfaces, so defects 5 and 10 were one
+change. Its `title` is now the directive — what the host does here — set at
+`--fs-h3` rather than up to 91 px. The surface is already named by the `h1` in
+the workspace header, so the `h2` states the task instead of repeating the
+name, which keeps the heading order valid (h1 surface → h2 task → h3 sections)
+without touching the twenty `h3`s.
+
+Defect 9 had a root cause worth naming: `focusMain` called
+`focus({ preventScroll: false })`, so the browser scrolled `#main-content`
+flush to the viewport top and the sticky header then covered the first 88 px of
+the surface. `window.scrollY` was exactly 88 on Play. Focus still moves for
+screen readers; the scroll to the top of the new surface is now explicit, and
+`scroll-margin-top` guards any future in-page scroll.
+
+Defect 8 keeps the descriptions accessible — every rail button carries the full
+`label — description` on `aria-label`; only the current destination renders it
+visually.
+
+### Note on defect 7 and Export
+
+Export still shows five visible instances of the code, but four of them are
+content rather than chrome: the archive's own identity, an `h2` and a footer
+inside the printable teacher-review sheet, and the raw JSON preview. A document
+preview that contains the table code is not a duplicate of the chrome. Left as
+is.
+
+### Test brittleness found
+
+Three e2e specs used the marketing string "Build the table before the first
+roll." as their "Setup has loaded" signal. They now assert the `h1` surface
+name, which is what actually identifies a surface and does not change when copy
+does. 11/11 desktop-chromium pass.
+
+### Still open
+
+Defect 4 (ASCII legibility), 13 (Market palette — seven competing hues, worst
+in Contrast), 14 (board strip clips mid-cell with no scroll affordance, clearly
+visible in `evidence/react/slice1b/survey/table-2-play.png`).
