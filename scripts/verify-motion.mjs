@@ -59,6 +59,8 @@ async function openDeck(browser, { reduced }) {
 
 /** Geometry of the Now zone and the phase underline, for stability checks. */
 async function geometry(page) {
+  /* eslint-disable no-undef -- the callback below is serialized and run in the
+     page realm, where document, window and getComputedStyle exist. */
   return page.evaluate(() => {
     const zone = document.querySelector(".now-zone");
     const instruction = document.querySelector(".now-zone__instruction");
@@ -96,6 +98,7 @@ async function geometry(page) {
           ?.textContent?.trim() ?? null,
     };
   });
+  /* eslint-enable no-undef */
 }
 
 /**
@@ -129,20 +132,18 @@ async function run() {
     const frames = [];
     await advancePhase(page);
     for (let i = 0; i < FRAME_COUNT; i += 1) {
-      // eslint-disable-next-line no-await-in-loop -- sampling a timeline
+      // Awaiting in sequence is the point: this is sampling a timeline.
       const frame = await geometry(page);
       frames.push(frame);
       // An element screenshot, not a fixed clip: committing the die scrolls the
       // physical stage into view, so a fixed region would photograph the wrong
       // part of the page.
-      // eslint-disable-next-line no-await-in-loop
       await page
         .locator(".now-zone")
         .screenshot({
           path: `${outDir}/rekey-animated-${String(i).padStart(2, "0")}.png`,
         })
         .catch(() => {});
-      // eslint-disable-next-line no-await-in-loop
       await page.waitForTimeout(FRAME_GAP_MS);
     }
 

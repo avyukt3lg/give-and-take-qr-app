@@ -642,3 +642,29 @@ sync states, the pulse gating, and the ticker's committed value) ·
 `check:artifact` verified 44 spaces and 81 cards · 11/11 `desktop-chromium` e2e
 including the axe audit and the reduced-motion/forced-colors spec · 12/12 motion
 checks.
+
+### CI broke once on slice 6, and it was my process error
+
+`423f766` failed the Linux runner on `npm run lint`: nine `no-undef` errors in
+`scripts/verify-motion.mjs`, because `page.evaluate` callbacks reference
+`document`, `window` and `getComputedStyle` in a file eslint lints as Node.
+`survey-surfaces.mjs` already carries a single-line disable for exactly this;
+the new harness needed a block one.
+
+The cause was not subtle and not platform-specific: **I ran the full check
+before writing the harness, then added a file under `scripts/` and never ran
+lint again.** macOS did not pass where Linux failed — macOS was never asked. The
+fix is to run the workflow's own step verbatim as the last thing before pushing:
+
+```
+npm run typecheck && npm run lint && npm run test
+```
+
+which now exits 0.
+
+One further trap this exposed. `npm run build` produces a **production** bundle,
+and `?fixture=host` is DEV/test only — so running the production build before
+`verify-motion.mjs` leaves `dist` without the fixture and the harness times out
+with no useful error. Any motion or survey run needs
+`npx vite build --mode test && node scripts/assemble-dist.mjs` first. Worth
+folding into an npm script.
