@@ -135,7 +135,7 @@ export function MarketView({
           const Direction =
             change > 0 ? ArrowUpRight : change < 0 ? ArrowDownRight : Minus;
           return (
-            <article key={asset.id} style={{ "--asset": asset.color } as React.CSSProperties}>
+            <article key={asset.id} data-risk={asset.risk}>
               <header>
                 <span>{asset.id.toUpperCase()}</span>
                 <Direction aria-hidden="true" />

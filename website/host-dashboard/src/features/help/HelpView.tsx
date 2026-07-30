@@ -205,14 +205,15 @@ export function HelpView({
       <section className="asset-reference" aria-labelledby="asset-reference-title">
         <header>
           <p className="eyebrow">Printed asset legend</p>
-          <h3 id="asset-reference-title">The six fictional categories</h3>
+          {/* Counted from the data, not written in: the copy said six while the
+              config has carried seven assets. */}
+          <h3 id="asset-reference-title">
+            The {game.assets.length} fictional categories
+          </h3>
         </header>
         <div>
           {game.assets.map((asset) => (
-            <article
-              key={asset.id}
-              style={{ "--asset": asset.color } as React.CSSProperties}
-            >
+            <article key={asset.id} data-risk={asset.risk}>
               <span>{asset.id.slice(0, 2).toUpperCase()}</span>
               <strong>{asset.name}</strong>
               <small>

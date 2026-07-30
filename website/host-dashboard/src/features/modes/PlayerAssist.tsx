@@ -141,14 +141,12 @@ export function PlayerAssist({
                 const units = Number(player.holdings[asset.id] ?? 0);
                 const price = Number(session.prices[asset.id] ?? asset.startIndex);
                 return (
-                  <article
-                    key={asset.id}
-                    style={{ "--asset": asset.color } as React.CSSProperties}
-                  >
+                  <article key={asset.id} data-risk={asset.risk}>
                     <span>{asset.name}</span>
                     <strong>{units} units</strong>
                     <small>
-                      Index {price} · {formatMoney(units * price * 1_000)}
+                      Risk {asset.risk} · index {price} ·{" "}
+                      {formatMoney(units * price * 1_000)}
                     </small>
                   </article>
                 );

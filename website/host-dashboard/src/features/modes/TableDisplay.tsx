@@ -56,8 +56,13 @@ export function TableDisplay({
 
       <section className="projection-band" aria-label="Shared market indexes">
         {game.assets.map((asset) => (
-          <div key={asset.id} style={{ "--asset": asset.color } as React.CSSProperties}>
-            <span>{asset.name}</span>
+          <div key={asset.id} data-risk={asset.risk}>
+            {/* The rule above this cell encodes risk by weight. Stating it in
+                text keeps the information out of colour alone, and a projected
+                board is exactly where a reader cannot lean in to compare. */}
+            <span>
+              {asset.name} <small>risk {asset.risk}</small>
+            </span>
             <strong>{session.prices[asset.id] ?? asset.startIndex}</strong>
           </div>
         ))}

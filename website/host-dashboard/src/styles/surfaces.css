@@ -2176,12 +2176,97 @@ button.bg-destructive {
   border-top: 1px solid var(--line);
 }
 
-.board-route {
+/* Defect 14: the strip scrolled but never said so, clipping mid-cell at the
+   right edge. The affordance is a fade to the strip's own ground, shown only on
+   the side that actually has more route on it — `data-overflow` is measured from
+   scroll position, so at either end of the strip that edge goes hard again.
+   Three deliberate choices here:
+   - A fade, not a blur. These cells carry the S-codes and labels the host reads
+     off the screen; blurring them to advertise scrolling trades legibility for
+     a hint, which this product cannot afford.
+   - An overlay on a wrapper, not a mask on the scroller. The scroller is
+     `tabIndex=0`, and a mask clips the element's own focus ring.
+   - Paired with a text range below, because an edge treatment alone puts the
+     information in appearance only. */
+.board-route-frame {
   margin-bottom: 1rem;
+  --edge: 2.5rem;
+}
+
+/* The viewport bounds the fades to the strip. Hanging them off the frame let
+   them run down over the range line, which faded out the very text that carries
+   the affordance in Contrast and for screen readers. */
+.board-route-viewport {
+  position: relative;
+}
+
+.board-route-viewport::before,
+.board-route-viewport::after {
+  position: absolute;
+  z-index: 2;
+  inset-block: 1px;
+  width: var(--edge);
+  opacity: 0;
+  content: "";
+  pointer-events: none;
+  transition: opacity var(--dur-control) var(--ease-control);
+}
+
+.board-route-viewport::before {
+  left: 1px;
+  background: linear-gradient(to left, transparent, var(--canvas-raised) 85%);
+}
+
+.board-route-viewport::after {
+  right: 1px;
+  background: linear-gradient(to right, transparent, var(--canvas-raised) 85%);
+}
+
+.board-route-frame[data-overflow="start"] .board-route-viewport::before,
+.board-route-frame[data-overflow="both"] .board-route-viewport::before,
+.board-route-frame[data-overflow="end"] .board-route-viewport::after,
+.board-route-frame[data-overflow="both"] .board-route-viewport::after {
+  opacity: 1;
+}
+
+.board-route {
   overflow-x: auto;
   border: 1px solid var(--line);
   background: var(--canvas-raised);
   scrollbar-color: var(--brass) var(--canvas-raised);
+}
+
+/* Contrast must not rely on a soft edge to say "there is more here", and a fade
+   over white-on-black text is exactly the subtle cue this theme exists to
+   remove. The range line below carries it instead. */
+[data-theme="contrast"] .board-route-viewport::before,
+[data-theme="contrast"] .board-route-viewport::after {
+  content: none;
+}
+
+.board-route-range {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin: 0.4rem 0 0;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.board-route-hint {
+  color: var(--ink-faint);
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+
+[data-theme="contrast"] .board-route-range,
+[data-theme="contrast"] .board-route-hint {
+  color: var(--ink);
 }
 
 .board-route ol {
@@ -2576,6 +2661,44 @@ button.bg-destructive {
   gap: 0.65rem;
 }
 
+/* Asset marks. `--asset-mark` and `--asset-rule` resolve an asset's risk to an
+   ink weight and a rule thickness. They replace the old `--asset` custom
+   property, which was set inline from `asset.color` — Tailwind's default
+   green/blue/teal/orange/red/violet/yellow. Seven competing hues carried no
+   information the ticker ID did not already carry, and the palette excludes
+   them. Risk is ordinal, so weight is the honest channel: heavier mark, more
+   risk. Applied on the market tape, the projection band, the player dossier,
+   the assist holdings and the help reference. */
+[data-risk] {
+  --asset-mark: var(--risk-3);
+  --asset-rule: 3px;
+}
+
+[data-risk="1"] {
+  --asset-mark: var(--risk-1);
+  --asset-rule: 1px;
+}
+
+[data-risk="2"] {
+  --asset-mark: var(--risk-2);
+  --asset-rule: 2px;
+}
+
+[data-risk="3"] {
+  --asset-mark: var(--risk-3);
+  --asset-rule: 3px;
+}
+
+[data-risk="4"] {
+  --asset-mark: var(--risk-4);
+  --asset-rule: 4px;
+}
+
+[data-risk="5"] {
+  --asset-mark: var(--risk-5);
+  --asset-rule: 5px;
+}
+
 .market-tape {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
@@ -2594,8 +2717,8 @@ button.bg-destructive {
 .market-tape article::before {
   position: absolute;
   inset: 0 auto 0 0;
-  width: 2px;
-  background: var(--asset);
+  width: var(--asset-rule);
+  background: var(--asset-mark);
   content: "";
 }
 
@@ -2648,10 +2771,13 @@ button.bg-destructive {
   overflow: visible;
 }
 
+/* The sparkline stroke weight is the asset's risk, so a volatile line also
+   reads as a heavy one. Ink, not hue — seven coloured traces on one screen was
+   the worst of the old palette. */
 .price-sparkline polyline {
   fill: none;
-  stroke: var(--asset);
-  stroke-width: 1.5;
+  stroke: var(--asset-mark, var(--ink-dim));
+  stroke-width: calc(0.75px + (var(--asset-rule, 3px) * 0.4));
 }
 
 .market-layout {
@@ -2991,11 +3117,12 @@ button.bg-destructive {
   gap: 0.55rem;
 }
 
+/* Was a hue-coded dot. Now a risk-weighted bar: a dot cannot show weight, and
+   weight is the whole point. */
 .dossier-body tbody th i {
-  width: 0.55rem;
-  height: 0.55rem;
-  border-radius: 50%;
-  background: var(--asset);
+  width: var(--asset-rule);
+  height: 0.7rem;
+  background: var(--asset-mark);
 }
 
 .evidence-register {
@@ -4006,15 +4133,16 @@ button.bg-destructive {
   border-bottom: 1px solid var(--line);
 }
 
+/* The ticker ID is the identity, so it stays ink at full strength in every
+   theme; the rule beside it carries risk. The old rule coloured the ID itself,
+   which made a low-risk asset's own name harder to read than a high-risk one's
+   — hierarchy inverted by decoration. */
 .asset-reference article > span {
-  color: var(--asset);
-  font: 740 0.61rem/1 monospace;
-}
-
-[data-theme="classroom"] .asset-reference article > span {
+  display: inline-block;
   padding-left: 0.45rem;
-  border-left: 3px solid var(--asset);
+  border-left: var(--asset-rule) solid var(--asset-mark);
   color: var(--ink);
+  font: 740 0.61rem/1.4 monospace;
 }
 
 .asset-reference article strong {
@@ -4135,17 +4263,28 @@ button.bg-destructive {
   border-right: 1px solid var(--line);
 }
 
+/* This band is the projector case. A 3px Tailwind-orange bar at 2m across a lit
+   classroom was the worst instance of the old hue coding; ink weight survives
+   the projector, the room light and a colour-blind reader. */
 .projection-band div::before {
   position: absolute;
   inset: 0 0 auto;
-  height: 3px;
-  background: var(--asset);
+  height: var(--asset-rule);
+  background: var(--asset-mark);
   content: "";
 }
 
 .projection-band span {
   color: var(--muted);
   font-size: clamp(0.65rem, 1vw, 0.9rem);
+}
+
+.projection-band span small {
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 0.8em;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .projection-band strong {
@@ -4411,8 +4550,8 @@ button.bg-destructive {
 .assist-holdings article::before {
   position: absolute;
   inset: 0 auto 0 0;
-  width: 2px;
-  background: var(--asset);
+  width: var(--asset-rule);
+  background: var(--asset-mark);
   content: "";
 }
 
@@ -4549,7 +4688,32 @@ button.bg-destructive {
   border-width: 2px;
 }
 
-[data-theme="contrast"] .market-tape article::before,
+/* Contrast widens every asset rule by a constant rather than flattening them to
+   one width, so the risk ramp survives the theme that needs it most. */
+[data-theme="contrast"] [data-risk] {
+  --asset-rule: 5px;
+}
+
+[data-theme="contrast"] [data-risk="1"] {
+  --asset-rule: 3px;
+}
+
+[data-theme="contrast"] [data-risk="2"] {
+  --asset-rule: 4px;
+}
+
+[data-theme="contrast"] [data-risk="3"] {
+  --asset-rule: 5px;
+}
+
+[data-theme="contrast"] [data-risk="4"] {
+  --asset-rule: 6px;
+}
+
+[data-theme="contrast"] [data-risk="5"] {
+  --asset-rule: 7px;
+}
+
 [data-theme="contrast"] .player-dossier::before {
   width: 5px;
 }

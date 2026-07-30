@@ -312,12 +312,11 @@ export function LedgerView({
                               return (
                                 <tr key={assetId}>
                                   <th scope="row">
-                                    <i
-                                      style={
-                                        { "--asset": asset.color } as React.CSSProperties
-                                      }
-                                    />
+                                    <i data-risk={asset.risk} aria-hidden="true" />
                                     {asset.name}
+                                    <span className="sr-only">
+                                      , risk {asset.risk}
+                                    </span>
                                   </th>
                                   <td>{units}</td>
                                   <td>{price}</td>

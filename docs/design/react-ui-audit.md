@@ -350,3 +350,121 @@ Defect 13 (Market's seven competing hues, worst in Contrast) and defect 14
 (board strip clips mid-cell with no scroll affordance). The Command Deck motion
 layer — Now-zone re-key, rail marker, number tickers, phase strip, connection
 states — is not started.
+
+## Slice 5 — defects 13 and 14
+
+Both re-verified before the fix and after. Evidence in
+`evidence/react/slice5/survey/` (seven surfaces in Table, three each in
+Classroom and Contrast, captured from a `--mode test` build served by
+`vite preview`).
+
+### Defect 13 — the market palette was off-system
+
+Worse than the audit recorded. The seven `asset.color` values in
+`game_data/game_config.json` are Tailwind's default palette verbatim:
+
+| asset | hex | Tailwind |
+| --- | --- | --- |
+| cash | `#22C55E` | green-500 |
+| bond | `#3B82F6` | blue-500 |
+| index | `#14B8A6` | teal-500 |
+| growth | `#F97316` | orange-500 |
+| crypto | `#EF4444` | red-500 |
+| ethical | `#8B5CF6` | violet-500 |
+| trend | `#EAB308` | yellow-500 |
+
+They reached the screen through an inline `--asset` custom property set in five
+components, not one: `MarketView`, `LedgerView`, `HelpView`, `TableDisplay` and
+`PlayerAssist`. Fixing only the market tape would have left `.projection-band`
+drawing a 3px Tailwind-orange bar across a **projected classroom display** —
+the worse offence for this product, and the one the design language's "fails on
+a projector at 2m" test exists to catch. One encoding change fixed all five.
+
+**What replaced it.** Not a hue substitution. Asset *identity* was never
+carried by the colour — every card already states the ticker ID in mono caps and
+the full asset name beneath it, and no legend mapping hue to asset existed
+anywhere in the app. Seven competing hues were decorative data, which the
+language excludes explicitly.
+
+So the mark now carries **risk**, which is the one asset attribute that is
+ordinal, that a host needs at a glance, and that had *no* visual encoding at all
+— it was buried in a `<small>` as "Risk 5". `--asset-mark` and `--asset-rule`
+resolve `data-risk` to an ink weight and a rule thickness: risk 1–3 on a
+three-step ink ramp, risk 4–5 on `--warning`. The rule width scales 1px → 5px.
+
+Two things this gained beyond removing the hue:
+
+- The two risk-5 assets — Crypto-Style Asset and Unverified Trend — now cluster
+  visually for the first time. That is the game's teaching point, and it was
+  previously invisible: red and yellow read as unrelated.
+- The sparkline stroke weight is now risk-derived, so a volatile line also reads
+  as a heavy one. Seven coloured traces on one screen were the worst single
+  instance of the old palette.
+
+**Contrast keeps the ramp.** The pre-existing rule flattened every asset rule to
+a constant 5px in Contrast, which would have erased the encoding in the theme
+that needs it most. Contrast now widens each step by a constant instead (3px →
+7px), and the three ink steps are re-derived at 0.62 / 0.82 / 1.0 white so each
+clears AA against pure black on its own rather than relying on opacity.
+
+**An accessibility problem the fix introduced, and the fix for it.** Encoding
+risk as weight put information into appearance in three views that did not state
+risk in text — WCAG 1.4.1. Corrected in the same slice: the projection band now
+prints `risk N` beside the asset name (useful on a projector regardless), the
+assist holdings row includes it in the existing `<small>`, and the ledger
+dossier bar is `aria-hidden` with an `sr-only` equivalent. `asset.color` remains
+in the schema and the JSON untouched — it describes the printed components, and
+nothing was changed for visual reasons.
+
+**Also found:** `HelpView` read "The six fictional categories" while the config
+has carried seven assets. Now counted from `game.assets.length` so it cannot
+drift again.
+
+### Defect 14 — the board strip overflowed without affordance
+
+`.board-route` already had `overflow-x: auto`; it scrolled but never said so,
+clipping mid-cell at the right edge.
+
+**progressive-blur was not the right tool, and was not used.** The brief
+suggested it. These 44 cells carry the S-codes and space labels the host reads
+off the screen to match against the physical board — blurring the edge cells to
+advertise that the strip scrolls trades legibility for a hint. That is the trade
+the design language forbids: more expressive, no more legible. A fade to the
+strip's own ground says the same thing without degrading the text.
+
+**The real defect was worse than the cosmetic one.** The strip is 44 cells and
+shows about eleven. The active player's pawn could sit entirely outside the
+fold, so the single thing a host most needs — where the current player is —
+required hunting. `BoardRoute` now re-centres the active cell whenever the
+position or current player changes. Under reduced motion that is a jump rather
+than a glide: a designed static outcome, and the cell still ends up centred.
+
+Three implementation notes worth keeping:
+
+- **The fade is an overlay on a wrapper, not a mask on the scroller.** The
+  scroller is `tabIndex=0`; `mask-image` clips the element's own focus ring, so
+  masking it would have made the focus indicator partly invisible.
+- **The first attempt hung the fades off `.board-route-frame`**, which contains
+  the range line as well as the strip. The gradient painted over the text —
+  visible in the first capture as "SHOWING" rendering as "HOWING" and the hint
+  clipped mid-word. A dedicated `.board-route-viewport` bounds them.
+- **`scrollTo` needs a fallback.** jsdom does not implement it at all (two unit
+  tests failed on `scroller.scrollTo is not a function`), and older Safari
+  accepts only the `(x, y)` signature. Assigning `scrollLeft` is the fallback;
+  the cell ends up centred either way and only the easing is lost.
+
+**Paired with a text equivalent.** `Showing S07–S17 of 44 spaces` plus a scroll
+hint, both derived from measured scroll position via a new
+`useScrollOverflow` hook. Without it the fact that the route continues would
+live in a gradient alone. Contrast drops the fade entirely and relies on the
+text, since a soft edge is exactly the subtle cue that theme exists to remove.
+
+`useScrollOverflow` is deliberately general — the ledger and scores tables have
+the same `overflow-x` pattern and will want it in the sweep.
+
+### Verification
+
+`typecheck` clean · `lint` 0 errors, 4 pre-existing `react-refresh` warnings ·
+85/85 unit · `check:artifact` verified 44 spaces and 81 cards · 11/11
+`desktop-chromium` e2e including the axe audit across Table, Classroom and
+Contrast.
