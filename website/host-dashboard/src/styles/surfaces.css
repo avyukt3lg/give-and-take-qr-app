@@ -330,15 +330,18 @@ button.bg-destructive {
   color: var(--ink) !important;
 }
 
+/* Two zones, not three. The artwork is atmosphere that the composition sits
+   on, exactly as it did in the approved design — boxing it into a middle
+   column turned the focal object into a widget sitting between two panels. */
 .entry-hero {
   position: relative;
   z-index: 1;
   display: grid;
   width: min(100%, 104rem);
   min-height: calc(100svh - 5.5rem);
-  grid-template-columns: minmax(19rem, 0.85fr) minmax(22rem, 1.25fr) minmax(20rem, 0.9fr);
+  grid-template-columns: minmax(19rem, 1fr) minmax(21rem, 0.82fr);
   align-items: center;
-  gap: clamp(1.5rem, 3vw, 4.5rem);
+  gap: clamp(1.5rem, 4vw, 6rem);
   margin: 0 auto;
   padding: clamp(1.75rem, 3.2vw, 3.75rem) var(--entry-gutter);
 }
@@ -348,17 +351,34 @@ button.bg-destructive {
   z-index: 3;
 }
 
+/* The Ricardo Chance treatment the approved design named explicitly: bigger,
+   tighter, authored line breaks. 17ch is what lets "Keep the board physical."
+   and "Run the table here." each hold one line — at 11ch the display face was
+   forced into four, so the statement read as a paragraph. Instrument Serif
+   ships a single weight and font-synthesis is off, so 400 is the only honest
+   value here. */
 .entry-hero__copy h1 {
-  max-width: 11ch;
+  max-width: 17ch;
   margin: 1.1rem 0 1.35rem;
-  font-size: clamp(3.4rem, 5.5vw, 7.4rem);
-  font-weight: 520;
-  line-height: 0.84;
+  font-size: clamp(42px, 6.4vw, 96px);
+  font-weight: 400;
+  letter-spacing: -0.022em;
+  line-height: 0.92;
+  text-wrap: balance;
+}
+
+.entry-headline__line {
+  display: block;
+  overflow: hidden;
+}
+
+.entry-headline__line > span {
+  display: block;
 }
 
 .entry-hero__copy h1 em {
   color: var(--brass);
-  font-weight: 380;
+  font-style: italic;
 }
 
 .entry-hero__copy > p:not(.eyebrow) {
@@ -401,11 +421,43 @@ button.bg-destructive {
   text-transform: uppercase;
 }
 
+/* Full-bleed atmosphere behind the whole fold, bleeding under the console,
+   rather than a bordered panel in the middle of the layout. The mask keeps the
+   left edge clear so the display headline never competes with the cell field. */
 .entry-art {
-  position: relative;
+  position: absolute;
+  z-index: 0;
+  inset: -12% -8% -12% -8%;
   align-self: stretch;
-  min-height: min(34rem, 62svh);
-  perspective: 1200px;
+  pointer-events: none;
+  /* Dim enough to sit under the display headline without competing with it.
+     The approved design ran this as a page-wide texture, not a panel — the
+     mask weights it to the right so the copy column stays the quietest part
+     of the frame. */
+  opacity: 0.58;
+  /* The approved design let the texture run under the copy, and that is the
+     one thing about it that was wrong — body text over the cell field failed
+     contrast. The horizontal mask keeps the copy column clean and lets the
+     field own the right two thirds, so the atmosphere survives without
+     costing legibility. */
+  -webkit-mask-image: linear-gradient(
+      to right,
+      transparent 0%,
+      rgb(0 0 0 / 0.06) 26%,
+      rgb(0 0 0 / 0.55) 44%,
+      #000 62%
+    ),
+    radial-gradient(120% 96% at 74% 46%, #000 0%, #000 46%, transparent 100%);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(
+      to right,
+      transparent 0%,
+      rgb(0 0 0 / 0.06) 26%,
+      rgb(0 0 0 / 0.55) 44%,
+      #000 62%
+    ),
+    radial-gradient(120% 96% at 74% 46%, #000 0%, #000 46%, transparent 100%);
+  mask-composite: intersect;
 }
 
 .entry-art::before,
@@ -430,22 +482,15 @@ button.bg-destructive {
     linear-gradient(180deg, var(--canvas), transparent 12%, transparent 86%, var(--canvas));
 }
 
+/* Atmosphere, not a framed object. The border, inset ring, drop shadow and 3D
+   rotation are what turned the focal object into a widget sitting between two
+   panels; the approved design had the sampled board bleeding behind the whole
+   composition and under the console. */
 .entry-art__frame {
   position: absolute;
-  inset: 2% 2% 5%;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--signal) 58%, var(--line));
-  background: var(--canvas-sunk);
-  box-shadow: var(--shadow-print);
-  transform: rotateY(-4deg) rotateX(1.5deg);
-}
-
-.entry-art__frame::after {
-  position: absolute;
   inset: 0;
-  pointer-events: none;
-  border: 0.45rem solid color-mix(in srgb, var(--canvas) 78%, transparent);
-  content: "";
+  overflow: hidden;
+  background: transparent;
 }
 
 .entry-ascii,
@@ -453,19 +498,31 @@ button.bg-destructive {
 .entry-ascii img {
   width: 100%;
   height: 100%;
-  min-height: min(34rem, 62svh);
   object-fit: cover;
 }
 
+/* The raster fallback sits behind the canvas so it can take over if the effect
+   fails. Now that the frame has no opaque ground, any moment the canvas has
+   not yet painted — first frame, a resize, a paused tab — showed the raw board
+   photograph as the page background instead of the sampled field. It only
+   earns its place when the effect has actually failed. */
+.entry-ascii img {
+  visibility: hidden;
+}
+
+.entry-art[data-failed] .entry-ascii img {
+  visibility: visible;
+  opacity: 0.5;
+}
+
 .entry-art__caption {
-  position: absolute;
+  position: relative;
   z-index: 4;
-  right: 1.2rem;
-  bottom: 1rem;
-  max-width: 18rem;
-  padding: 0.5rem 0.65rem;
-  background: var(--canvas-sunk);
-  color: #b9c0b7;
+  max-width: 22rem;
+  margin: var(--space-4) 0 0;
+  padding: 0;
+  background: transparent;
+  color: var(--ink-faint);
   font-size: 0.58rem;
   letter-spacing: 0.12em;
   line-height: 1.45;
@@ -475,13 +532,14 @@ button.bg-destructive {
 .entry-art__code {
   position: absolute;
   z-index: 4;
-  top: 3%;
-  left: -0.5rem;
+  top: clamp(1rem, 2.4vw, 2.2rem);
+  right: var(--entry-gutter);
+  left: auto;
   padding: 0.55rem 0.7rem;
-  border: 1px solid var(--signal);
-  background: var(--canvas-sunk);
-  color: var(--signal);
-  font: 700 0.62rem/1 monospace;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: var(--brass);
+  font: 700 0.62rem/1 var(--font-mono);
   letter-spacing: 0.12em;
 }
 
@@ -5736,5 +5794,137 @@ button.bg-destructive {
 
   .teacher-review-footer p:last-child {
     text-align: right;
+  }
+}
+
+/* ── Entry page furniture ────────────────────────────────────────────────────
+   Corner registration marks, the vertical chapter index and the bottom status
+   band are part of the approved language. They carry no reading load, which is
+   what makes them the right things to drift under scroll — unlike the copy or
+   the console, which must stay still. */
+
+.entry-marks-layer {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  pointer-events: none;
+}
+
+.registration-marks {
+  position: absolute;
+  inset: clamp(0.75rem, 1.6vw, 1.6rem);
+  pointer-events: none;
+}
+
+.registration-marks span {
+  position: absolute;
+  width: 1.35rem;
+  height: 1.35rem;
+  border: 0 solid var(--line-strong);
+}
+
+.registration-marks span[data-corner="tl"] {
+  top: 0;
+  left: 0;
+  border-top-width: 1px;
+  border-left-width: 1px;
+}
+
+.registration-marks span[data-corner="tr"] {
+  top: 0;
+  right: 0;
+  border-top-width: 1px;
+  border-right-width: 1px;
+}
+
+.registration-marks span[data-corner="bl"] {
+  bottom: 0;
+  left: 0;
+  border-bottom-width: 1px;
+  border-left-width: 1px;
+}
+
+.registration-marks span[data-corner="br"] {
+  right: 0;
+  bottom: 0;
+  border-right-width: 1px;
+  border-bottom-width: 1px;
+}
+
+/* The vertical chapter index. The active chapter is marked in signal, so the
+   reader always knows which of the three they are in without a scrollbar. */
+.entry-chapter-index {
+  position: fixed;
+  z-index: 6;
+  top: 50%;
+  left: clamp(0.6rem, 1.4vw, 1.5rem);
+  display: grid;
+  gap: var(--space-3);
+  padding: 0;
+  margin: 0;
+  transform: translateY(-50%);
+  list-style: none;
+  pointer-events: none;
+}
+
+.entry-chapter-index li {
+  color: var(--ink-faint);
+  font: 700 0.62rem/1 var(--font-mono);
+  letter-spacing: 0.14em;
+  writing-mode: vertical-rl;
+  transition:
+    color var(--dur-control) var(--ease-control),
+    opacity var(--dur-control) var(--ease-control);
+  opacity: 0.55;
+}
+
+.entry-chapter-index li[data-active="true"] {
+  color: var(--signal);
+  opacity: 1;
+}
+
+/* Persistent status band. The clock is the one live element on an otherwise
+   static page, and it is what makes the fictional-data disclaimer permanent
+   rather than something buried in a footer. */
+.entry-status-band {
+  position: fixed;
+  z-index: 6;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-2) clamp(1rem, 3vw, 3rem);
+  border-top: 1px solid var(--line);
+  background: color-mix(in srgb, var(--canvas) 82%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: var(--ink-faint);
+  font: 700 0.6rem/1 var(--font-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.entry-status-band__live {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--brass);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 900px) {
+  .entry-chapter-index {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .entry-status-band {
+    font-size: 0.52rem;
+    letter-spacing: 0.1em;
   }
 }

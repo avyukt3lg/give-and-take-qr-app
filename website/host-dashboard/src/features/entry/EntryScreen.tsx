@@ -22,6 +22,16 @@ import { BrandMark } from "@/components/brand/BrandMark";
 import { useScene } from "@/hooks/useScene";
 import { useThemeTokens } from "@/hooks/useThemeTokens";
 import { useBoardResolve } from "./useBoardResolve";
+import {
+  ChapterIndex,
+  ENTRY_STAGGER,
+  RegistrationMarks,
+  Reveal,
+  RevealLines,
+  StatusBand,
+  useEntryReducedMotion,
+  useLayerParallax,
+} from "./EntryMotion";
 import { SettingsDialog } from "@/components/layout/SettingsDialog";
 import { Button } from "@/components/ui/button";
 import { ScrollProgress } from "@/components/ui/scroll-progress";
@@ -187,10 +197,17 @@ export function EntryScreen({
   const [renderFailed, setRenderFailed] = useState(false);
   const [boardProgress, setBoardProgress] = useState(0);
   const boardChapterRef = useRef<HTMLElement>(null);
+  const heroRef = useRef<HTMLElement>(null);
+  const chaptersRef = useRef<HTMLElement>(null);
+  const [activeChapter, setActiveChapter] = useState(0);
+  const motionOff = useEntryReducedMotion(reducedMotion);
+  // Background slowest, marks a touch faster, console fixed. Small on purpose.
+  const artworkDrift = useLayerParallax(heroRef, 26, motionOff);
+  const markDrift = useLayerParallax(heroRef, 40, motionOff);
   const { source: artworkSource, mobile } = useEntryArtworkSource();
   const tokens = useThemeTokens(theme);
   const quality = mobile ? "balanced" : "high";
-  const boardCellSize = useBoardResolve(reducedMotion, asciiActive);
+  const boardCellSize = useBoardResolve(motionOff, asciiActive);
   const asciiConfig = useMemo(
     () =>
       createEntryBoardPreset({
@@ -237,6 +254,30 @@ export function EntryScreen({
     releaseBoard,
     showEffectLab,
   ]);
+
+  // Which chapter the reader is in, for the vertical index. An observer on the
+  // list items rather than a scroll handler, so it costs nothing when idle.
+  useEffect(() => {
+    const list = chaptersRef.current?.querySelectorAll("ol > li");
+    if (!list?.length) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          const index = Number(
+            (entry.target as HTMLElement).dataset.chapterIndex ?? 0,
+          );
+          setActiveChapter(index);
+        }
+      },
+      { threshold: 0.55 },
+    );
+    list.forEach((node, index) => {
+      (node as HTMLElement).dataset.chapterIndex = String(index);
+      observer.observe(node);
+    });
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     if (!boardActive || reducedMotion) return;
@@ -288,6 +329,8 @@ export function EntryScreen({
       <a className="skip-link" href="#main-content">
         Skip to table entry
       </a>
+      <ChapterIndex count={chapters.length} active={activeChapter} />
+      <StatusBand reducedMotion={motionOff} />
 
       <header className="entry-header">
         <BrandMark />
@@ -308,18 +351,34 @@ export function EntryScreen({
         />
       </header>
 
-      <section className="entry-hero" aria-labelledby="entry-title">
+      <section className="entry-hero" aria-labelledby="entry-title" ref={heroRef}>
         <div className="entry-hero__copy">
-          <p className="eyebrow">The physical board’s digital instrument</p>
-          <h1 id="entry-title" className="display-serif">
-            Keep the board <em>physical.</em>
-            <br />
-            Run the table <em>here.</em>
-          </h1>
-          <p>
+          <Reveal
+            as="p"
+            className="eyebrow"
+            delay={ENTRY_STAGGER.eyebrow}
+            reducedMotion={motionOff}
+          >
+            The physical board’s digital instrument
+          </Reveal>
+          <RevealLines
+            id="entry-title"
+            className="display-serif"
+            delay={ENTRY_STAGGER.headline}
+            reducedMotion={motionOff}
+            lines={[
+              <>
+                Keep the board <em>physical.</em>
+              </>,
+              <>
+                Run the table <em>here.</em>
+              </>,
+            ]}
+          />
+          <Reveal as="p" delay={ENTRY_STAGGER.body} reducedMotion={motionOff}>
             Give And Take tracks the shared market, verifies physical turns,
             and records evidence without turning the game into another screen.
-          </p>
+          </Reveal>
           <dl className="entry-proof">
             <div>
               <dt>44</dt>
@@ -334,31 +393,49 @@ export function EntryScreen({
               <dd>players</dd>
             </div>
           </dl>
+          {/* In the copy flow rather than floating over the artwork, where it
+              was clipped by the full-bleed overscan and hidden behind the
+              console. The claim is deliberately modest: at hero scale this is
+              atmosphere sampled from the board, and the board is the subject
+              further down the page rather than the ground. */}
+          <Reveal
+            as="p"
+            className="entry-art__caption"
+            delay={ENTRY_STAGGER.proof}
+            reducedMotion={motionOff}
+          >
+            Sampled from the printed board
+          </Reveal>
         </div>
 
-        <div className="entry-art" data-failed={renderFailed || undefined}>
+        <motion.div
+          className="entry-art"
+          data-failed={renderFailed || undefined}
+          style={{ y: artworkDrift }}
+          aria-hidden="true"
+        >
           <div className="entry-art__frame">
             <AsciiRasterCanvas
               src={artworkSource}
               config={asciiConfig}
-              paused={!asciiActive || reducedMotion}
+              paused={!asciiActive || motionOff}
               quality={quality}
               solidBackground={tokens.canvasSunk}
-              fit="contain"
+              fit="cover"
               fallbackImage={artworkSource}
               fallbackAlt=""
               className="entry-ascii"
               onError={() => setRenderFailed(true)}
             />
           </div>
-          <span className="entry-art__caption">
-            The printed board, sampled live into a shared table signal
-          </span>
-          <span className="entry-art__code" aria-hidden="true">
-            GT / 2026
-          </span>
-        </div>
+        </motion.div>
 
+        <motion.div className="entry-marks-layer" style={{ y: markDrift }}>
+          <RegistrationMarks />
+        </motion.div>
+
+        {/* The console holds the primary action, so it is the one thing on this
+            page that never parallaxes and never tilts. */}
         <main id="main-content" className="entry-console" tabIndex={-1}>
           {backendError && (
             <div className="entry-backend-alert" role="alert">
@@ -376,12 +453,17 @@ export function EntryScreen({
               </Button>
             </div>
           )}
-          <header className="entry-console__head">
+          <Reveal
+            as="header"
+            className="entry-console__head"
+            delay={ENTRY_STAGGER.console}
+            reducedMotion={motionOff}
+          >
             <p className="eyebrow">Table entry</p>
             <h2 id="entry-console-title" className="display-serif">
               Enter the table
             </h2>
-          </header>
+          </Reveal>
           <Tabs
             value={mode}
             onValueChange={(value) => onModeChange(value as AccessMode)}
@@ -411,7 +493,11 @@ export function EntryScreen({
         </main>
       </section>
 
-      <section className="entry-chapters" aria-labelledby="entry-story-title">
+      <section
+        className="entry-chapters"
+        aria-labelledby="entry-story-title"
+        ref={chaptersRef}
+      >
         <header>
           <p className="eyebrow">The division of labour</p>
           <h2 id="entry-story-title" className="display-serif">
@@ -420,14 +506,23 @@ export function EntryScreen({
             Table where it matters.
           </h2>
         </header>
+        {/* Scroll-linked, not scroll-triggered. The previous chapters recede
+            and dim as you pass them, so the section reads as one progression
+            under the reader's control rather than three independent fades that
+            fire once and are then inert. */}
         <ol>
           {chapters.map((chapter, index) => (
             <motion.li
               key={chapter.index}
-              initial={reducedMotion ? false : { opacity: 1, y: 28 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, amount: 0.4 }}
-              transition={{ duration: 0.55, delay: index * 0.04 }}
+              data-active={activeChapter === index || undefined}
+              initial={motionOff ? false : { opacity: 0.35, y: 26 }}
+              whileInView={motionOff ? undefined : { opacity: 1, y: 0 }}
+              viewport={{ amount: 0.55, margin: "-12% 0px -12% 0px" }}
+              transition={{
+                duration: 0.6,
+                delay: index * 0.05,
+                ease: [0.16, 1, 0.3, 1],
+              }}
             >
               <span>{chapter.index}</span>
               <div>
