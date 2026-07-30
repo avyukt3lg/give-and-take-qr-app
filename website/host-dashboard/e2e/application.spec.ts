@@ -149,6 +149,14 @@ test.describe("production artifact", () => {
     }));
     expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth);
 
+    // Text that fades in is below its contrast ratio while it is fading, so
+    // auditing mid-entrance measures a state no user reads. Wait for the page
+    // to report its steady state, then audit that.
+    await expect(page.locator(".entry-page")).toHaveAttribute(
+      "data-entry-state",
+      "settled",
+    );
+
     const accessibility = await new AxeBuilder({ page }).analyze();
     expect(seriousAxeViolations(accessibility.violations)).toEqual([]);
     expect(errors).toEqual([]);

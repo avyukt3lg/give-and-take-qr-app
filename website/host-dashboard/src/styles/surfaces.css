@@ -5871,20 +5871,21 @@ button.bg-destructive {
   pointer-events: none;
 }
 
+/* aria-hidden does not excuse this from contrast — a sighted user still reads
+   it. --ink-faint at 0.55 opacity composited to #504e45 on the artwork ground,
+   which is 2.4:1 against a 4.5:1 requirement. The inactive state now carries
+   its own legible colour and the active state is distinguished by hue and
+   weight rather than by fading the others out. */
 .entry-chapter-index li {
-  color: var(--ink-faint);
+  color: var(--ink-dim);
   font: 700 0.62rem/1 var(--font-mono);
   letter-spacing: 0.14em;
   writing-mode: vertical-rl;
-  transition:
-    color var(--dur-control) var(--ease-control),
-    opacity var(--dur-control) var(--ease-control);
-  opacity: 0.55;
+  transition: color var(--dur-control) var(--ease-control);
 }
 
 .entry-chapter-index li[data-active="true"] {
   color: var(--signal);
-  opacity: 1;
 }
 
 /* Persistent status band. The clock is the one live element on an otherwise

@@ -31,6 +31,27 @@ export const ENTRY_STAGGER = {
   artwork: 0.2,
 } as const;
 
+/** How long the load choreography takes to settle, in ms. */
+export const ENTRY_CHOREOGRAPHY_MS = 1150;
+
+/**
+ * True once the load choreography has finished. Text that fades in is, by
+ * definition, below its contrast ratio while it is fading — so anything
+ * auditing this page has to know when it has reached its steady state rather
+ * than sampling mid-flight. Surfaced on the page as data-entry-state.
+ */
+export function useChoreographySettled(reducedMotion: boolean): boolean {
+  const [settled, setSettled] = useState(reducedMotion);
+
+  useEffect(() => {
+    if (reducedMotion) return;
+    const timer = window.setTimeout(() => setSettled(true), ENTRY_CHOREOGRAPHY_MS);
+    return () => window.clearTimeout(timer);
+  }, [reducedMotion]);
+
+  return settled || reducedMotion;
+}
+
 export function useEntryReducedMotion(preference: boolean): boolean {
   const system = useReducedMotion();
   const hiddenAtMount = useHiddenAtMount();

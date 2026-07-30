@@ -29,6 +29,7 @@ import {
   Reveal,
   RevealLines,
   StatusBand,
+  useChoreographySettled,
   useEntryReducedMotion,
   useLayerParallax,
 } from "./EntryMotion";
@@ -201,6 +202,7 @@ export function EntryScreen({
   const chaptersRef = useRef<HTMLElement>(null);
   const [activeChapter, setActiveChapter] = useState(0);
   const motionOff = useEntryReducedMotion(reducedMotion);
+  const choreographySettled = useChoreographySettled(motionOff);
   // Background slowest, marks a touch faster, console fixed. Small on purpose.
   const artworkDrift = useLayerParallax(heroRef, 26, motionOff);
   const markDrift = useLayerParallax(heroRef, 40, motionOff);
@@ -324,7 +326,10 @@ export function EntryScreen({
   }
 
   return (
-    <div className="entry-page">
+    <div
+      className="entry-page"
+      data-entry-state={choreographySettled ? "settled" : "entering"}
+    >
       <ScrollProgress className="entry-scroll-progress" aria-hidden="true" />
       <a className="skip-link" href="#main-content">
         Skip to table entry
