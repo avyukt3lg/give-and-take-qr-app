@@ -127,25 +127,26 @@ for (const file of lazyJavascript) {
   }
 }
 
-const desktopHero = assetFiles.find((file) =>
-  /^product-box-1024-.*\.avif$/.test(file),
-);
-const mobileHero = assetFiles.find((file) =>
-  /^product-box-640-.*\.jpg$/.test(file),
-);
-if (!desktopHero || !mobileHero) {
-  throw new Error("Both desktop and mobile product-box assets must be emitted.");
-}
-const desktopHeroBytes = (
-  await stat(path.join(assetDirectory, desktopHero))
-).size;
-const mobileHeroBytes = (
-  await stat(path.join(assetDirectory, mobileHero))
-).size;
-if (desktopHeroBytes > 250 * 1024 || mobileHeroBytes > 120 * 1024) {
-  throw new Error(
-    `Hero image budget exceeded: desktop ${desktopHeroBytes}, mobile ${mobileHeroBytes}.`,
-  );
+// The entry hero samples the printed board, not the product box. The box shot
+// is a dark product photo that dithered down to a handful of lit cells; the
+// board is the focal object of this product and stays recognisable as a cell
+// grid. These ship from outputs/, not from the hashed asset graph.
+const boardDirectory = path.join(distRoot, "outputs/final_assets/board");
+const heroArtwork = [
+  { file: "give_and_take_board_web_1280.webp", budget: 250 * 1024 },
+  { file: "give_and_take_board_web_640.webp", budget: 120 * 1024 },
+];
+
+for (const { file, budget } of heroArtwork) {
+  let bytes;
+  try {
+    bytes = (await stat(path.join(boardDirectory, file))).size;
+  } catch {
+    throw new Error(`Hero board artwork missing from the artifact: ${file}.`);
+  }
+  if (bytes > budget) {
+    throw new Error(`Hero image budget exceeded: ${file} is ${bytes} bytes.`);
+  }
 }
 
 console.log(

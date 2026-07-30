@@ -14,6 +14,12 @@ export {
   cloneAsciiPreset,
 } from "./preset";
 export {
+  createEntryBoardPreset,
+  ENTRY_BOARD_CELL_SIZE,
+  ENTRY_BOARD_COARSE_CELL_SIZE,
+  type EntryBoardPresetOptions,
+} from "./entryPreset";
+export {
   RENDER_MODE_REGISTRY,
   assertCompleteRendererRegistry,
 } from "./renderers";

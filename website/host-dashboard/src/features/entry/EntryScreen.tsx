@@ -2,6 +2,7 @@ import {
   lazy,
   Suspense,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ComponentType,
@@ -13,14 +14,14 @@ import type {
   AuthDraft,
   AuthSubmission,
 } from "@/app/contracts";
-import productBox from "@/assets/product-box-1024.avif";
-import productBoxMobile from "@/assets/product-box-640.jpg";
 import {
   AsciiRasterCanvas,
-  BENJAMINS_DITHER_PRESET,
+  createEntryBoardPreset,
 } from "@/components/effects/ascii";
 import { BrandMark } from "@/components/brand/BrandMark";
 import { useScene } from "@/hooks/useScene";
+import { useThemeTokens } from "@/hooks/useThemeTokens";
+import { useBoardResolve } from "./useBoardResolve";
 import { SettingsDialog } from "@/components/layout/SettingsDialog";
 import { Button } from "@/components/ui/button";
 import { ScrollProgress } from "@/components/ui/scroll-progress";
@@ -107,6 +108,18 @@ const DevelopmentAsciiEffectLab = import.meta.env.DEV
   ? lazy(() => import("@/components/effects/ascii/AsciiEffectLab"))
   : null;
 
+/**
+ * The hero samples the printed board, not the box photo.
+ *
+ * The box photo is a dark product shot, so dithering it produced a handful of
+ * lit cells on grey and the caption promising a "sampled table signal" was
+ * writing a cheque the frame could not cash. The board is the actual focal
+ * object of this product, it is bright and high-contrast, and it survives
+ * being reduced to a cell grid — you can still read the route.
+ */
+const BOARD_ARTWORK_1280 = `${import.meta.env.BASE_URL}outputs/final_assets/board/give_and_take_board_web_1280.webp`;
+const BOARD_ARTWORK_640 = `${import.meta.env.BASE_URL}outputs/final_assets/board/give_and_take_board_web_640.webp`;
+
 function prefersMobileArtwork(): boolean {
   if (typeof window === "undefined" || typeof navigator === "undefined") {
     return false;
@@ -117,7 +130,7 @@ function prefersMobileArtwork(): boolean {
   );
 }
 
-function useEntryArtworkSource(): string {
+function useEntryArtworkSource(): { source: string; mobile: boolean } {
   const [mobile, setMobile] = useState(prefersMobileArtwork);
 
   useEffect(() => {
@@ -128,7 +141,10 @@ function useEntryArtworkSource(): string {
     return () => query.removeEventListener?.("change", update);
   }, []);
 
-  return mobile ? productBoxMobile : productBox;
+  return {
+    source: mobile ? BOARD_ARTWORK_640 : BOARD_ARTWORK_1280,
+    mobile,
+  };
 }
 
 export interface EntryScreenProps {
@@ -171,7 +187,21 @@ export function EntryScreen({
   const [renderFailed, setRenderFailed] = useState(false);
   const [boardProgress, setBoardProgress] = useState(0);
   const boardChapterRef = useRef<HTMLElement>(null);
-  const artworkSource = useEntryArtworkSource();
+  const { source: artworkSource, mobile } = useEntryArtworkSource();
+  const tokens = useThemeTokens(theme);
+  const quality = mobile ? "balanced" : "high";
+  const boardCellSize = useBoardResolve(reducedMotion, asciiActive);
+  const asciiConfig = useMemo(
+    () =>
+      createEntryBoardPreset({
+        tint: tokens.brass,
+        background: tokens.canvasSunk,
+        quality,
+        cellSize: boardCellSize,
+        reducedMotion,
+      }),
+    [boardCellSize, quality, reducedMotion, tokens.brass, tokens.canvasSunk],
+  );
   const showEffectLab =
     import.meta.env.DEV &&
     typeof window !== "undefined" &&
@@ -310,11 +340,11 @@ export function EntryScreen({
           <div className="entry-art__frame">
             <AsciiRasterCanvas
               src={artworkSource}
-              config={BENJAMINS_DITHER_PRESET}
+              config={asciiConfig}
               paused={!asciiActive || reducedMotion}
-              quality="balanced"
-              solidBackground="#080b09"
-              fit="cover"
+              quality={quality}
+              solidBackground={tokens.canvasSunk}
+              fit="contain"
               fallbackImage={artworkSource}
               fallbackAlt=""
               className="entry-ascii"
@@ -322,7 +352,7 @@ export function EntryScreen({
             />
           </div>
           <span className="entry-art__caption">
-            Box artwork translated live into a sampled table signal
+            The printed board, sampled live into a shared table signal
           </span>
           <span className="entry-art__code" aria-hidden="true">
             GT / 2026
