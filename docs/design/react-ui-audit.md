@@ -273,3 +273,80 @@ does. 11/11 desktop-chromium pass.
 Defect 4 (ASCII legibility), 13 (Market palette — seven competing hues, worst
 in Contrast), 14 (board strip clips mid-cell with no scroll affordance, clearly
 visible in `evidence/react/slice1b/survey/table-2-play.png`).
+
+---
+
+## Slice 3+4 — ASCII legibility and the entry hero (shipped, `88dc78a`)
+
+Live and verified: Instrument Serif regular and italic load from the public
+URL, no console errors, `data-entry-state="settled"` reached.
+
+### Defect 4 — closed
+
+The engine was never the problem. Three things made the frame unreadable, all
+in the configuration and the source:
+
+- `progressivePosition: 55` hides every cell where `(x + y) / 2 > 0.55`, cutting
+  roughly the bottom-right half of the field on a diagonal.
+- The source was the dark product-box photo; dithering it lights few cells.
+- `tint: #00ff66` belongs to no theme here, and `glitch` and `chromatic`
+  displace cells.
+
+`BENJAMINS_DITHER_PRESET` is untouched. `createEntryBoardPreset` derives the
+entry config: full field, grayscale then a single-hue tint, no displacement,
+and a coverage/contrast floor per quality tier so weak hardware degrades to a
+coarser board rather than to noise. Tint and ground resolve from the live theme
+through `useThemeTokens`, because a canvas cannot read CSS custom properties.
+
+At cell size 7 the board border, the track and the GIVE AND TAKE lettering all
+read — see `evidence/react/hero/board-settled-1440.png`. In the hero the field
+is full-bleed atmosphere, so the caption there is deliberately modest.
+
+### Hero composition
+
+Two zones instead of three; the artwork is a full-bleed layer behind the fold
+rather than a bordered panel between two columns. Headline restored to the
+Ricardo Chance treatment the approved design named explicitly — 17ch,
+`clamp(42px, 6.4vw, 96px)`, line-height 0.92, letter-spacing -0.022em. At 11ch
+the display face was forced into four lines. Registration marks, the vertical
+chapter index and the persistent status band are back.
+
+The one legacy flaw not carried forward: the approved design ran the texture
+under the body copy, which failed contrast. A horizontal mask keeps the copy
+column clean and gives the field the right two thirds.
+
+### Three defects found only by running it in a real browser
+
+1. **Background-tab load left the headline invisible.** A reveal starting at
+   opacity 0 and driven by rAF never runs while the document is hidden. Copy
+   must not depend on an animation to become readable — hidden at mount now
+   means start settled.
+2. **The raster fallback showed the raw board photograph as the page
+   background** any time the canvas had not yet painted, once the frame's
+   opaque ground was removed. It is now visible only on actual failure.
+3. **The artwork overscan widened `documentElement.scrollWidth`.** The hero
+   clips it. Verified at 1440, 1280, 900, 768, 390, 320.
+
+### CI failed twice before this landed — worth recording why
+
+The runner failed while macOS passed, and the first two attempts at a fix were
+guesses that did not hit it. Reading the actual log gave two real defects:
+
+- The chapter index used `--ink-faint` at 0.55 opacity, compositing to
+  `#504e45` on the artwork ground — 2.4:1 against 4.5:1. `aria-hidden` does
+  not excuse contrast; a sighted user still reads it.
+- axe sampled the brass italic mid-entrance and measured 2.4:1. Text that
+  fades in is below its contrast ratio while it is fading. That is a state no
+  user reads, but nothing told the audit when the page had settled. The page
+  now reports `data-entry-state` and the spec waits for `settled`.
+
+Both were timing-dependent, which is why a faster machine passed. The workflow
+now uploads the Playwright report and traces on failure, so the next runner
+failure is readable rather than reproducible only by guessing.
+
+### Still open
+
+Defect 13 (Market's seven competing hues, worst in Contrast) and defect 14
+(board strip clips mid-cell with no scroll affordance). The Command Deck motion
+layer — Now-zone re-key, rail marker, number tickers, phase strip, connection
+states — is not started.
