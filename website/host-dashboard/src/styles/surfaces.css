@@ -336,6 +336,10 @@ button.bg-destructive {
 .entry-hero {
   position: relative;
   z-index: 1;
+  /* The artwork layer is deliberately overscanned past the hero so the field
+     has no visible edge. Without clipping here that overscan widens
+     documentElement.scrollWidth and the page overflows horizontally. */
+  overflow: hidden;
   display: grid;
   width: min(100%, 104rem);
   min-height: calc(100svh - 5.5rem);

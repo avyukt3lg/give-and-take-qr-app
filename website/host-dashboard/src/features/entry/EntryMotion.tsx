@@ -122,6 +122,11 @@ export function RevealLines({
     <h1 id={id} className={className}>
       {lines.map((line, index) => (
         <span className="entry-headline__line" key={index}>
+          {/* A real space in the DOM between lines. Without it the heading's
+              text is "…physical.Run the table…" and the accessible name is
+              only correct because Chromium inserts a space for block-level
+              children — a heuristic that is not guaranteed across engines. */}
+          {index > 0 ? " " : null}
           {reducedMotion ? (
             <span>{line}</span>
           ) : (
@@ -210,8 +215,11 @@ export function ChapterIndex({
  * instead of buried in a footer nobody scrolls to.
  */
 export function StatusBand({ reducedMotion }: { readonly reducedMotion: boolean }) {
+  // Visual furniture that restates the header meta strip and the footer
+  // disclaimer. Both of those are real content in landmarks; announcing this
+  // as well would duplicate them and leave content outside any landmark.
   return (
-    <div className="entry-status-band">
+    <div className="entry-status-band" aria-hidden="true">
       <span>S00—S43 · 12 turns · Fictional data only</span>
       <span className="entry-status-band__live">
         <Clock reducedMotion={reducedMotion} />
