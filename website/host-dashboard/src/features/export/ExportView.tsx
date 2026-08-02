@@ -183,7 +183,11 @@ export function ExportView({
             </div>
           </header>
           {scores.length ? (
-            <div className="teacher-table-scroll">
+            <div
+              className="teacher-table-scroll"
+              tabIndex={0}
+              aria-label="Scrollable player score calculation"
+            >
               <table>
                 <caption className="sr-only">
                   Provisional or final score calculation for each player
@@ -280,7 +284,10 @@ export function ExportView({
 
                   <div className="teacher-player-columns">
                     <section aria-labelledby={`print-holdings-${player.id}`}>
-                      <h5 id={`print-holdings-${player.id}`}>Holdings</h5>
+                      <h5 id={`print-holdings-${player.id}`}>
+                        Holdings
+                        <span className="sr-only"> for {player.name}</span>
+                      </h5>
                       {holdings.length ? (
                         <table>
                           <thead>
@@ -317,6 +324,7 @@ export function ExportView({
                     <section aria-labelledby={`print-notes-${player.id}`}>
                       <h5 id={`print-notes-${player.id}`}>
                         Decision notes · {player.decisions.length}
+                        <span className="sr-only"> for {player.name}</span>
                       </h5>
                       {player.decisions.length ? (
                         <ol>
@@ -363,7 +371,11 @@ export function ExportView({
             </div>
           </header>
           {session.marketHistory.length ? (
-            <div className="teacher-table-scroll">
+            <div
+              className="teacher-table-scroll"
+              tabIndex={0}
+              aria-label="Scrollable market event history"
+            >
               <table>
                 <caption className="sr-only">
                   Complete session market event history

@@ -7,13 +7,16 @@ import { useSystemReducedMotion } from "@/hooks/useReducedMotion";
 export function BoardRoute({
   game,
   session,
+  reducedMotion = false,
 }: {
   game: GameDefinition;
   session: GameSession;
+  reducedMotion?: boolean;
 }) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const activeRef = useRef<HTMLLIElement>(null);
-  const reducedMotion = useSystemReducedMotion();
+  const systemReducedMotion = useSystemReducedMotion();
+  const motionOff = reducedMotion || systemReducedMotion;
   const { overflow, firstVisible, lastVisible } = useScrollOverflow(
     scrollerRef,
     game.boardSpaces.length,
@@ -57,14 +60,14 @@ export function BoardRoute({
     // centred, so the outcome is the same and only the easing is lost.
     if (typeof scroller.scrollTo === "function") {
       try {
-        scroller.scrollTo({ left, behavior: reducedMotion ? "auto" : "smooth" });
+        scroller.scrollTo({ left, behavior: motionOff ? "auto" : "smooth" });
         return;
       } catch {
         /* falls through to the direct assignment below */
       }
     }
     scroller.scrollLeft = left;
-  }, [activePosition, reducedMotion, session.currentPlayerIndex]);
+  }, [activePosition, motionOff, session.currentPlayerIndex]);
 
   const firstId = game.boardSpaces[firstVisible]?.id ?? game.boardSpaces[0]?.id;
   const lastId = game.boardSpaces[lastVisible]?.id ?? firstId;

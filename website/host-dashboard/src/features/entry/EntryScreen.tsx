@@ -1,11 +1,7 @@
 import {
-  lazy,
-  Suspense,
   useEffect,
-  useMemo,
   useRef,
   useState,
-  type ComponentType,
 } from "react";
 import { motion } from "motion/react";
 
@@ -14,31 +10,26 @@ import type {
   AuthDraft,
   AuthSubmission,
 } from "@/app/contracts";
-import {
-  AsciiRasterCanvas,
-  createEntryBoardPreset,
-} from "@/components/effects/ascii";
 import { BrandMark } from "@/components/brand/BrandMark";
-import { useScene } from "@/hooks/useScene";
-import { useThemeTokens } from "@/hooks/useThemeTokens";
-import { useBoardResolve } from "./useBoardResolve";
 import {
   ChapterIndex,
-  ENTRY_STAGGER,
   RegistrationMarks,
   Reveal,
   RevealLines,
   StatusBand,
+} from "./EntryMotion";
+import {
+  ENTRY_STAGGER,
   useChoreographySettled,
   useEntryReducedMotion,
-  useLayerParallax,
-} from "./EntryMotion";
+} from "./entry-motion-state";
 import { SettingsDialog } from "@/components/layout/SettingsDialog";
 import { Button } from "@/components/ui/button";
 import { ScrollProgress } from "@/components/ui/scroll-progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { ThemeId } from "@/domain/types";
+import type { GameDefinition, ThemeId } from "@/domain/types";
 import { AccessForm } from "./AccessForm";
+import { BoardRouteRelief } from "./BoardRouteRelief";
 
 const modes: Array<{
   id: AccessMode;
@@ -73,92 +64,8 @@ const chapters = [
   },
 ];
 
-interface LazyBoardSceneProps {
-  active: boolean;
-  progress?: number;
-  reducedMotion?: boolean;
-  className?: string;
-  onError?: (error: Error) => void;
-}
-
-const BOARD_FALLBACK_URL = `${import.meta.env.BASE_URL}outputs/final_assets/board/give_and_take_board_web_640.webp`;
-
-const StaticBoardScene: ComponentType<LazyBoardSceneProps> = ({
-  active,
-  className,
-}) =>
-  active ? (
-    <div
-      className={`board-point-scene ${className ?? ""}`}
-      aria-hidden="true"
-      data-renderer="static"
-    >
-      <img
-        src={BOARD_FALLBACK_URL}
-        alt=""
-        className="board-point-scene__fallback"
-        decoding="async"
-      />
-    </div>
-  ) : null;
-
-const LazyBoardPointCloudScene = lazy<ComponentType<LazyBoardSceneProps>>(
-  async (): Promise<{ default: ComponentType<LazyBoardSceneProps> }> => {
-  try {
-    const module = await import("@/components/effects/BoardPointCloudScene");
-      return {
-        default: module.BoardPointCloudScene as ComponentType<LazyBoardSceneProps>,
-      };
-  } catch {
-    return { default: StaticBoardScene };
-  }
-  },
-);
-
-const DevelopmentAsciiEffectLab = import.meta.env.DEV
-  ? lazy(() => import("@/components/effects/ascii/AsciiEffectLab"))
-  : null;
-
-/**
- * The hero samples the printed board, not the box photo.
- *
- * The box photo is a dark product shot, so dithering it produced a handful of
- * lit cells on grey and the caption promising a "sampled table signal" was
- * writing a cheque the frame could not cash. The board is the actual focal
- * object of this product, it is bright and high-contrast, and it survives
- * being reduced to a cell grid — you can still read the route.
- */
-const BOARD_ARTWORK_1280 = `${import.meta.env.BASE_URL}outputs/final_assets/board/give_and_take_board_web_1280.webp`;
-const BOARD_ARTWORK_640 = `${import.meta.env.BASE_URL}outputs/final_assets/board/give_and_take_board_web_640.webp`;
-
-function prefersMobileArtwork(): boolean {
-  if (typeof window === "undefined" || typeof navigator === "undefined") {
-    return false;
-  }
-  return (
-    window.matchMedia("(max-width: 640px)").matches ||
-    (navigator.hardwareConcurrency ?? 8) <= 4
-  );
-}
-
-function useEntryArtworkSource(): { source: string; mobile: boolean } {
-  const [mobile, setMobile] = useState(prefersMobileArtwork);
-
-  useEffect(() => {
-    const query = window.matchMedia("(max-width: 640px)");
-    const update = () => setMobile(prefersMobileArtwork());
-    update();
-    query.addEventListener?.("change", update);
-    return () => query.removeEventListener?.("change", update);
-  }, []);
-
-  return {
-    source: mobile ? BOARD_ARTWORK_640 : BOARD_ARTWORK_1280,
-    mobile,
-  };
-}
-
 export interface EntryScreenProps {
+  game: GameDefinition;
   mode: AccessMode;
   draft: AuthDraft;
   pending: boolean;
@@ -175,6 +82,7 @@ export interface EntryScreenProps {
 }
 
 export function EntryScreen({
+  game,
   mode,
   draft,
   pending,
@@ -189,73 +97,10 @@ export function EntryScreen({
   onThemeChange,
   onReducedMotionChange,
 }: EntryScreenProps) {
-  const { active: asciiActive, activate: activateAscii } = useScene("ascii");
-  const {
-    active: boardActive,
-    activate: activateBoard,
-    release: releaseBoard,
-  } = useScene("board");
-  const [renderFailed, setRenderFailed] = useState(false);
-  const [boardProgress, setBoardProgress] = useState(0);
-  const boardChapterRef = useRef<HTMLElement>(null);
-  const heroRef = useRef<HTMLElement>(null);
   const chaptersRef = useRef<HTMLElement>(null);
   const [activeChapter, setActiveChapter] = useState(0);
   const motionOff = useEntryReducedMotion(reducedMotion);
   const choreographySettled = useChoreographySettled(motionOff);
-  // Background slowest, marks a touch faster, console fixed. Small on purpose.
-  const artworkDrift = useLayerParallax(heroRef, 26, motionOff);
-  const markDrift = useLayerParallax(heroRef, 40, motionOff);
-  const { source: artworkSource, mobile } = useEntryArtworkSource();
-  const tokens = useThemeTokens(theme);
-  const quality = mobile ? "balanced" : "high";
-  const boardCellSize = useBoardResolve(motionOff, asciiActive);
-  const asciiConfig = useMemo(
-    () =>
-      createEntryBoardPreset({
-        tint: tokens.brass,
-        background: tokens.canvasSunk,
-        quality,
-        cellSize: boardCellSize,
-        reducedMotion,
-      }),
-    [boardCellSize, quality, reducedMotion, tokens.brass, tokens.canvasSunk],
-  );
-  const showEffectLab =
-    import.meta.env.DEV &&
-    typeof window !== "undefined" &&
-    new URLSearchParams(window.location.search).has("ascii-lab");
-
-  useEffect(() => {
-    if (showEffectLab) return;
-    const chapter = boardChapterRef.current;
-    if (!chapter) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry) return;
-        if (entry.isIntersecting) {
-          activateBoard();
-          return;
-        }
-        if (entry.boundingClientRect.top > 0) {
-          activateAscii();
-        } else {
-          releaseBoard();
-        }
-      },
-      {
-        rootMargin: "-10% 0px -18% 0px",
-        threshold: [0, 0.15],
-      },
-    );
-    observer.observe(chapter);
-    return () => observer.disconnect();
-  }, [
-    activateAscii,
-    activateBoard,
-    releaseBoard,
-    showEffectLab,
-  ]);
 
   // Which chapter the reader is in, for the vertical index. An observer on the
   // list items rather than a scroll handler, so it costs nothing when idle.
@@ -281,57 +126,16 @@ export function EntryScreen({
     return () => observer.disconnect();
   }, []);
 
-  useEffect(() => {
-    if (!boardActive || reducedMotion) return;
-    let frame = 0;
-    const update = () => {
-      frame = 0;
-      const chapter = boardChapterRef.current;
-      if (!chapter) return;
-      const bounds = chapter.getBoundingClientRect();
-      const viewport = Math.max(window.innerHeight, 1);
-      const progress = Math.max(
-        0,
-        Math.min(1, (viewport - bounds.top) / (bounds.height + viewport)),
-      );
-      setBoardProgress(progress);
-    };
-    const schedule = () => {
-      if (!frame) frame = requestAnimationFrame(update);
-    };
-    update();
-    window.addEventListener("scroll", schedule, { passive: true });
-    window.addEventListener("resize", schedule, { passive: true });
-    return () => {
-      cancelAnimationFrame(frame);
-      window.removeEventListener("scroll", schedule);
-      window.removeEventListener("resize", schedule);
-    };
-  }, [boardActive, reducedMotion]);
-
-  const sceneProgress = reducedMotion ? 0.68 : boardProgress;
-
-  if (showEffectLab && DevelopmentAsciiEffectLab) {
-    return (
-      <Suspense
-        fallback={
-          <main className="boot-stage">
-            <p>Loading the ASCII effect instrument…</p>
-          </main>
-        }
-      >
-        <DevelopmentAsciiEffectLab />
-      </Suspense>
-    );
-  }
-
   return (
     <div
       className="entry-page"
       data-entry-state={choreographySettled ? "settled" : "entering"}
+      data-entry-submit={pending ? "pending" : "idle"}
     >
-      <ScrollProgress className="entry-scroll-progress" aria-hidden="true" />
-      <a className="skip-link" href="#main-content">
+      {!motionOff && (
+        <ScrollProgress className="entry-scroll-progress" aria-hidden="true" />
+      )}
+      <a className="skip-link" href="#entry-console">
         Skip to table entry
       </a>
       <ChapterIndex count={chapters.length} active={activeChapter} />
@@ -356,34 +160,51 @@ export function EntryScreen({
         />
       </header>
 
-      <section className="entry-hero" aria-labelledby="entry-title" ref={heroRef}>
-        <div className="entry-hero__copy">
+      <main id="main-content" tabIndex={-1}>
+        <section className="entry-hero" aria-labelledby="entry-title">
+        <div className="entry-hero__stage">
+          <div className="entry-hero__copy">
+            <Reveal
+              as="p"
+              className="eyebrow"
+              delay={ENTRY_STAGGER.eyebrow}
+              reducedMotion={motionOff}
+            >
+              The physical board’s digital instrument
+            </Reveal>
+            <RevealLines
+              id="entry-title"
+              className="display-serif"
+              delay={ENTRY_STAGGER.headline}
+              reducedMotion={motionOff}
+              lines={[
+                <>
+                  Keep the board <em>physical.</em>
+                </>,
+                <>
+                  Run the table <em>here.</em>
+                </>,
+              ]}
+            />
+            <Reveal as="p" delay={ENTRY_STAGGER.body} reducedMotion={motionOff}>
+              Give And Take tracks the shared market, verifies physical turns,
+              and records evidence without turning the game into another screen.
+            </Reveal>
+          </div>
+
           <Reveal
-            as="p"
-            className="eyebrow"
-            delay={ENTRY_STAGGER.eyebrow}
+            className="entry-relief-reveal"
+            delay={ENTRY_STAGGER.artwork}
             reducedMotion={motionOff}
+            y={18}
           >
-            The physical board’s digital instrument
+            <BoardRouteRelief
+              spaces={game.boardSpaces}
+              reducedMotion={motionOff}
+              interactive
+            />
           </Reveal>
-          <RevealLines
-            id="entry-title"
-            className="display-serif"
-            delay={ENTRY_STAGGER.headline}
-            reducedMotion={motionOff}
-            lines={[
-              <>
-                Keep the board <em>physical.</em>
-              </>,
-              <>
-                Run the table <em>here.</em>
-              </>,
-            ]}
-          />
-          <Reveal as="p" delay={ENTRY_STAGGER.body} reducedMotion={motionOff}>
-            Give And Take tracks the shared market, verifies physical turns,
-            and records evidence without turning the game into another screen.
-          </Reveal>
+
           <dl className="entry-proof">
             <div>
               <dt>44</dt>
@@ -398,50 +219,13 @@ export function EntryScreen({
               <dd>players</dd>
             </div>
           </dl>
-          {/* In the copy flow rather than floating over the artwork, where it
-              was clipped by the full-bleed overscan and hidden behind the
-              console. The claim is deliberately modest: at hero scale this is
-              atmosphere sampled from the board, and the board is the subject
-              further down the page rather than the ground. */}
-          <Reveal
-            as="p"
-            className="entry-art__caption"
-            delay={ENTRY_STAGGER.proof}
-            reducedMotion={motionOff}
-          >
-            Sampled from the printed board
-          </Reveal>
         </div>
 
-        <motion.div
-          className="entry-art"
-          data-failed={renderFailed || undefined}
-          style={{ y: artworkDrift }}
-          aria-hidden="true"
-        >
-          <div className="entry-art__frame">
-            <AsciiRasterCanvas
-              src={artworkSource}
-              config={asciiConfig}
-              paused={!asciiActive || motionOff}
-              quality={quality}
-              solidBackground={tokens.canvasSunk}
-              fit="cover"
-              fallbackImage={artworkSource}
-              fallbackAlt=""
-              className="entry-ascii"
-              onError={() => setRenderFailed(true)}
-            />
-          </div>
-        </motion.div>
-
-        <motion.div className="entry-marks-layer" style={{ y: markDrift }}>
+        <div className="entry-marks-layer">
           <RegistrationMarks />
-        </motion.div>
+        </div>
 
-        {/* The console holds the primary action, so it is the one thing on this
-            page that never parallaxes and never tilts. */}
-        <main id="main-content" className="entry-console" tabIndex={-1}>
+        <div id="entry-console" className="entry-console" tabIndex={-1}>
           {backendError && (
             <div className="entry-backend-alert" role="alert">
               <div>
@@ -495,14 +279,14 @@ export function EntryScreen({
               </TabsContent>
             ))}
           </Tabs>
-        </main>
-      </section>
+        </div>
+        </section>
 
-      <section
-        className="entry-chapters"
-        aria-labelledby="entry-story-title"
-        ref={chaptersRef}
-      >
+        <section
+          className="entry-chapters"
+          aria-labelledby="entry-story-title"
+          ref={chaptersRef}
+        >
         <header>
           <p className="eyebrow">The division of labour</p>
           <h2 id="entry-story-title" className="display-serif">
@@ -511,17 +295,16 @@ export function EntryScreen({
             Table where it matters.
           </h2>
         </header>
-        {/* Scroll-linked, not scroll-triggered. The previous chapters recede
-            and dim as you pass them, so the section reads as one progression
-            under the reader's control rather than three independent fades that
-            fire once and are then inert. */}
+        {/* The active chapter is carried by structure and the chapter index.
+            Copy never starts dimmed: hosts must not depend on an intersection
+            observer firing before the product explanation becomes readable. */}
         <ol>
           {chapters.map((chapter, index) => (
             <motion.li
               key={chapter.index}
               data-active={activeChapter === index || undefined}
-              initial={motionOff ? false : { opacity: 0.35, y: 26 }}
-              whileInView={motionOff ? undefined : { opacity: 1, y: 0 }}
+              initial={motionOff ? false : { y: 18 }}
+              whileInView={motionOff ? undefined : { y: 0 }}
               viewport={{ amount: 0.55, margin: "-12% 0px -12% 0px" }}
               transition={{
                 duration: 0.6,
@@ -538,26 +321,18 @@ export function EntryScreen({
             </motion.li>
           ))}
         </ol>
-      </section>
+        </section>
 
-      <section
-        ref={boardChapterRef}
-        className="entry-board-chapter"
-        aria-labelledby="entry-board-title"
-        data-scene-active={boardActive || undefined}
-      >
-        <div className="entry-board-chapter__visual" aria-hidden="true">
-          {boardActive ? (
-            <Suspense fallback={<StaticBoardScene active />}>
-              <LazyBoardPointCloudScene
-                active
-                progress={sceneProgress}
-                reducedMotion={reducedMotion}
-              />
-            </Suspense>
-          ) : (
-            <StaticBoardScene active />
-          )}
+        <section
+          className="entry-board-chapter"
+          aria-labelledby="entry-board-title"
+        >
+        <div className="entry-board-chapter__visual">
+          <BoardRouteRelief
+            spaces={game.boardSpaces}
+            reducedMotion={motionOff}
+            variant="chapter"
+          />
         </div>
         <div className="entry-board-chapter__copy">
           <p className="eyebrow">The physical route, reconstructed</p>
@@ -567,10 +342,10 @@ export function EntryScreen({
             One shared signal.
           </h2>
           <p>
-            The companion samples the printed route into a technical point
-            field, then steps aside. Pawns still move by hand; only the verified
-            position, market revision, and evidence record travel between
-            screens.
+            The companion carries the printed perimeter into the host surface,
+            then steps aside. Pawns still move by hand; only the verified
+            position, shared market revision, and evidence record travel
+            between screens.
           </p>
           <dl>
             <div>
@@ -578,8 +353,8 @@ export function EntryScreen({
               <dd>physical stops</dd>
             </div>
             <div>
-              <dt>01</dt>
-              <dd>shared revision</dd>
+              <dt>05</dt>
+              <dd>printed decks</dd>
             </div>
             <div>
               <dt>00</dt>
@@ -587,7 +362,8 @@ export function EntryScreen({
             </div>
           </dl>
         </div>
-      </section>
+        </section>
+      </main>
 
       <footer className="entry-footer">
         <BrandMark compact />

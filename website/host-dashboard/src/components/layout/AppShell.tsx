@@ -1,4 +1,4 @@
-import type { PropsWithChildren } from "react";
+import { useEffect, type PropsWithChildren } from "react";
 
 import type { CompanionMode, GameSession, ThemeId, ViewId } from "@/domain/types";
 import type { HostUnsyncedState } from "@/state";
@@ -7,6 +7,7 @@ import { BrandMark } from "@/components/brand/BrandMark";
 import { SettingsDialog } from "./SettingsDialog";
 import { MobileNavigation } from "./MobileNavigation";
 import { NAVIGATION_ITEMS, navigationItem } from "./navigation";
+import { RoutePositionStamp } from "./RoutePositionStamp";
 import { SessionActions } from "./SessionActions";
 import { SyncIndicator } from "./SyncIndicator";
 
@@ -26,6 +27,7 @@ export interface AppShellProps extends PropsWithChildren {
   onRetrySave(): void;
   onNewSession(discardUnsynced: boolean): void;
   onSignOut(discardUnsynced: boolean): void;
+  onReady?(): void;
 }
 
 export function AppShell({
@@ -45,8 +47,13 @@ export function AppShell({
   onRetrySave,
   onNewSession,
   onSignOut,
+  onReady,
 }: AppShellProps) {
   const current = navigationItem(view);
+
+  useEffect(() => {
+    onReady?.();
+  }, [onReady]);
 
   // The header eyebrow used to read "Turn table · <phase>" on every surface,
   // so Market, Ledger, Scores, Export and Help all carried a phase that had
@@ -105,7 +112,11 @@ export function AppShell({
           })}
         </nav>
         <div className="command-rail__footer">
-          <SyncIndicator backend={backend} onRetry={onRetrySave} />
+          <SyncIndicator
+            backend={backend}
+            reducedMotion={reducedMotion}
+            onRetry={onRetrySave}
+          />
           <SessionActions
             hostUnsyncedState={hostUnsyncedState}
             playerLocked={playerLocked}
@@ -115,13 +126,14 @@ export function AppShell({
         </div>
       </aside>
 
-      <section className="app-workspace">
+      <div className="app-workspace">
         <header className="workspace-header">
           <div>
             <p className="eyebrow">{headerContext}</p>
             <h1 className="display-serif">{current.label}</h1>
           </div>
           <div className="workspace-header__tools">
+            {activePlayer && <RoutePositionStamp player={activePlayer} />}
             {/* Duplicates the rail's table-code block wherever the rail is
                 visible, so it only earns its place once the rail is gone. */}
             <span className="header-code">{session.code}</span>
@@ -140,7 +152,7 @@ export function AppShell({
         <main id="main-content" tabIndex={-1} className="surface-stage">
           {children}
         </main>
-      </section>
+      </div>
 
       <MobileNavigation
         activeView={view}

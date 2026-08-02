@@ -1,8 +1,12 @@
 import { CloudOff, Check, RefreshCw, RotateCw, TriangleAlert } from "lucide-react";
+import { lazy, Suspense } from "react";
 
 import type { BackendSnapshot } from "@/app/contracts";
 import { Button } from "@/components/ui/button";
-import { NumberTicker } from "@/components/ui/number-ticker";
+
+const NumberTicker = lazy(async () => ({
+  default: (await import("@/components/ui/number-ticker")).NumberTicker,
+}));
 
 /**
  * The three connection states a host has to be able to tell apart from across a
@@ -51,9 +55,11 @@ function present(state: BackendSnapshot["state"]): SyncPresentation {
 
 export function SyncIndicator({
   backend,
+  reducedMotion = false,
   onRetry,
 }: {
   backend: BackendSnapshot;
+  reducedMotion?: boolean;
   onRetry(): void;
 }) {
   const { tone, label, Icon, busy } = present(backend.state);
@@ -91,7 +97,12 @@ export function SyncIndicator({
         // substitution. Space is reserved so it cannot reflow the row.
         <span className="save-indicator__revision" title="Saved revision">
           <span aria-hidden="true">r</span>
-          <NumberTicker value={backend.revision} />
+          <Suspense fallback={<span>{backend.revision}</span>}>
+            <NumberTicker
+              value={backend.revision}
+              reducedMotion={reducedMotion}
+            />
+          </Suspense>
         </span>
       )}
     </div>

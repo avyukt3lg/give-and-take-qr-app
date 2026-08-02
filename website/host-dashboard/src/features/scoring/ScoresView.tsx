@@ -21,11 +21,13 @@ const categoryRows = (score: ScoreResult) => [
 export function ScoresView({
   game,
   session,
+  reducedMotion = false,
   onExport,
   onSpeak,
 }: {
   game: GameDefinition;
   session: GameSession;
+  reducedMotion?: boolean;
   onExport(): void;
   onSpeak(text: string): void;
 }) {
@@ -91,7 +93,11 @@ export function ScoresView({
                   </div>
                   <strong className="score-total">
                     {final ? (
-                      <NumberTicker value={score.total} startValue={0} />
+                      <NumberTicker
+                        value={score.total}
+                        startValue={0}
+                        reducedMotion={reducedMotion}
+                      />
                     ) : (
                       score.total
                     )}

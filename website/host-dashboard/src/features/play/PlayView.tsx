@@ -107,6 +107,7 @@ export interface PlayViewProps {
   cardLookup: string;
   spaceLookup: string;
   canEdit: boolean;
+  reducedMotion?: boolean;
   onDieChange(value: number | null): void;
   onRoll(): void;
   onConfirmMove(): void;
@@ -129,6 +130,7 @@ export function PlayView({
   cardLookup,
   spaceLookup,
   canEdit,
+  reducedMotion = false,
   onDieChange,
   onRoll,
   onConfirmMove,
@@ -248,7 +250,11 @@ export function PlayView({
               {/* One underline, shared across the four steps, so advancing the
                   phase moves it rather than swapping a class. The direction of
                   travel is the information. */}
-              <TravellingUnderline active={active} layoutId="phase-underline" />
+              <TravellingUnderline
+                active={active}
+                layoutId="phase-underline"
+                reducedMotion={reducedMotion}
+              />
             </div>
           );
         })}
@@ -263,7 +269,11 @@ export function PlayView({
             looks away to move a pawn; on looking back, a panel that swapped
             silently is indistinguishable from one that never changed. Re-keying
             on player, phase and turn says "this is new". */}
-        <NowRekey className="now-zone__instruction" changeKey={nowKey}>
+        <NowRekey
+          className="now-zone__instruction"
+          changeKey={nowKey}
+          reducedMotion={reducedMotion}
+        >
           <p className="eyebrow">
             {currentSpace?.id ?? "S—"} · {currentSpace?.type ?? "Board space"}
           </p>
@@ -289,7 +299,13 @@ export function PlayView({
               host may not have noticed. */}
           <Metric
             label="Cash"
-            value={<NumberTicker value={current.cash} format={formatMoney} />}
+            value={
+              <NumberTicker
+                value={current.cash}
+                format={formatMoney}
+                reducedMotion={reducedMotion}
+              />
+            }
           />
           <Metric
             label="Portfolio"
@@ -297,6 +313,7 @@ export function PlayView({
               <NumberTicker
                 value={portfolioValue(current, session.prices)}
                 format={formatMoney}
+                reducedMotion={reducedMotion}
               />
             }
           />
@@ -310,7 +327,11 @@ export function PlayView({
         </div>
       </section>
 
-      <BoardRoute game={game} session={session} />
+      <BoardRoute
+        game={game}
+        session={session}
+        reducedMotion={reducedMotion}
+      />
 
       <div className="turn-workbench">
         <section className="physical-stage" aria-labelledby="physical-stage-title">

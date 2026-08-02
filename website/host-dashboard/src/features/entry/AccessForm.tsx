@@ -161,11 +161,6 @@ export function AccessForm({
 
       <p className="entry-preview">{item.preview}</p>
 
-      <p className="backend-note">
-        <span aria-hidden="true" />
-        Supabase session sync is required for shared tables.
-      </p>
-
       {error && (
         <p className="form-error" role="alert">
           {error}
@@ -183,6 +178,11 @@ export function AccessForm({
           </>
         )}
       </LiquidButton>
+
+      <p className="backend-note">
+        <span aria-hidden="true" />
+        Supabase session sync is required for shared tables.
+      </p>
     </form>
   );
 }
