@@ -11,22 +11,24 @@
       "shadcn/ui",
       "Radix UI",
       "Motion",
-      "Canvas2D"
+      "semantic CSS 3D"
     ]
   },
   "sources": {
     "tokens": [
-      "website/host-dashboard/src/styles/globals.css"
+      "website/host-dashboard/src/styles/globals.css",
+      "website/host-dashboard/src/styles/surfaces.css",
+      "website/host-dashboard/src/styles/entry-relief.css"
     ],
     "components": [
       "website/host-dashboard/src/components"
     ],
     "assets": [
-      "assets"
+      "game_data/game_config.json"
     ],
     "instructions": [
-      "CLAUDE.md",
-      "docs/design/digital-table-handoff.md"
+      "README.md",
+      ".superdesign/design-system.md"
     ]
   },
   "design": {
@@ -40,8 +42,8 @@
       "danger": "semantic red"
     },
     "typography": {
-      "display": "Newsreader editorial serif",
-      "interface": "Inter",
+      "display": "Instrument Serif with Newsreader and Georgia fallbacks",
+      "interface": "Source Sans 3 with system-ui fallback",
       "labels": "uppercase tracking with tabular numerals"
     },
     "spacing": {
@@ -83,7 +85,7 @@
       "Preserve all game mechanics, Supabase RPCs and persisted session shapes",
       "Maintain 44px touch targets, visible focus and keyboard navigation",
       "Support Table, Classroom, Contrast and reduced-motion modes",
-      "Keep one Canvas or WebGL renderer active at a time",
+      "Keep the Board Route Relief semantic and tied to real game geometry",
       "Keep all critical data and controls in semantic DOM"
     ],
     "avoid": [
@@ -98,8 +100,12 @@
   },
   "decisions": [
     {
-      "decision": "Use the manufacturer box art as a live Canvas2D dither hero",
-      "reason": "It is product-native and same-origin, unlike a stock portrait."
+      "decision": "Use Board Route Relief as the Entry focal object",
+      "reason": "The semantic S00-S43 perimeter, real deck categories and physical pawn tray make the product legible without a decorative renderer."
+    },
+    {
+      "decision": "Use CSS 3D and native View Transitions for Entry to Deck",
+      "reason": "Measured DOM depth preserves all game information and avoids adding Three.js where WebGL would not improve the product meaning."
     },
     {
       "decision": "Use LiquidButton once and MetalButton only for physical game commitments",
