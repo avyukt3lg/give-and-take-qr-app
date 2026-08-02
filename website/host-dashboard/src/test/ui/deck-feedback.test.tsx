@@ -131,4 +131,18 @@ describe("NumberTicker", () => {
 
     expect(screen.getByTestId("ticker")).toHaveTextContent("₹36,000");
   });
+
+  it("commits a changed value immediately for the in-app motion setting", async () => {
+    const { rerender } = render(
+      <NumberTicker value={7} reducedMotion data-testid="ticker" />,
+    );
+
+    rerender(
+      <NumberTicker value={8} reducedMotion data-testid="ticker" />,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("ticker")).toHaveTextContent("88"),
+    );
+  });
 });

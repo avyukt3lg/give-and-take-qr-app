@@ -9,6 +9,7 @@ import {
 const DASHBOARD_PATH =
   "/give-and-take-qr-app/website/host-dashboard/";
 const SESSION_ID = "00000000-0000-4000-8000-000000000001";
+const UI_STORAGE_KEY = "give-and-take:ui:v1";
 
 interface RemoteRecord {
   id: string;
@@ -111,13 +112,34 @@ async function startPhysicalGame(page: Page) {
   ).toBeVisible();
 }
 
-function seriousAxeViolations(
-  violations: Awaited<ReturnType<AxeBuilder["analyze"]>>["violations"],
+async function navigateHostSurface(
+  page: Page,
+  destination: string,
+  viewportWidth: number,
 ) {
-  return violations.filter(
-    (violation) =>
-      violation.impact === "serious" || violation.impact === "critical",
-  );
+  if (viewportWidth > 900) {
+    await page
+      .locator(".desktop-navigation button")
+      .filter({ has: page.getByText(destination, { exact: true }) })
+      .click();
+    return;
+  }
+
+  const navigation = page.getByRole("navigation", { name: "Game sections" });
+  if (["Setup", "Play", "Market", "Ledger", "Scores"].includes(destination)) {
+    await navigation
+      .getByRole("button", { name: destination, exact: true })
+      .click();
+    return;
+  }
+
+  await navigation
+    .getByRole("button", { name: "Open more game sections" })
+    .click();
+  await page
+    .locator(".more-drawer__list")
+    .getByRole("button", { name: new RegExp(`^${destination}`) })
+    .click();
 }
 
 test.describe("production artifact", () => {
@@ -142,6 +164,20 @@ test.describe("production artifact", () => {
       }),
     ).toBeVisible();
     await expect(page.getByRole("button", { name: "Host table" })).toBeVisible();
+    const reliefSpaces = page.locator(
+      '.board-route-relief[data-variant="hero"] [data-space-id]',
+    );
+    await expect(reliefSpaces).toHaveCount(44);
+    expect(
+      await reliefSpaces.evaluateAll((spaces) =>
+        spaces.map((space) => (space as HTMLElement).dataset.spaceId),
+      ),
+    ).toEqual(
+      Array.from({ length: 44 }, (_, index) =>
+        `S${String(index).padStart(2, "0")}`,
+      ),
+    );
+    await expect(page.locator("canvas")).toHaveCount(0);
 
     const dimensions = await page.evaluate(() => ({
       scrollWidth: document.documentElement.scrollWidth,
@@ -158,7 +194,7 @@ test.describe("production artifact", () => {
     );
 
     const accessibility = await new AxeBuilder({ page }).analyze();
-    expect(seriousAxeViolations(accessibility.violations)).toEqual([]);
+    expect(accessibility.violations).toEqual([]);
     expect(errors).toEqual([]);
   });
 
@@ -196,10 +232,17 @@ test.describe("production artifact", () => {
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   });
 
-  test("keeps table entry usable when every hero image decode fails", async ({
+  test("keeps table entry usable without native view transitions", async ({
     page,
   }) => {
-    await page.route(/product-box-.*\.(?:avif|jpg)$/, (route) => route.abort());
+    const table: MockTable = { record: null, calls: [] };
+    await page.addInitScript(() => {
+      Object.defineProperty(document, "startViewTransition", {
+        configurable: true,
+        value: undefined,
+      });
+    });
+    await installSupabaseMock(page, table);
     await page.goto(DASHBOARD_PATH);
 
     await expect(
@@ -208,11 +251,90 @@ test.describe("production artifact", () => {
       }),
     ).toBeVisible();
     await expect(page.getByLabel("Host name")).toBeEditable();
-    await expect(page.getByRole("button", { name: "Host table" })).toBeEnabled();
+    await page.getByLabel("Host name").fill("Fallback Host");
+    await page.getByRole("button", { name: "Host table" }).click();
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Setup" }),
+    ).toBeVisible();
+    await expect(page.getByRole("img", { name: /44 space physical board route/ })).toBeVisible();
   });
 });
 
 test.describe("host and joined-player workflows", () => {
+  test("hands the real route into Setup without delaying authentication", async ({
+    page,
+  }) => {
+    const table: MockTable = { record: null, calls: [] };
+    await page.addInitScript(() => {
+      const trackedWindow = window as Window & {
+        __gatViewTransition?: { calls: number; status: string };
+      };
+      trackedWindow.__gatViewTransition = {
+        calls: 0,
+        status: "unsupported",
+      };
+      const nativeStart = document.startViewTransition?.bind(document);
+      if (!nativeStart) return;
+      Object.defineProperty(document, "startViewTransition", {
+        configurable: true,
+        value: (update: () => void) => {
+          trackedWindow.__gatViewTransition = {
+            calls: (trackedWindow.__gatViewTransition?.calls ?? 0) + 1,
+            status: "capturing",
+          };
+          const transition = nativeStart(update);
+          void transition.ready.then(
+            () => {
+              if (trackedWindow.__gatViewTransition) {
+                trackedWindow.__gatViewTransition.status = "ready";
+              }
+            },
+            (error) => {
+              if (trackedWindow.__gatViewTransition) {
+                trackedWindow.__gatViewTransition.status = `failed: ${String(
+                  error,
+                )}`;
+              }
+            },
+          );
+          return transition;
+        },
+      });
+    });
+    await installSupabaseMock(page, table);
+    await page.goto(DASHBOARD_PATH);
+
+    await expect(
+      page.locator('.board-route-relief[data-variant="hero"]'),
+    ).toBeVisible();
+    await page.getByLabel("Host name").fill("Fixture Host");
+    await page.getByRole("button", { name: "Host table" }).click();
+
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Setup" }),
+    ).toBeVisible();
+    const setupRoute = page.getByRole("img", {
+      name: "44 space physical board route from S00 to S43",
+    });
+    await expect(setupRoute).toBeVisible();
+    await expect(setupRoute.locator("[data-space-id]")).toHaveCount(44);
+    await expect
+      .poll(() => page.evaluate(() => document.activeElement?.id))
+      .toBe("main-content");
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            (
+              window as Window & {
+                __gatViewTransition?: { calls: number; status: string };
+              }
+            ).__gatViewTransition,
+        ),
+      )
+      .toEqual({ calls: 1, status: "ready" });
+  });
+
   test("requires confirmation before replacing or leaving a host table", async ({
     page,
   }, testInfo) => {
@@ -368,6 +490,7 @@ test.describe("surface and viewport matrix", () => {
     page,
   }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop-chromium");
+    test.setTimeout(90_000);
     const table: MockTable = { record: null, calls: [] };
     await openAsHost(page, table);
     await startPhysicalGame(page);
@@ -423,7 +546,7 @@ test.describe("surface and viewport matrix", () => {
         );
         expect(overflow).toBeLessThanOrEqual(0);
         const accessibility = await new AxeBuilder({ page }).analyze();
-        expect(seriousAxeViolations(accessibility.violations)).toEqual([]);
+        expect(accessibility.violations).toEqual([]);
       }
     }
   });
@@ -432,9 +555,6 @@ test.describe("surface and viewport matrix", () => {
     page,
   }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop-chromium");
-    const table: MockTable = { record: null, calls: [] };
-    await openAsHost(page, table);
-
     const viewports = [
       { width: 1440, height: 900 },
       { width: 1180, height: 760 },
@@ -445,6 +565,7 @@ test.describe("surface and viewport matrix", () => {
       { width: 320, height: 568 },
     ];
 
+    await page.goto(DASHBOARD_PATH);
     for (const viewport of viewports) {
       await page.setViewportSize(viewport);
       const dimensions = await page.evaluate(() => ({
@@ -453,24 +574,125 @@ test.describe("surface and viewport matrix", () => {
       }));
       expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth);
       await expect(page.getByRole("main")).toBeVisible();
+      await expect(
+        page.locator('.board-route-relief[data-variant="hero"]'),
+      ).toBeVisible();
     }
+
+    const table: MockTable = { record: null, calls: [] };
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    page.on("console", (message) => {
+      if (message.type() === "error") errors.push(message.text());
+    });
+    await openAsHost(page, table);
+    for (const viewport of viewports) {
+      await page.setViewportSize(viewport);
+      for (const destination of [
+        "Setup",
+        "Play",
+        "Market",
+        "Ledger",
+        "Scores",
+        "Export",
+        "Help",
+      ]) {
+        await navigateHostSurface(page, destination, viewport.width);
+        await expect(
+          page.locator(".workspace-header").getByRole("heading", {
+            name: destination,
+            exact: true,
+          }),
+        ).toBeVisible();
+        const dimensions = await page.evaluate(() => ({
+          scrollWidth: document.documentElement.scrollWidth,
+          clientWidth: document.documentElement.clientWidth,
+        }));
+        expect(dimensions.scrollWidth).toBeLessThanOrEqual(
+          dimensions.clientWidth,
+        );
+        await expect(page.getByRole("main")).toBeVisible();
+      }
+    }
+    expect(errors).toEqual([]);
   });
 
-  test("remains usable with reduced motion and forced colors", async ({
+  test("honors the in-app reduced-motion setting independently of the OS", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-chromium");
+    const table: MockTable = { record: null, calls: [] };
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await page.addInitScript(
+      ([key, value]) => {
+        window.localStorage.setItem(key, JSON.stringify(value));
+      },
+      [UI_STORAGE_KEY, { theme: "table", reducedMotion: true }],
+    );
+    await openAsHost(page, table);
+    await startPhysicalGame(page);
+    await expect(page.locator("html")).toHaveAttribute("data-motion", "reduced");
+
+    await page.getByRole("button", { name: "Die result 3" }).click();
+    await page
+      .getByRole("button", { name: "Record die and show destination" })
+      .click();
+    await expect(
+      page.locator(".phase-rail > div[data-active] strong"),
+    ).toHaveText("Resolve");
+    await expect(page.locator(".now-zone__instruction")).not.toHaveAttribute(
+      "style",
+    );
+    await expect(
+      page.locator(".phase-rail > div[data-active] .travelling-underline"),
+    ).not.toHaveAttribute("style");
+  });
+
+  test("uses the intentional static relief under reduced motion", async ({
     page,
   }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop-chromium");
     await page.emulateMedia({
       reducedMotion: "reduce",
-      forcedColors: "active",
     });
     await page.goto(DASHBOARD_PATH);
     await expect(page.getByLabel("Host name")).toBeEditable();
     await expect(page.getByRole("button", { name: "Host table" })).toBeEnabled();
+    await expect(page.locator(".entry-page")).toHaveAttribute(
+      "data-entry-state",
+      "settled",
+    );
+    await expect(
+      page.locator('.board-route-relief[data-variant="hero"]'),
+    ).toHaveCSS("transform", "none");
+    const accessibility = await new AxeBuilder({ page }).analyze();
+    expect(accessibility.violations).toEqual([]);
+  });
+
+  test("preserves the route and controls in forced colors", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-chromium");
+    await page.emulateMedia({
+      forcedColors: "active",
+    });
+    await page.goto(DASHBOARD_PATH);
+    await expect(page.getByLabel("Host name")).toBeEditable();
+    await expect(page.locator("[data-space-id]")).toHaveCount(88);
     const accessibility = await new AxeBuilder({ page })
       .disableRules(["color-contrast"])
       .analyze();
-    expect(seriousAxeViolations(accessibility.violations)).toEqual([]);
+    expect(accessibility.violations).toEqual([]);
+
+    const table: MockTable = { record: null, calls: [] };
+    await openAsHost(page, table);
+    await expect(
+      page.getByRole("img", { name: /44 space physical board route/ }),
+    ).toBeVisible();
+    const setupAccessibility = await new AxeBuilder({ page })
+      .disableRules(["color-contrast"])
+      .analyze();
+    expect(setupAccessibility.violations).toEqual([]);
   });
 });
 
@@ -502,5 +724,19 @@ test.describe("mobile composition", () => {
       clientWidth: document.documentElement.clientWidth,
     }));
     expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth);
+
+    await navigation.getByRole("button", { name: /more/i }).click();
+    await page
+      .locator(".more-drawer__list")
+      .getByRole("button", { name: /^Export/ })
+      .click();
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Export" }),
+    ).toBeVisible();
+    await expect
+      .poll(() => page.evaluate(() => document.activeElement?.id))
+      .toBe("main-content");
+    const exportAccessibility = await new AxeBuilder({ page }).analyze();
+    expect(exportAccessibility.violations).toEqual([]);
   });
 });
