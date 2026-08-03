@@ -5,6 +5,7 @@ import { MetalButton } from "@/components/actions/MetalButton";
 import { CopyButton } from "@/components/ui/copy-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { BoardRouteRelief } from "@/features/entry/BoardRouteRelief";
 import {
   Select,
   SelectContent,
@@ -70,8 +71,12 @@ export function SetupView({
       />
 
       <section className="setup-now" aria-labelledby="setup-now-title">
-        <div className="setup-now__number" aria-hidden="true">
-          01
+        <div className="setup-now__route">
+          <BoardRouteRelief
+            spaces={game.boardSpaces}
+            reducedMotion={true}
+            variant="mini"
+          />
         </div>
         <div>
           <p className="eyebrow">Now</p>
@@ -224,18 +229,6 @@ export function SetupView({
               );
             })}
           </ol>
-
-          <div className="board-mini-map" role="img" aria-label="44 space route from S00 to S43">
-            {game.boardSpaces.map((space, index) => (
-              <span
-                key={space.id}
-                data-major={index % 6 === 0 || index === 43 || undefined}
-                title={`${space.id}: ${space.label}`}
-              >
-                {index % 6 === 0 || index === 43 ? space.id : ""}
-              </span>
-            ))}
-          </div>
 
           <MetalButton
             disabled={!ready || !canEdit}

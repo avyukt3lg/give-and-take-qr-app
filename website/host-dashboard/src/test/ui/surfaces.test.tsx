@@ -27,6 +27,7 @@ describe("React production surfaces", () => {
 
     render(
       <EntryScreen
+        game={game}
         mode="guest"
         draft={{
           name: "",
@@ -87,6 +88,45 @@ describe("React production surfaces", () => {
     });
   });
 
+  it("renders the real 44-space relief on Entry", () => {
+    const { container } = render(
+      <EntryScreen
+        game={game}
+        mode="guest"
+        draft={{
+          name: "",
+          email: "",
+          password: "",
+          code: "GT-",
+        }}
+        pending={false}
+        error={null}
+        backendError={null}
+        theme="table"
+        reducedMotion
+        onModeChange={vi.fn()}
+        onDraftChange={vi.fn()}
+        onSubmit={vi.fn()}
+        onRetryBackend={vi.fn()}
+        onThemeChange={vi.fn()}
+        onReducedMotionChange={vi.fn()}
+      />,
+    );
+
+    const hero = container.querySelector(
+      '.board-route-relief[data-variant="hero"]',
+    );
+    const ids = Array.from(
+      hero?.querySelectorAll<HTMLElement>("[data-space-id]") ?? [],
+      (space) => space.dataset.spaceId,
+    );
+
+    expect(ids).toHaveLength(44);
+    expect(new Set(ids).size).toBe(44);
+    expect(ids).toEqual(game.boardSpaces.map((space) => space.id));
+    expect(container.querySelector("canvas")).not.toBeInTheDocument();
+  });
+
   it("renders all 44 physical board spaces and keeps Start gated by setup", () => {
     const session = createSession(game, undefined, "GT-4827");
 
@@ -110,10 +150,10 @@ describe("React production surfaces", () => {
       />,
     );
 
-    expect(
-      screen.getByRole("img", { name: "44 space route from S00 to S43" })
-        .children,
-    ).toHaveLength(44);
+    const route = screen.getByRole("img", {
+      name: "44 space physical board route from S00 to S43",
+    });
+    expect(route.querySelectorAll("[data-space-id]")).toHaveLength(44);
     expect(
       screen.getByRole("button", { name: /start physical game/i }),
     ).toBeEnabled();
@@ -415,5 +455,11 @@ describe("React production surfaces", () => {
     expect(
       within(sheet).getByText(`${event.id} · ${event.title}`),
     ).toBeInTheDocument();
+    expect(
+      within(sheet).getByLabelText("Scrollable player score calculation"),
+    ).toHaveAttribute("tabindex", "0");
+    expect(
+      within(sheet).getByLabelText("Scrollable market event history"),
+    ).toHaveAttribute("tabindex", "0");
   });
 });

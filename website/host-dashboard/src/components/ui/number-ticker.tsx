@@ -48,6 +48,8 @@ interface NumberTickerProps
   decimalPlaces?: number;
   /** Formats both the animated frames and the announced value. */
   format?: (value: number) => string;
+  /** App-level preference; the system preference is still observed internally. */
+  reducedMotion?: boolean;
 }
 
 /** Matches --dur-panel. Under the 400ms cap the motion contract sets. */
@@ -59,10 +61,13 @@ export function NumberTicker({
   className,
   decimalPlaces = 0,
   format,
+  reducedMotion = false,
   ...props
 }: NumberTickerProps) {
   const frameRef = useRef<HTMLSpanElement>(null);
-  const shouldReduceMotion = useReducedMotion();
+  const systemReducedMotion = useReducedMotion();
+  const shouldReduceMotion =
+    reducedMotion || Boolean(systemReducedMotion);
 
   const formatValue = (input: number): string =>
     format

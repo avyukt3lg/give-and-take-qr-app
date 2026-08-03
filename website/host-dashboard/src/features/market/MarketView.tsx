@@ -1,7 +1,4 @@
 import {
-  ArrowDownRight,
-  ArrowUpRight,
-  Minus,
   RadioTower,
   SlidersHorizontal,
   Sparkles,
@@ -30,7 +27,6 @@ import {
 } from "@/components/ui/select";
 import type { GameDefinition, GameSession } from "@/domain/types";
 import { EmptyState, SurfaceIntro } from "@/features/shared/SurfacePrimitives";
-import { PriceSparkline } from "./PriceSparkline";
 
 function signed(value: number): string {
   return value > 0 ? `+${value}` : String(value);
@@ -40,11 +36,13 @@ export function MarketView({
   game,
   session,
   canEdit,
+  reducedMotion = false,
   onReveal,
 }: {
   game: GameDefinition;
   session: GameSession;
   canEdit: boolean;
+  reducedMotion?: boolean;
   onReveal(): void;
 }) {
   const latest = session.marketHistory[0] ?? null;
@@ -81,8 +79,8 @@ export function MarketView({
     <div className="surface market-surface">
       <SurfaceIntro
         eyebrow="03 · Shared market tape"
-        title="Read the current index, then update the physical tracker."
-        description="No value can fall below one."
+        title="Reveal the shared event, then update the physical tracker."
+        description="The resulting indexes synchronize immediately and can never fall below one."
         aside={
           <div className="market-intro-actions">
             <span className="market-live">
@@ -122,23 +120,65 @@ export function MarketView({
         }
       />
 
+      <section className="latest-event" aria-labelledby="latest-event-title">
+        <div className="latest-event__headline">
+          <p className="eyebrow">Latest reveal</p>
+          <span className="latest-event__id">
+            {latest?.id ?? "Awaiting event"}
+          </span>
+          <h3 id="latest-event-title" className="display-serif">
+            {latest?.title ?? "No market event yet."}
+          </h3>
+          <p>
+            {latest?.sentiment ??
+              "A Market Pulse space or the host reveal will turn the next printed card."}
+          </p>
+        </div>
+        {latest && (
+          <div className="latest-event__evidence">
+            <dl>
+              <div>
+                <dt>Behaviour watch</dt>
+                <dd>{latest.bias}</dd>
+              </div>
+              <div>
+                <dt>Triggered by</dt>
+                <dd>
+                  {latest.playerName
+                    ? `${latest.playerName}, turn ${latest.turn ?? "—"}`
+                    : latest.source}
+                </dd>
+              </div>
+            </dl>
+            <div className="event-deltas" aria-label="Latest price changes">
+              {Object.entries(latest.appliedEffects).map(([assetId, delta]) => (
+                <span
+                  key={assetId}
+                  data-tone={delta > 0 ? "up" : delta < 0 ? "down" : "flat"}
+                >
+                  {game.assets.find((asset) => asset.id === assetId)?.name ??
+                    assetId}{" "}
+                  <strong>{signed(Number(delta))}</strong>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
+
       <section className="market-tape" aria-label="Current asset indexes">
-        {game.assets.map((asset) => {
+        {game.assets.map((asset, index) => {
           const value = Number(session.prices[asset.id] ?? asset.startIndex);
-          const history = [...session.priceHistory]
-            .reverse()
-            .map((entry) => Number(entry.prices[asset.id] ?? value))
-            .slice(-12);
           const previous =
             Number(session.priceHistory[1]?.prices[asset.id]) || value;
           const change = value - previous;
-          const Direction =
-            change > 0 ? ArrowUpRight : change < 0 ? ArrowDownRight : Minus;
           return (
             <article key={asset.id} data-risk={asset.risk}>
               <header>
-                <span>{asset.id.toUpperCase()}</span>
-                <Direction aria-hidden="true" />
+                <span>
+                  {String(index + 1).padStart(2, "0")} · {asset.id.toUpperCase()}
+                </span>
+                <span>Risk {asset.risk}</span>
               </header>
               <strong>
                 {/* NumberTicker now announces the settled value itself, so the
@@ -147,60 +187,19 @@ export function MarketView({
                   value={value}
                   startValue={previous}
                   className="market-ticker"
+                  reducedMotion={reducedMotion}
                 />
               </strong>
               <p>{asset.name}</p>
-              <small>
-                Risk {asset.risk} · {signed(change)} latest
+              <small data-tone={change > 0 ? "up" : change < 0 ? "down" : "flat"}>
+                Latest change {signed(change)}
               </small>
-              <PriceSparkline values={history} label={`${asset.name} price history`} />
             </article>
           );
         })}
       </section>
 
-      <div className="market-layout">
-        <section className="latest-event" aria-labelledby="latest-event-title">
-          <p className="eyebrow">Latest reveal</p>
-          {latest ? (
-            <>
-              <span className="latest-event__id">{latest.id}</span>
-              <h3 id="latest-event-title" className="display-serif">
-                {latest.title}
-              </h3>
-              <p>{latest.sentiment}</p>
-              <dl>
-                <div>
-                  <dt>Behaviour watch</dt>
-                  <dd>{latest.bias}</dd>
-                </div>
-                <div>
-                  <dt>Triggered by</dt>
-                  <dd>
-                    {latest.playerName
-                      ? `${latest.playerName}, turn ${latest.turn ?? "—"}`
-                      : latest.source}
-                  </dd>
-                </div>
-              </dl>
-              <div className="event-deltas" aria-label="Latest price changes">
-                {Object.entries(latest.appliedEffects).map(([assetId, delta]) => (
-                  <span key={assetId} data-tone={delta > 0 ? "up" : delta < 0 ? "down" : "flat"}>
-                    {game.assets.find((asset) => asset.id === assetId)?.name ??
-                      assetId}{" "}
-                    <strong>{signed(Number(delta))}</strong>
-                  </span>
-                ))}
-              </div>
-            </>
-          ) : (
-            <EmptyState title="No market event yet">
-              A Market Pulse space will reveal the first printed event.
-            </EmptyState>
-          )}
-        </section>
-
-        <section className="market-log" aria-labelledby="market-log-title">
+      <section className="market-log" aria-labelledby="market-log-title">
           <header>
             <div>
               <p className="eyebrow">Stable history</p>
@@ -320,8 +319,7 @@ export function MarketView({
               No Market/Life card has changed the shared indexes.
             </EmptyState>
           )}
-        </section>
-      </div>
+      </section>
       <p className="surface-footnote">
         Prices are fictional index points for this board game. They are not
         quotes, recommendations, or financial advice.

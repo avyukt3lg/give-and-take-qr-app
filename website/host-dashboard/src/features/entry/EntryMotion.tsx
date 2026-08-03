@@ -1,12 +1,10 @@
+import { motion } from "motion/react";
 import {
-  motion,
-  useReducedMotion,
-  useScroll,
-  useSpring,
-  useTransform,
-  type MotionValue,
-} from "motion/react";
-import { useEffect, useState, type ElementType, type ReactNode, type RefObject } from "react";
+  useEffect,
+  useState,
+  type ElementType,
+  type ReactNode,
+} from "react";
 
 /**
  * Motion primitives for the entry hero.
@@ -19,55 +17,6 @@ import { useEffect, useState, type ElementType, type ReactNode, type RefObject }
  *  - Nothing the user aims at moves. The console holds the primary action, so
  *    it never parallaxes and never tilts.
  */
-
-/** Load-choreography timings, in seconds. Total settles under 1.1s. */
-export const ENTRY_STAGGER = {
-  brand: 0,
-  eyebrow: 0.08,
-  headline: 0.16,
-  body: 0.34,
-  proof: 0.42,
-  console: 0.35,
-  artwork: 0.2,
-} as const;
-
-/** How long the load choreography takes to settle, in ms. */
-export const ENTRY_CHOREOGRAPHY_MS = 1150;
-
-/**
- * True once the load choreography has finished. Text that fades in is, by
- * definition, below its contrast ratio while it is fading — so anything
- * auditing this page has to know when it has reached its steady state rather
- * than sampling mid-flight. Surfaced on the page as data-entry-state.
- */
-export function useChoreographySettled(reducedMotion: boolean): boolean {
-  const [settled, setSettled] = useState(reducedMotion);
-
-  useEffect(() => {
-    if (reducedMotion) return;
-    const timer = window.setTimeout(() => setSettled(true), ENTRY_CHOREOGRAPHY_MS);
-    return () => window.clearTimeout(timer);
-  }, [reducedMotion]);
-
-  return settled || reducedMotion;
-}
-
-export function useEntryReducedMotion(preference: boolean): boolean {
-  const system = useReducedMotion();
-  const hiddenAtMount = useHiddenAtMount();
-  // A reveal that starts at opacity 0 and is driven by requestAnimationFrame
-  // never runs while the document is hidden, so a page opened in a background
-  // tab would hold its headline invisible. Copy must not depend on an
-  // animation to become readable — if we start hidden, we start settled.
-  return preference || Boolean(system) || hiddenAtMount;
-}
-
-function useHiddenAtMount(): boolean {
-  const [hidden] = useState(
-    () => typeof document !== "undefined" && document.hidden,
-  );
-  return hidden;
-}
 
 export interface RevealProps {
   readonly children: ReactNode;
@@ -167,29 +116,6 @@ export function RevealLines({
       ))}
     </h1>
   );
-}
-
-/**
- * Depth by layer. The page grid moves slowest, the artwork frame and its
- * registration marks drift, and the console is fixed. Offsets are small on
- * purpose — the moment parallax is consciously noticeable it has stopped
- * describing depth and started decorating.
- */
-export function useLayerParallax(
-  target: RefObject<HTMLElement | null>,
-  distance: number,
-  reducedMotion: boolean,
-): MotionValue<number> {
-  const { scrollYProgress } = useScroll({
-    target,
-    offset: ["start end", "end start"],
-  });
-  const raw = useTransform(
-    scrollYProgress,
-    [0, 1],
-    reducedMotion ? [0, 0] : [distance, -distance],
-  );
-  return useSpring(raw, { stiffness: 120, damping: 30, mass: 0.4 });
 }
 
 /**

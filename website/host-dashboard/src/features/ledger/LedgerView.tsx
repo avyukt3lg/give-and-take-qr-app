@@ -286,7 +286,10 @@ export function LedgerView({
                   <section aria-labelledby={`holdings-${player.id}`}>
                     <header>
                       <Landmark aria-hidden="true" />
-                      <h4 id={`holdings-${player.id}`}>Holdings register</h4>
+                      <h4 id={`holdings-${player.id}`}>
+                        Holdings register
+                        <span className="sr-only"> for {player.name}</span>
+                      </h4>
                     </header>
                     {holdings.length ? (
                       <div className="table-scroll" tabIndex={0}>
@@ -373,7 +376,10 @@ export function LedgerView({
                   <section aria-labelledby={`evidence-${player.id}`}>
                     <header>
                       <ShieldCheck aria-hidden="true" />
-                      <h4 id={`evidence-${player.id}`}>Evidence register</h4>
+                      <h4 id={`evidence-${player.id}`}>
+                        Evidence register
+                        <span className="sr-only"> for {player.name}</span>
+                      </h4>
                     </header>
                     <dl className="evidence-register">
                       <div>

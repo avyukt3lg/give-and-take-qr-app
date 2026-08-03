@@ -17,8 +17,6 @@ import {
   requestedFixtureRole,
   type FixtureRole,
 } from "@/app/fixture";
-import { SceneOrchestrator } from "@/components/brand/SceneOrchestrator";
-import { AppShell } from "@/components/layout/AppShell";
 import { LiveMessage } from "@/components/layout/LiveMessage";
 import { SettingsDialog } from "@/components/layout/SettingsDialog";
 import { Button } from "@/components/ui/button";
@@ -56,6 +54,7 @@ import type {
   PhysicalCheckKey,
   ViewId,
 } from "@/domain/types";
+import { BoardRouteRelief } from "@/features/entry/BoardRouteRelief";
 import { EntryScreen } from "@/features/entry/EntryScreen";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useSystemReducedMotion } from "@/hooks/useReducedMotion";
@@ -76,7 +75,11 @@ import {
   type AppState,
 } from "@/state";
 import "@/styles/surfaces.css";
+import "@/styles/entry-relief.css";
 
+const AppShell = lazy(async () => ({
+  default: (await import("@/components/layout/AppShell")).AppShell,
+}));
 const SetupView = lazy(async () => ({
   default: (await import("@/features/setup/SetupView")).SetupView,
 }));
@@ -114,8 +117,69 @@ function SurfaceLoading() {
   );
 }
 
-function LazySurface({ children }: { children: React.ReactNode }) {
-  return <Suspense fallback={<SurfaceLoading />}>{children}</Suspense>;
+function LazySurface({
+  children,
+  fallback = <SurfaceLoading />,
+}: {
+  children: React.ReactNode;
+  fallback?: React.ReactNode;
+}) {
+  return <Suspense fallback={fallback}>{children}</Suspense>;
+}
+
+function SetupTransitionFrame({
+  game,
+  code,
+}: {
+  game: GameDefinition;
+  code: string;
+}) {
+  return (
+    <div
+      className="surface setup-surface setup-transition-frame"
+      role="status"
+      aria-live="polite"
+      aria-label="Preparing table setup controls"
+    >
+      <section className="setup-now" aria-hidden="true">
+        <div className="setup-now__route">
+          <BoardRouteRelief
+            spaces={game.boardSpaces}
+            reducedMotion={true}
+            variant="mini"
+          />
+        </div>
+        <div>
+          <p className="eyebrow">Now</p>
+          <h3 className="display-serif">Opening table {code}.</h3>
+          <p>The physical setup controls are arriving.</p>
+        </div>
+      </section>
+      <span className="sr-only">Preparing table setup controls…</span>
+    </div>
+  );
+}
+
+function HostShellTransitionFrame({
+  game,
+  code,
+  view,
+}: {
+  game: GameDefinition;
+  code: string;
+  view: ViewId;
+}) {
+  return (
+    <div className="host-shell-transition-frame">
+      <main id="main-content" className="surface-stage" tabIndex={-1}>
+        {view === "setup" ? (
+          <SetupTransitionFrame game={game} code={code} />
+        ) : (
+          <SurfaceLoading />
+        )}
+      </main>
+    </div>
+  );
 }
 
 interface BootstrapState {
@@ -219,9 +283,11 @@ function focusMain(): void {
 function SurfaceRouter({
   state,
   dispatch,
+  reducedMotion,
 }: {
   state: AppState;
   dispatch: Dispatch<AppAction>;
+  reducedMotion: boolean;
 }) {
   const { game, session } = state;
   const canEdit = selectCanEditSession(state);
@@ -359,6 +425,7 @@ function SurfaceRouter({
           cardLookup={state.ui.cardLookupId}
           spaceLookup={state.ui.boardLookupId}
           canEdit={canEdit}
+          reducedMotion={reducedMotion}
           onDieChange={(die) => dispatch({ type: "DIE_DRAFT_SET", die })}
           onRoll={() => {
             const result = rollDie(
@@ -423,6 +490,7 @@ function SurfaceRouter({
           game={game}
           session={session}
           canEdit={canEdit}
+          reducedMotion={reducedMotion}
           onReveal={() =>
             domain(
               revealMarketEvent(
@@ -462,6 +530,7 @@ function SurfaceRouter({
         <ScoresView
           game={game}
           session={session}
+          reducedMotion={reducedMotion}
           onExport={() => {
             dispatch({ type: "VIEW_SET", view: "export" });
             focusMain();
@@ -592,47 +661,46 @@ function TableApplication({
       password,
     };
     return (
-      <SceneOrchestrator>
-        <EntryScreen
-          mode={state.authTab as AccessMode}
-          draft={authDraft}
-          pending={state.ui.authPending}
-          error={state.ui.authError || null}
-          backendError={
-            state.backend.saveState === "failed"
-              ? state.backend.unavailableReason ||
-                "Supabase could not be initialized."
-              : null
-          }
-          theme={state.ui.theme}
-          reducedMotion={reducedMotion}
-          onModeChange={(tab) =>
-            dispatch({ type: "AUTH_TAB_SET", tab })
-          }
-          onDraftChange={(patch) => {
-            if (patch.password !== undefined) setPassword(patch.password);
-            const authDraftPatch = { ...patch };
-            delete authDraftPatch.password;
-            dispatch({
-              type: "UI_PATCH",
-              patch: {
-                authDraft: {
-                  ...state.ui.authDraft,
-                  ...authDraftPatch,
-                },
+      <EntryScreen
+        game={game}
+        mode={state.authTab as AccessMode}
+        draft={authDraft}
+        pending={state.ui.authPending}
+        error={state.ui.authError || null}
+        backendError={
+          state.backend.saveState === "failed"
+            ? state.backend.unavailableReason ||
+              "Supabase could not be initialized."
+            : null
+        }
+        theme={state.ui.theme}
+        reducedMotion={reducedMotion}
+        onModeChange={(tab) =>
+          dispatch({ type: "AUTH_TAB_SET", tab })
+        }
+        onDraftChange={(patch) => {
+          if (patch.password !== undefined) setPassword(patch.password);
+          const authDraftPatch = { ...patch };
+          delete authDraftPatch.password;
+          dispatch({
+            type: "UI_PATCH",
+            patch: {
+              authDraft: {
+                ...state.ui.authDraft,
+                ...authDraftPatch,
               },
-            });
-          }}
-          onSubmit={(input) => void runtime.submitAuth(input)}
-          onRetryBackend={() => void runtime.reinitializeBackend()}
-          onThemeChange={(theme) =>
-            dispatch({ type: "THEME_SET", theme })
-          }
-          onReducedMotionChange={(reduced) =>
-            dispatch({ type: "REDUCED_MOTION_SET", reduced })
-          }
-        />
-      </SceneOrchestrator>
+            },
+          });
+        }}
+        onSubmit={(input) => void runtime.submitAuth(input)}
+        onRetryBackend={() => void runtime.reinitializeBackend()}
+        onThemeChange={(theme) =>
+          dispatch({ type: "THEME_SET", theme })
+        }
+        onReducedMotionChange={(reduced) =>
+          dispatch({ type: "REDUCED_MOTION_SET", reduced })
+        }
+      />
     );
   }
 
@@ -695,35 +763,59 @@ function TableApplication({
 
   return (
     <>
-      <AppShell
-        session={state.session}
-        view={state.session.view}
-        theme={state.ui.theme}
-        companionMode={companionMode}
-        reducedMotion={reducedMotion}
-        backend={backend}
-        hostUnsyncedState={runtime.hostUnsyncedState}
-        playerLocked={playerLocked}
-        onViewChange={setView}
-        onThemeChange={(theme) => dispatch({ type: "THEME_SET", theme })}
-        onModeChange={(mode) =>
-          dispatch({ type: "COMPANION_MODE_SET", mode })
-        }
-        onReducedMotionChange={(reduced) =>
-          dispatch({ type: "REDUCED_MOTION_SET", reduced })
-        }
-        onRetrySave={() => void runtime.retrySync()}
-        onNewSession={(discardUnsynced) =>
-          void runtime.newSession({ discardUnsynced })
-        }
-        onSignOut={(discardUnsynced) =>
-          void runtime.signOut({ discardUnsynced })
+      <LazySurface
+        fallback={
+          <HostShellTransitionFrame
+            game={game}
+            code={state.session.code}
+            view={state.session.view}
+          />
         }
       >
-        <LazySurface>
-          <SurfaceRouter state={state} dispatch={dispatch} />
-        </LazySurface>
-      </AppShell>
+        <AppShell
+          session={state.session}
+          view={state.session.view}
+          theme={state.ui.theme}
+          companionMode={companionMode}
+          reducedMotion={reducedMotion}
+          backend={backend}
+          hostUnsyncedState={runtime.hostUnsyncedState}
+          playerLocked={playerLocked}
+          onViewChange={setView}
+          onThemeChange={(theme) => dispatch({ type: "THEME_SET", theme })}
+          onModeChange={(mode) =>
+            dispatch({ type: "COMPANION_MODE_SET", mode })
+          }
+          onReducedMotionChange={(reduced) =>
+            dispatch({ type: "REDUCED_MOTION_SET", reduced })
+          }
+          onRetrySave={() => void runtime.retrySync()}
+          onNewSession={(discardUnsynced) =>
+            void runtime.newSession({ discardUnsynced })
+          }
+          onSignOut={(discardUnsynced) =>
+            void runtime.signOut({ discardUnsynced })
+          }
+          onReady={focusMain}
+        >
+          <LazySurface
+            fallback={
+              state.session.view === "setup" ? (
+                <SetupTransitionFrame
+                  game={game}
+                  code={state.session.code}
+                />
+              ) : undefined
+            }
+          >
+            <SurfaceRouter
+              state={state}
+              dispatch={dispatch}
+              reducedMotion={reducedMotion}
+            />
+          </LazySurface>
+        </AppShell>
+      </LazySurface>
       <LiveMessage
         message={state.message}
         assertive={state.messageAssertive}

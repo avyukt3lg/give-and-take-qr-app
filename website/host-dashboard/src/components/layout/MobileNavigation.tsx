@@ -1,5 +1,5 @@
 import { Ellipsis } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import type { ViewId } from "@/domain/types";
 import type { HostUnsyncedState } from "@/state";
@@ -34,6 +34,7 @@ export function MobileNavigation({
   const secondary = NAVIGATION_ITEMS.slice(5);
   const secondaryActive = secondary.some((item) => item.id === activeView);
   const [moreOpen, setMoreOpen] = useState(false);
+  const focusSurfaceAfterClose = useRef(false);
 
   return (
     <nav className="mobile-navigation" aria-label="Game sections">
@@ -62,7 +63,20 @@ export function MobileNavigation({
             <span>More</span>
           </button>
         </DrawerTrigger>
-        <DrawerContent className="more-drawer">
+        <DrawerContent
+          className="more-drawer"
+          onCloseAutoFocus={(event) => {
+            if (!focusSurfaceAfterClose.current) return;
+            event.preventDefault();
+            focusSurfaceAfterClose.current = false;
+            requestAnimationFrame(() => {
+              document
+                .getElementById("main-content")
+                ?.focus({ preventScroll: true });
+              window.scrollTo({ top: 0, behavior: "auto" });
+            });
+          }}
+        >
           <DrawerHeader>
             <DrawerTitle>More table tools</DrawerTitle>
             <DrawerDescription>
@@ -77,7 +91,10 @@ export function MobileNavigation({
                   <button
                     type="button"
                     aria-current={activeView === item.id ? "page" : undefined}
-                    onClick={() => onViewChange(item.id)}
+                    onClick={() => {
+                      focusSurfaceAfterClose.current = true;
+                      onViewChange(item.id);
+                    }}
                   >
                     <Icon aria-hidden="true" />
                     <span>

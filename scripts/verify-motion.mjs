@@ -38,18 +38,18 @@ function check(condition, message) {
   }
 }
 
-async function openDeck(browser, { reduced }) {
+async function openDeck(browser, { appReduced, systemReduced }) {
   const context = await browser.newContext({
     viewport: { width: 1440, height: 900 },
     deviceScaleFactor: 1,
-    reducedMotion: reduced ? "reduce" : "no-preference",
+    reducedMotion: systemReduced ? "reduce" : "no-preference",
   });
   await context.addInitScript(
     ([key, value]) => {
       // eslint-disable-next-line no-undef -- runs in the page realm
       window.localStorage.setItem(key, JSON.stringify(value));
     },
-    [UI_STORAGE_KEY, { theme: "table", reducedMotion: reduced }],
+    [UI_STORAGE_KEY, { theme: "table", reducedMotion: appReduced }],
   );
   const page = await context.newPage();
   await page.goto(`${baseUrl}?fixture=host`, { waitUntil: "networkidle" });
@@ -118,7 +118,10 @@ async function run() {
 
   // ---- animated ----------------------------------------------------------
   {
-    const { context, page } = await openDeck(browser, { reduced: false });
+    const { context, page } = await openDeck(browser, {
+      appReduced: false,
+      systemReduced: false,
+    });
     const before = await geometry(page);
     check(
       before.zone !== null && before.instruction !== null,
@@ -201,8 +204,14 @@ async function run() {
   }
 
   // ---- reduced motion ----------------------------------------------------
-  {
-    const { context, page } = await openDeck(browser, { reduced: true });
+  // Exercise the product switch and the OS preference separately. Combining
+  // both here used to let a broken in-app toggle pass because the OS setting
+  // happened to suppress Motion on its behalf.
+  for (const [label, preference] of [
+    ["app setting", { appReduced: true, systemReduced: false }],
+    ["system setting", { appReduced: false, systemReduced: true }],
+  ]) {
+    const { context, page } = await openDeck(browser, preference);
     const before = await geometry(page);
     await advancePhase(page);
     await page.waitForTimeout(140);
@@ -210,24 +219,26 @@ async function run() {
 
     await page
       .locator(".now-zone")
-      .screenshot({ path: `${outDir}/rekey-reduced-settled.png` })
+      .screenshot({
+        path: `${outDir}/rekey-reduced-${label.replace(" ", "-")}.png`,
+      })
       .catch(() => {});
 
     check(
       after.instructionOpacity === 1,
-      `reduced: instruction fully opaque immediately (${after.instructionOpacity})`,
+      `reduced (${label}): instruction fully opaque immediately (${after.instructionOpacity})`,
     );
     check(
       after.instructionFilter === "none" || after.instructionFilter === null,
-      `reduced: no blur left applied (${after.instructionFilter})`,
+      `reduced (${label}): no blur left applied (${after.instructionFilter})`,
     );
     check(
       after.activePhase !== before.activePhase,
-      `reduced: phase still advanced ${before.activePhase} -> ${after.activePhase}`,
+      `reduced (${label}): phase still advanced ${before.activePhase} -> ${after.activePhase}`,
     );
     check(
       after.underline !== null,
-      "reduced: active phase is still marked — the state is designed, not disabled",
+      `reduced (${label}): active phase is still marked — the state is designed, not disabled`,
     );
 
     await context.close();

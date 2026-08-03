@@ -3,15 +3,15 @@
 
 This is a physical board-game companion, not a SaaS dashboard. The visual
 system should feel like an editorial game table: warm black, bone paper,
-brass rules and chartreuse signals. Newsreader carries narrative hierarchy;
-Inter carries operational controls and tabular values.
+brass rules and chartreuse signals. Instrument Serif carries narrative
+hierarchy; Source Sans 3 carries operational controls and tabular values.
 
 ## Runtime shape
 
 - React 19, strict TypeScript, Vite and Tailwind CSS v4.
 - shadcn/ui New York and Radix provide accessible behavior.
-- Motion handles DOM transitions. Canvas2D owns the ASCII hero. A lazy WebGL
-  board scene may run only after the ASCII scene is paused.
+- Motion handles DOM reveals. Semantic CSS 3D owns the Board Route Relief,
+  while native View Transitions carry the real route into Setup.
 - Table, Classroom and Contrast are separately authored themes.
 
 ## Interaction rules
@@ -22,16 +22,17 @@ Inter carries operational controls and tabular values.
   or particle effects across routine controls.
 - Use native scrolling. Reduced motion stops render loops and substitutes a
   static frame.
-- Canvas is decorative; real names, values, rules and state remain in the DOM.
+- Decorative depth never owns meaning; real names, values, rules and state
+  remain in the DOM.
 
 ## Approved component roles
 
 - LiquidButton: entry/auth CTA only.
 - MetalButton: Start Game, Confirm Move and End Turn only.
-- Magic UI mechanics: Number Ticker, Scroll Progress, Text Reveal and
-  Progressive Blur, retokenized to this project.
+- Magic UI mechanics: Number Ticker and Scroll Progress, retokenized to this
+  project; no registry effect is imported when the existing primitive suffices.
 - 21st inspiration is metadata and visual grounding. Paid component code and
-  baked ASCII video implementations are not copied.
+  legacy raster-effect implementations are not copied.
 
 ## Product constraints
 

@@ -40,13 +40,15 @@ const cspDirectives = [
   "default-src 'self'",
   "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
   "img-src 'self' data: blob:",
-  "worker-src 'self' blob:",
   "object-src 'none'",
 ];
 for (const directive of cspDirectives) {
   if (!html.includes(directive)) {
     throw new Error(`Built dashboard CSP is missing: ${directive}`);
   }
+}
+if (html.includes("worker-src")) {
+  throw new Error("Built dashboard still grants a worker source after renderer removal.");
 }
 
 const rootAbsoluteAssets = [
@@ -94,6 +96,57 @@ if (spaces.length !== 44 || cards.length !== 81) {
   );
 }
 
+const sourceRoot = path.join(
+  repoRoot,
+  "website/host-dashboard/src",
+);
+const globalsCss = await readFile(
+  path.join(sourceRoot, "styles/globals.css"),
+  "utf8",
+);
+for (const token of [
+  "--dur-control",
+  "--dur-panel",
+  "--dur-surface",
+  "--dur-narrative",
+]) {
+  if (!globalsCss.includes(token)) {
+    throw new Error(`Motion timing contract is missing ${token}.`);
+  }
+}
+
+const surfaceCss = await readFile(
+  path.join(sourceRoot, "styles/surfaces.css"),
+  "utf8",
+);
+if (surfaceCss.includes("var(--asset)")) {
+  throw new Error("Production CSS regressed to unencoded var(--asset).");
+}
+
+for (const file of [
+  "features/help/HelpView.tsx",
+  "features/market/MarketView.tsx",
+  "features/ledger/LedgerView.tsx",
+  "features/modes/TableDisplay.tsx",
+  "features/modes/PlayerAssist.tsx",
+]) {
+  const source = await readFile(path.join(sourceRoot, file), "utf8");
+  if (!source.includes("data-risk")) {
+    throw new Error(`${file} no longer exposes risk-based asset encoding.`);
+  }
+}
+
+const entrySource = await readFile(
+  path.join(sourceRoot, "features/entry/EntryScreen.tsx"),
+  "utf8",
+);
+if (
+  !entrySource.includes("data-entry-state") ||
+  entrySource.includes("documentElement.dataset.entryState")
+) {
+  throw new Error("data-entry-state must remain owned by EntryScreen.");
+}
+
 const dashboardStat = await stat(
   path.join(distRoot, "website/host-dashboard/index.html"),
 );
@@ -105,19 +158,63 @@ if (!moduleMatch) {
   throw new Error("Built dashboard is missing its production module entry.");
 }
 const modulePath = moduleMatch[1].replace(/^\/give-and-take-qr-app\//, "");
-const initialJavascript = await readFile(path.join(distRoot, modulePath));
-const initialJavascriptGzip = gzipSync(initialJavascript).byteLength;
+const modulePreloads = [
+  ...html.matchAll(
+    /<link[^>]+rel="modulepreload"[^>]+href="([^"]+\.js)"/g,
+  ),
+].map((match) =>
+  match[1].replace(/^\/give-and-take-qr-app\//, ""),
+);
+const initialModulePaths = [...new Set([modulePath, ...modulePreloads])];
+const initialJavascriptGzip = (
+  await Promise.all(
+    initialModulePaths.map(async (file) =>
+      gzipSync(await readFile(path.join(distRoot, file))).byteLength,
+    ),
+  )
+).reduce((total, bytes) => total + bytes, 0);
 const initialBudget = 240 * 1024;
 if (initialJavascriptGzip > initialBudget) {
   throw new Error(
-    `Initial JavaScript exceeds 240 KB gzip: ${initialJavascriptGzip} bytes.`,
+    `Complete initial JavaScript graph exceeds 240 KB gzip: ${initialJavascriptGzip} bytes across ${initialModulePaths.length} modules.`,
   );
 }
 
 const assetDirectory = path.join(distRoot, "assets");
 const assetFiles = await readdir(assetDirectory);
+const legacyEffectArtifacts = assetFiles.filter((file) =>
+  /ascii|dither|boardpointcloud|board-point/i.test(file),
+);
+if (legacyEffectArtifacts.length) {
+  throw new Error(
+    `Legacy ASCII/dither artifacts remain: ${legacyEffectArtifacts.join(", ")}.`,
+  );
+}
+
+const legacyEffectSignatures = [
+  "AsciiRasterCanvas",
+  "ascii-effect-lab",
+  "ascii.worker",
+  "board-point-scene",
+  "BoardPointCloudScene",
+];
+for (const file of assetFiles.filter(
+  (asset) => asset.endsWith(".js") || asset.endsWith(".css"),
+)) {
+  const source = await readFile(path.join(assetDirectory, file), "utf8");
+  const signature = legacyEffectSignatures.find((value) =>
+    source.includes(value),
+  );
+  if (signature) {
+    throw new Error(`${file} still contains legacy effect signature ${signature}.`);
+  }
+}
+
+const initialModuleNames = new Set(
+  initialModulePaths.map((file) => path.basename(file)),
+);
 const lazyJavascript = assetFiles.filter(
-  (file) => file.endsWith(".js") && file !== path.basename(modulePath),
+  (file) => file.endsWith(".js") && !initialModuleNames.has(file),
 );
 const lazyBudget = 80 * 1024;
 for (const file of lazyJavascript) {
@@ -127,28 +224,25 @@ for (const file of lazyJavascript) {
   }
 }
 
-// The entry hero samples the printed board, not the product box. The box shot
-// is a dark product photo that dithered down to a handful of lit cells; the
-// board is the focal object of this product and stays recognisable as a cell
-// grid. These ship from outputs/, not from the hashed asset graph.
+// The semantic relief is built from game data. The real board image remains a
+// social-preview and documentation asset, not a hidden rendering dependency.
 const boardDirectory = path.join(distRoot, "outputs/final_assets/board");
-const heroArtwork = [
+const boardArtwork = [
   { file: "give_and_take_board_web_1280.webp", budget: 250 * 1024 },
-  { file: "give_and_take_board_web_640.webp", budget: 120 * 1024 },
 ];
 
-for (const { file, budget } of heroArtwork) {
+for (const { file, budget } of boardArtwork) {
   let bytes;
   try {
     bytes = (await stat(path.join(boardDirectory, file))).size;
   } catch {
-    throw new Error(`Hero board artwork missing from the artifact: ${file}.`);
+    throw new Error(`Board artwork missing from the artifact: ${file}.`);
   }
   if (bytes > budget) {
-    throw new Error(`Hero image budget exceeded: ${file} is ${bytes} bytes.`);
+    throw new Error(`Board artwork budget exceeded: ${file} is ${bytes} bytes.`);
   }
 }
 
 console.log(
-  `Artifact verified: ${required.length} required files, dashboard ${dashboardStat.size} bytes, 44 spaces, 81 cards, initial JS ${(initialJavascriptGzip / 1024).toFixed(2)} KB gzip.`,
+  `Artifact verified: ${required.length} required files, dashboard ${dashboardStat.size} bytes, 44 spaces, 81 cards, complete initial graph ${(initialJavascriptGzip / 1024).toFixed(2)} KB gzip across ${initialModulePaths.length} modules.`,
 );

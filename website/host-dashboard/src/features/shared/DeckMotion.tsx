@@ -30,12 +30,15 @@ export function NowRekey({
   changeKey,
   children,
   className,
+  reducedMotion = false,
 }: {
   changeKey: string;
   children: ReactNode;
   className?: string;
+  reducedMotion?: boolean;
 }) {
-  const reduce = useReducedMotion();
+  const systemReducedMotion = useReducedMotion();
+  const reduce = reducedMotion || Boolean(systemReducedMotion);
 
   if (reduce) {
     return <div className={className}>{children}</div>;
@@ -89,11 +92,14 @@ export function NowRekey({
 export function TravellingUnderline({
   active,
   layoutId,
+  reducedMotion = false,
 }: {
   active: boolean;
   layoutId: string;
+  reducedMotion?: boolean;
 }) {
-  const reduce = useReducedMotion();
+  const systemReducedMotion = useReducedMotion();
+  const reduce = reducedMotion || Boolean(systemReducedMotion);
 
   if (!active) return null;
 

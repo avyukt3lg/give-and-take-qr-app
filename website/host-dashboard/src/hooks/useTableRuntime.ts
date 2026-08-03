@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
+import { flushSync } from "react-dom";
 
 import type { AuthSubmission } from "@/app/contracts";
 import { PRODUCTION_APP_URL } from "@/domain/constants";
@@ -78,6 +79,44 @@ function publicConfiguration() {
   }
   const appUrl = import.meta.env.VITE_APP_URL || PRODUCTION_APP_URL;
   return { supabaseUrl, supabasePublishableKey, appUrl };
+}
+
+interface ViewTransitionCapableDocument {
+  startViewTransition?: (update: () => void) => unknown;
+}
+
+function commitAuthenticatedSurface(
+  dispatch: React.Dispatch<AppAction>,
+  auth: AuthRecord,
+  reducedMotion: boolean,
+): void {
+  const commit = () => {
+    dispatch({ type: "AUTH_SET", auth });
+    dispatch({ type: "AUTH_PENDING_SET", pending: false });
+  };
+
+  if (typeof document === "undefined" || typeof window === "undefined") {
+    commit();
+    return;
+  }
+
+  const startViewTransition = (document as unknown as ViewTransitionCapableDocument)
+    .startViewTransition;
+  const systemReducedMotion = window.matchMedia(
+    "(prefers-reduced-motion: reduce)",
+  ).matches;
+  if (!startViewTransition || reducedMotion || systemReducedMotion) {
+    commit();
+    return;
+  }
+
+  try {
+    startViewTransition.call(document, () => {
+      flushSync(commit);
+    });
+  } catch {
+    commit();
+  }
 }
 
 export function useTableRuntime(
@@ -342,8 +381,11 @@ export function useTableRuntime(
           runtime!.sync.beginHostSession(stateRef.current.session);
         }
 
-        dispatch({ type: "AUTH_SET", auth });
-        dispatch({ type: "AUTH_PENDING_SET", pending: false });
+        commitAuthenticatedSurface(
+          dispatch,
+          auth,
+          stateRef.current.ui.reducedMotion,
+        );
       } catch (cause) {
         dispatch({
           type: "AUTH_PENDING_SET",
